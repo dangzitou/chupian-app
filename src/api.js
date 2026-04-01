@@ -5,8 +5,15 @@ async function request(path, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error(`服务器响应异常（HTTP ${res.status}）`);
+  }
+
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
   return data;
 }
 
