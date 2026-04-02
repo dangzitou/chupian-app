@@ -1,129 +1,235 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, TextInput,
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Video } from 'expo-av';
 import { api } from '../api';
 import { COLORS } from '../config';
+import ActionBar from '../components/ActionBar';
+import MediaGallery from '../components/MediaGallery';
+
+function formatTime(value) {
+  const text = String(value || '').replace('T', ' ');
+  return text.length > 16 ? text.slice(0, 16) : text;
+}
 
 export default function PostDetailScreen({ route }) {
   const { postId } = route.params;
   const [post, setPost] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
-  const [author, setAuthor] = useState('');
+  const [author, setAuthor] = useState('匿名拍友');
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const d = await api.posts();
-      const p = (d.posts || []).find((x) => x.id === postId);
-      setPost(p || null);
+      const data = await api.getPost(postId);
+      setPost(data);
+      setError(null);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [postId]);
 
-  useEffect(() => { load(); }, [postId]);
+  useEffect(() => { load(); }, [load]);
 
-  const doLike = async () => {
-    const a = author.trim() || '匿名拍友';
-    try {
-      const d = await api.likePost(postId, a);
-      setPost({ ...post, likes: d.likes });
-    } catch (e) { /* ignore */ }
-  };
+  const postActions = useMemo(() => {
+    if (!post) return null;
+    return {
+      onLike: async () => {
+        try {
+          const next = !post.liked;
+          setPost((prev) => ({
+            ...prev,
+            liked: next,
+            likes: Math.max(0, Number(prev.likes || 0) + (next ? 1 : -1)),
+          }));
+          await api.toggleLike(post.id, author, next ? 'like' : 'unlike');
+          const fresh = await api.getPost(post.id);
+          setPost((prev) => ({
+            ...prev,
+            likes: fresh.likes,
+            liked: Boolean(fresh.liked),
+          }));
+        } catch (e) {
+          setPost((prev) => ({
+            ...prev,
+            likes: Math.max(0, (prev.likes || 0) + (prev.liked ? -1 : 1)),
+            liked: !prev.liked,
+          }));
+        }
+      },
+      onFavorite: async () => {
+        try {
+          const next = !post.favorited;
+          setPost((prev) => ({
+            ...prev,
+            favorited: next,
+            favorites: Math.max(0, Number(prev.favorites || 0) + (next ? 1 : -1)),
+          }));
+          await api.toggleFavorite(post.id, author, next ? 'favorite' : 'unfavorite');
+          const fresh = await api.getPost(post.id);
+          setPost((prev) => ({
+            ...prev,
+            favorites: fresh.favorites,
+            favorited: Boolean(fresh.favorited),
+          }));
+        } catch (e) {
+          setPost((prev) => ({
+            ...prev,
+            favorites: Math.max(0, (prev.favorites || 0) + (prev.favorited ? -1 : 1)),
+            favorited: !prev.favorited,
+          }));
+        }
+      },
+    };
+  }, [author, post]);
 
-  const doComment = async () => {
-    if (!comment.trim()) return;
+  const onSendComment = useCallback(async () => {
+    if (!comment.trim() || !post) return;
     setSending(true);
     try {
-      await api.commentPost(postId, author.trim() || '匿名拍友', comment.trim());
+      await api.comment(post.id, author || '匿名拍友', comment.trim());
       setComment('');
       await load();
-    } catch (e) { /* ignore */ } finally {
+    } finally {
       setSending(false);
     }
-  };
+  }, [author, comment, load, post]);
 
-  if (error) return <SafeAreaView style={styles.center}><Text style={styles.err}>{error}</Text></SafeAreaView>;
-  if (!post) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></SafeAreaView>;
+  if (loading) {
+    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></SafeAreaView>;
+  }
+
+  if (error || !post) {
+    return <SafeAreaView style={styles.center}><Text style={styles.err}>{error || '内容不存在'}</Text></SafeAreaView>;
+  }
 
   const gear = post.gear || {};
-  const gearRows = [
-    ['机身', gear.camera], ['镜头', gear.lens], ['焦距', gear.focal],
-    ['光圈', gear.aperture], ['快门', gear.shutter], ['ISO', gear.iso],
-  ].filter(([, v]) => v);
+  const shootRows = [
+    ['机位', post.angle || post.direction || '未填写'],
+    ['地点', post.spotName || post.spotId || '未填写'],
+    ['时间窗口', post.timeWindow || '未填写'],
+    ['时段', post.bestTime || '未填写'],
+    ['相机', gear.camera || '未填写'],
+    ['镜头', gear.lens || '未填写'],
+    ['焦距', gear.focal || '未填写'],
+    ['光圈', gear.aperture || '未填写'],
+    ['快门', gear.shutter || '未填写'],
+    ['ISO', gear.iso || '未填写'],
+    ['白平衡', gear.whiteBalance || '未填写'],
+  ].filter(([, value]) => value);
+
+  const renderVideo = (item, idx) => {
+    if (!item.url) return null;
+    if (item.kind !== 'video') return null;
+    return (
+      <View key={`${item.url}-${idx}`} style={styles.videoCard}>
+        <Video
+          style={styles.video}
+          source={{ uri: item.url }}
+          useNativeControls
+          shouldPlay={false}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.body}>
-        <Image source={{ uri: post.cover }} style={styles.cover} />
-        <View style={styles.content}>
+        <MediaGallery media={post.media || []} showAll columns={1} />
+        <View style={styles.contentCard}>
           <Text style={styles.title}>{post.title}</Text>
           <Text style={styles.authorLine}>
-            {post.author || '匿名拍友'}{post.authorBio ? ` · ${post.authorBio}` : ''} · {String(post.createdAt || '').slice(0, 10)}
+            {post.author || '匿名拍友'} · {post.authorBio ? `${post.authorBio} · ` : ''}{formatTime(post.createdAt)}
           </Text>
 
-          <View style={styles.tagsRow}>
-            {(post.tags || []).map((t) => <Text key={t} style={styles.tag}>#{t}</Text>)}
-            {(post.styles || []).map((t) => <Text key={t} style={[styles.tag, styles.tagStyle]}>{t}</Text>)}
+          <View style={styles.tags}>
+            {(post.styles || []).map((item) => <Text key={item} style={styles.tag}>#{item}</Text>)}
+            {(post.tags || []).map((item) => <Text key={item} style={styles.tag}>{item}</Text>)}
           </View>
 
-          <Text style={styles.contentText}>{post.content || '（博主没有写正文）'}</Text>
+          <Text style={styles.contentText}>{post.content || '内容暂无说明'}</Text>
 
-          <Text style={styles.sectionTitle}>设备与参数</Text>
-          {gearRows.length ? (
-            <View style={styles.gearCard}>
-              {gearRows.map(([k, v]) => (
-                <View key={k} style={styles.gearRow}>
-                  <Text style={styles.gearLabel}>{k}</Text>
-                  <Text style={styles.gearVal}>{v}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>参数卡片</Text>
+            {(shootRows.length === 0) ? (
+              <Text style={styles.note}>博主未填写拍摄参数。</Text>
+            ) : (
+              shootRows.map(([k, v]) => (
+                <View key={k} style={styles.rowItem}>
+                  <Text style={styles.rowKey}>{k}</Text>
+                  <Text style={styles.rowVal}>{v}</Text>
                 </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.mutedText}>未填设备参数</Text>
-          )}
-
-          {post.angle ? <Text style={styles.extra}>📐 角度：{post.angle}</Text> : null}
-          {post.timeWindow ? <Text style={styles.extra}>🕐 时间：{post.timeWindow}</Text> : null}
-
-          <View style={styles.actions}>
-            <Pressable style={styles.likeBtn} onPress={doLike}>
-              <Text style={styles.likeBtnText}>❤ {post.likes || 0}</Text>
-            </Pressable>
-            <Text style={styles.commentCount}>💬 {post.comments?.length || 0} 条评论</Text>
+              ))
+            )}
           </View>
 
-          <Text style={styles.sectionTitle}>评论</Text>
-          {(post.comments || []).length === 0 && <Text style={styles.mutedText}>还没有评论，来抢沙发</Text>}
-          {(post.comments || []).map((c) => (
-            <View key={c.id} style={styles.commentCard}>
-              <Text style={styles.commentAuthor}>{c.author}</Text>
-              <Text style={styles.commentText}>{c.text}</Text>
-              <Text style={styles.commentTime}>{String(c.createdAt || '').slice(0, 16).replace('T', ' ')}</Text>
+          {post.media?.some((m) => m.kind === 'video') ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>视频</Text>
+              {post.media.map(renderVideo)}
+            </View>
+          ) : null}
+
+          <ActionBar
+            likes={post.likes || 0}
+            favorites={post.favorites || 0}
+            comments={post.comments?.length || 0}
+            liked={post.liked}
+            favorited={post.favorited}
+            onLike={postActions.onLike}
+            onFavorite={postActions.onFavorite}
+            onComment={() => {}}
+          />
+
+          <Text style={styles.sectionTitle}>评论 ({(post.comments || []).length})</Text>
+          {(post.comments || []).length === 0 ? <Text style={styles.note}>还没有评论，快点下第一个吧</Text> : null}
+          {(post.comments || []).map((item) => (
+            <View key={item.id} style={styles.commentCard}>
+              <Text style={styles.commentAuthor}>{item.author}</Text>
+              <Text style={styles.commentText}>{item.text}</Text>
+              <Text style={styles.commentTime}>{formatTime(item.createdAt)}</Text>
             </View>
           ))}
 
-          <View style={styles.commentBox}>
+          <View style={styles.commentBar}>
             <TextInput
-              style={styles.input}
-              placeholder="说点什么…"
               value={comment}
               onChangeText={setComment}
+              style={styles.input}
+              placeholder="写下你的拍摄反馈"
+              placeholderTextColor={COLORS.muted}
               multiline
             />
-            <Pressable style={[styles.sendBtn, sending && styles.sendBtnDisabled]} onPress={doComment} disabled={sending}>
-              <Text style={styles.sendBtnText}>发送</Text>
+            <Pressable
+              style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+              onPress={onSendComment}
+              disabled={sending}
+            >
+              <Text style={styles.sendBtnText}>{sending ? '发送中' : '发送'}</Text>
             </Pressable>
           </View>
 
           <TextInput
-            style={[styles.input, styles.authorInput]}
-            placeholder="昵称（默认 匿名拍友）"
             value={author}
             onChangeText={setAuthor}
+            style={[styles.input, styles.authorInput]}
+            placeholder="昵称（默认匿名拍友）"
+            placeholderTextColor={COLORS.muted}
           />
         </View>
       </ScrollView>
@@ -135,49 +241,52 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg },
   err: { color: '#a34a2a' },
-  body: { paddingBottom: 50 },
-  cover: { width: '100%', height: 220, backgroundColor: COLORS.bgDeep },
-  content: { padding: 16 },
-  title: { fontSize: 21, fontWeight: '700', color: COLORS.ink, lineHeight: 28 },
+  body: { paddingBottom: 40 },
+  contentCard: { padding: 14 },
+  title: { fontSize: 22, color: COLORS.ink, fontWeight: '700', lineHeight: 30 },
   authorLine: { fontSize: 12.5, color: COLORS.muted, marginTop: 6 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   tag: {
-    fontSize: 11.5, color: COLORS.muted, backgroundColor: COLORS.bgDeep,
-    borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, overflow: 'hidden',
+    fontSize: 11.5,
+    color: COLORS.accent,
+    backgroundColor: COLORS.accentBg,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  tagStyle: { color: '#6d3112', backgroundColor: COLORS.accentSoft },
-  contentText: { fontSize: 14.5, lineHeight: 22, color: COLORS.ink, marginTop: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.ink, marginTop: 18, marginBottom: 8 },
-  gearCard: {
-    backgroundColor: COLORS.panel, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: COLORS.line, gap: 8,
-  },
-  gearRow: { flexDirection: 'row', gap: 10 },
-  gearLabel: { fontSize: 13, color: COLORS.muted, width: 44 },
-  gearVal: { fontSize: 13, color: COLORS.ink, flex: 1 },
-  mutedText: { fontSize: 13, color: COLORS.muted },
-  extra: { fontSize: 13, color: COLORS.ink, marginTop: 6 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 16 },
-  likeBtn: {
-    backgroundColor: COLORS.accent, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10,
-  },
-  likeBtnText: { color: COLORS.onAccent, fontWeight: '600', fontSize: 14 },
-  commentCount: { fontSize: 13, color: COLORS.muted },
-  commentCard: {
-    backgroundColor: COLORS.panel, borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: COLORS.line, marginBottom: 8,
-  },
-  commentAuthor: { fontSize: 13, fontWeight: '600', color: COLORS.ink },
-  commentText: { fontSize: 13.5, color: COLORS.ink, marginTop: 3, lineHeight: 19 },
-  commentTime: { fontSize: 11, color: COLORS.muted, marginTop: 4 },
-  commentBox: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'flex-end' },
+  contentText: { fontSize: 14.5, color: COLORS.ink, marginTop: 12, lineHeight: 22 },
+  section: { marginTop: 14 },
+  sectionTitle: { fontSize: 16, color: COLORS.ink, fontWeight: '700' },
+  rowItem: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  rowKey: { color: COLORS.muted, fontSize: 13 },
+  rowVal: { color: COLORS.ink, fontSize: 13, maxWidth: '65%', textAlign: 'right' },
+  note: { marginTop: 8, color: COLORS.muted, fontSize: 13 },
+  videoCard: { marginTop: 8, borderRadius: 10, overflow: 'hidden' },
+  video: { width: '100%', height: 240, backgroundColor: '#000' },
+  commentCard: { marginTop: 8, backgroundColor: COLORS.card, borderRadius: 10, borderWidth: 1, borderColor: COLORS.cardBorder, padding: 10 },
+  commentAuthor: { color: COLORS.ink, fontWeight: '700', fontSize: 13 },
+  commentText: { color: COLORS.ink, marginTop: 4, lineHeight: 20, fontSize: 13.5 },
+  commentTime: { color: COLORS.muted, marginTop: 4, fontSize: 11 },
+  commentBar: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'flex-end' },
   input: {
-    flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 12,
-    padding: 10, backgroundColor: COLORS.panel, fontSize: 13.5, color: COLORS.ink,
-    minHeight: 40, maxHeight: 100,
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    color: COLORS.ink,
+    minHeight: 42,
+    maxHeight: 100,
+    padding: 10,
+    fontSize: 13.5,
   },
-  sendBtn: { backgroundColor: COLORS.accent, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10 },
-  sendBtnDisabled: { opacity: 0.5 },
-  sendBtnText: { color: COLORS.onAccent, fontWeight: '600' },
+  sendBtn: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  sendBtnDisabled: { opacity: 0.6 },
+  sendBtnText: { color: COLORS.onAccent, fontWeight: '700', fontSize: 13.5 },
   authorInput: { marginTop: 8 },
 });
