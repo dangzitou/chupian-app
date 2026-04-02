@@ -44,14 +44,48 @@ npm run start
 
 ## Backend contracts
 
-The app expects `chupian-map/server.py` compatible endpoints:
+The app supports both `/api/v1` and legacy `/api` endpoints (prefers `/api/v1`):
 
-- `GET /api/spots`
-- `GET /api/posts`
-- `POST /api/posts`
-- `POST /api/posts/{id}/like`
-- `POST /api/posts/{id}/comment`
-- `GET /api/weather`
+- Health
+  - `GET /api/v1/health`
+- Spots
+  - `GET /api/v1/spots`
+  - `GET /api/spots` (compat)
+- Community
+  - `GET /api/v1/community/feed`
+  - `GET /api/v1/posts`
+  - `GET /api/v1/posts/{id}`
+  - `POST /api/v1/posts`
+  - `POST /api/v1/posts/{id}/like`
+  - `POST /api/v1/posts/{id}/favorite`
+  - `POST /api/v1/posts/{id}/comments`
+  - `POST /api/v1/media/upload`
+  - `GET /api/v1/weather`
+- Compatibility endpoints
+  - `GET /api/posts`
+  - `GET /api/posts/{id}`
+  - `POST /api/posts`
+  - `POST /api/posts/{id}/like`
+  - `POST /api/posts/{id}/favorite`
+  - `POST /api/posts/{id}/comment`
+  - `POST /api/posts/{id}/comments`
+  - `GET /api/weather`
+
+## Local QA (integration + adversarial)
+
+```bash
+cd backend && npm install
+cd ..
+npm run qa:integration
+npm run qa:adversarial
+```
+
+If DB is not available, DB-dependent checks are reported as warnings; for full mode:
+
+```bash
+cd backend && mysql -h 127.0.0.1 -u root -p < schema.sql
+REDIS_URL=redis://127.0.0.1:6379 QA_REQUIRE_DB=1 npm run qa:integration
+```
 
 ## Project structure
 
