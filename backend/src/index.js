@@ -23,7 +23,10 @@ const {
   ALLOWED_UPLOAD_EXT = ".jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.m4v,.mp3",
   MAX_JSON_SIZE = "2mb",
   MAX_FILE_SIZE = "120mb",
+  SPOT_CACHE_TTL = "90",
 } = process.env;
+
+const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -521,8 +524,22 @@ app.get("/api/weather", weatherHandler);
 app.get("/api/v1/weather", weatherHandler);
 
 async function spotsHandler(_req, res) {
+  const cacheKey = "spots:list:v2";
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+
   const spots = await query("SELECT * FROM spots ORDER BY name");
-  res.json({ spots: spots.map((s) => ({ ...s, lat: Number(s.latitude), lng: Number(s.longitude), tags: safeJsonList(s.tags), styles: safeJsonList(s.styles) })) });
+  const payload = {
+    spots: spots.map((s) => ({
+      ...s,
+      lat: Number(s.latitude),
+      lng: Number(s.longitude),
+      tags: safeJsonList(s.tags),
+      styles: safeJsonList(s.styles),
+    })),
+  };
+  await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
+  return res.json(payload);
 }
 
 app.get("/api/v1/spots", asyncHandler(spotsHandler));

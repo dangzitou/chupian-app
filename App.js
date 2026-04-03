@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from './src/config';
+import { Ionicons } from '@expo/vector-icons';
 
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
@@ -17,10 +18,10 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const icons = {
-  首页: '🏙️',
-  地图: '🧭',
-  发布: '✚',
-  我的: '👤',
+  首页: { icon: 'albums-outline', active: 'albums' },
+  地图: { icon: 'location-outline', active: 'location' },
+  发布: { icon: 'add-circle-outline', active: 'add-circle' },
+  我的: { icon: 'person-outline', active: 'person' },
 };
 
 function HomeStack() {
@@ -40,7 +41,8 @@ function RedBookTabBar({ state, descriptors, navigation }) {
         const isFocused = state.index === index;
         const label = descriptors[route.key].options.tabBarLabel ?? route.name;
         const activeStyle = isFocused;
-        const icon = icons[label] || '•';
+        const config = icons[label] || { icon: 'ellipse-outline', active: 'ellipse' };
+        const iconName = activeStyle ? config.active : config.icon;
 
         return (
           <Pressable
@@ -54,13 +56,13 @@ function RedBookTabBar({ state, descriptors, navigation }) {
             android_ripple={{ color: '#ddd', borderless: false }}
           >
             <View style={[styles.tabInner, activeStyle && styles.tabInnerActive, label === '发布' && styles.plusCircle]}>
-              <Text style={[styles.tabIcon, activeStyle && styles.tabIconActive, label === '发布' && styles.plusIcon]}>
-                {icon}
-              </Text>
+              <Ionicons
+                name={iconName}
+                size={label === '发布' ? 30 : 20}
+                color={activeStyle ? COLORS.accent : COLORS.muted}
+              />
             </View>
-            {label !== '发布' ? (
-              <Text style={[styles.tabText, activeStyle && styles.tabTextActive]}>{label}</Text>
-            ) : null}
+            <Text style={[styles.tabText, activeStyle && styles.tabTextActive]}>{label}</Text>
           </Pressable>
         );
       })}

@@ -1,10 +1,12 @@
 # 出片地图 手机端（Chupian App）
 
-这是出片地图的 React Native / Expo 移动端，围绕广州拍照机位与出片攻略做了一个轻量体验：
+这是出片地图的 React Native / Expo 移动端，围绕广州拍照机位与出片攻略做了一个更偏「内容社区」的体验：
 
 - 点位列表 + 时段筛选
 - 点位详情（机位、时间、提示）
-- 攻略列表 + 发布攻略 + 点赞 + 评论
+- 小红书式「出片帖」列表（支持标题、正文、标签、拍摄参数）
+- 一键发布：地点、角度、方向、相机、焦距、快门、ISO 等摄影参数 + 图片/视频/实况素材
+- 点赞 / 收藏 / 评论互动闭环
 - 内嵌网页版地图（WebView）
 - 天气卡片 + 统计面板
 
@@ -96,6 +98,21 @@ npm run qa:adversarial      # 攻防/对抗性测试（异常参数、边界输�
 ```bash
 cd backend && mysql -h 127.0.0.1 -u root -p < schema.sql
 REDIS_URL=redis://127.0.0.1:6379 QA_REQUIRE_DB=1 npm run qa:integration
+```
+
+## Web 部署到 80 端口（可发布）
+
+> 先确认后端在 3000（或自定义端口）可访问。
+
+```bash
+# 1) 打包 web 前端
+npm run web:build
+
+# 2) 使用静态服务发布到 80 端口（同机部署）
+npm run web:serve
+
+# 示例：绑定到自定义域名（nginx 反代到 80）
+npx serve web-build -l 80 --single
 ```
 
 ## 说明

@@ -6,7 +6,9 @@ Features:
 
 - Spot list + time filters
 - Spot detail pages (angles, time, suggestions)
-- Post list + publish guide + like + comments
+- Xiaohongshu-style community feed for shooting posts (title/content/tags/camera meta)
+- One-click publish flow with photo info (spot, angle, direction, lens/focal/iso, etc.) + image/video/live media
+- Interaction loop: like, favorite, comments
 - Embedded web map (WebView)
 - Weather cards + statistics panel
 
@@ -85,6 +87,16 @@ If DB is not available, DB-dependent checks are reported as warnings; for full m
 ```bash
 cd backend && mysql -h 127.0.0.1 -u root -p < schema.sql
 REDIS_URL=redis://127.0.0.1:6379 QA_REQUIRE_DB=1 npm run qa:integration
+```
+
+## Web deploy on port 80
+
+> Ensure the backend is reachable first (default `http://localhost:3000`).
+
+```bash
+npm run web:build
+npm run web:serve
+npx serve web-build -l 80 --single
 ```
 
 ## Project structure
