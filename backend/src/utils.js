@@ -3,8 +3,15 @@ export function parseCursor(cursor) {
   const parts = String(cursor).split("|");
   if (parts.length !== 2) return null;
   const id = Number(parts[0]);
-  const ts = new Date(parts[1]).toISOString();
-  if (Number.isNaN(id) || Number.isNaN(new Date(ts).getTime())) return null;
+  let ts;
+  try {
+    const parsed = new Date(parts[1]);
+    if (Number.isNaN(parsed.getTime())) return null;
+    ts = parsed.toISOString();
+  } catch (_err) {
+    return null;
+  }
+  if (Number.isNaN(id)) return null;
   return { id, createdAt: ts };
 }
 

@@ -162,8 +162,8 @@ async function loadPostMeta(rows) {
        ORDER BY post_id, sort_order`,
       ids
     ),
-    query("SELECT post_id, tag FROM post_tags WHERE post_id IN (${inQuery})", ids),
-    query("SELECT post_id, style FROM post_styles WHERE post_id IN (${inQuery})", ids),
+    query(`SELECT post_id, tag FROM post_tags WHERE post_id IN (${inQuery})`, ids),
+    query(`SELECT post_id, style FROM post_styles WHERE post_id IN (${inQuery})`, ids),
     query(
       `SELECT post_id, id, actor_name AS author, content, created_at
        FROM post_comments
@@ -172,8 +172,8 @@ async function loadPostMeta(rows) {
        LIMIT 80`,
       ids
     ),
-    query("SELECT post_id, COUNT(*) AS c FROM post_likes WHERE post_id IN (${inQuery}) GROUP BY post_id", ids),
-    query("SELECT post_id, COUNT(*) AS c FROM post_favorites WHERE post_id IN (${inQuery}) GROUP BY post_id", ids),
+    query(`SELECT post_id, COUNT(*) AS c FROM post_likes WHERE post_id IN (${inQuery}) GROUP BY post_id`, ids),
+    query(`SELECT post_id, COUNT(*) AS c FROM post_favorites WHERE post_id IN (${inQuery}) GROUP BY post_id`, ids),
   ]);
 
   const mediaMap = new Map();
@@ -264,7 +264,8 @@ async function loadPostMeta(rows) {
 
 async function fetchFeedRows({ sort = "latest", cursor, limit, actorId }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
-  const clauses = ["SELECT p.*", " FROM posts p"];
+  const clauses = ["SELECT p.*"];
+  const fromClause = " FROM posts p";
   const where = ["p.status='published'"];
   const params = [];
 
@@ -286,7 +287,7 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId }) {
   params.unshift(actorId, actorId);
 
   const rows = await query(
-    `${clauses.join("")} WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
+    `${clauses.join("")} ${fromClause} WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
     [...params, max + 1]
   );
 
@@ -362,6 +363,13 @@ async function createPostHandler(req, res) {
   const media = Array.isArray(body.media) ? body.media : [];
   const tags = normalizeList(body.tags || body.tag || "");
   const styles = normalizeList(body.styles || "");
+  let shotAt = null;
+  if (body.shotAt) {
+    const parsed = new Date(body.shotAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      shotAt = parsed.toISOString().slice(0, 19).replace("T", " ");
+    }
+  }
 
   const result = await tx(async (conn) => {
     const [postResult] = await conn.execute(
@@ -382,7 +390,7 @@ async function createPostHandler(req, res) {
         safeText(body.angle || "", 80),
         safeText(body.timeWindow || "", 80),
         body.bestTime === "night" || body.bestTime === "golden" ? body.bestTime : "day",
-        body.shotAt || null,
+        shotAt,
         safeText(body.camera || "", 80),
         safeText(body.lens || "", 80),
         safeText(body.focalLength || "", 40),
@@ -616,7 +624,7 @@ app.post("/api/v1/posts/:id/comments", asyncHandler(async (req, res) => {
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
 
   const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists.length) return res.status(404).json({ error: "post not found" });
+  if (!exists?.id) return res.status(404).json({ error: "post not found" });
 
   await query(
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
@@ -635,7 +643,7 @@ app.post("/api/v1/posts/:id/comment", asyncHandler(async (req, res) => {
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
 
   const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists.length) return res.status(404).json({ error: "post not found" });
+  if (!exists?.id) return res.status(404).json({ error: "post not found" });
 
   await query(
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
@@ -698,7 +706,7 @@ app.post("/api/posts/:id/comment", asyncHandler(async (req, res) => {
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
 
   const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists.length) return res.status(404).json({ error: "post not found" });
+  if (!exists?.id) return res.status(404).json({ error: "post not found" });
 
   await query(
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
@@ -734,7 +742,7 @@ app.post("/api/posts/:id/comments", asyncHandler(async (req, res) => {
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
 
   const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists.length) return res.status(404).json({ error: "post not found" });
+  if (!exists?.id) return res.status(404).json({ error: "post not found" });
 
   await query(
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
