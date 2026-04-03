@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -25,6 +25,10 @@ export default function PostDetailScreen({ route }) {
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
   const [author, setAuthor] = useState('匿名拍友');
+  const [actionBusy, setActionBusy] = useState({
+    like: false,
+    favorite: false,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,57 +45,83 @@ export default function PostDetailScreen({ route }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const postActions = useMemo(() => {
-    if (!post) return null;
-    return {
-      onLike: async () => {
-        try {
-          const next = !post.liked;
-          setPost((prev) => ({
-            ...prev,
-            liked: next,
-            likes: Math.max(0, Number(prev.likes || 0) + (next ? 1 : -1)),
-          }));
-          await api.toggleLike(post.id, author, next ? 'like' : 'unlike');
-          const fresh = await api.getPost(post.id);
-          setPost((prev) => ({
-            ...prev,
-            likes: fresh.likes,
-            liked: Boolean(fresh.liked),
-          }));
-        } catch (e) {
-          setPost((prev) => ({
-            ...prev,
-            likes: Math.max(0, (prev.likes || 0) + (prev.liked ? -1 : 1)),
-            liked: !prev.liked,
-          }));
-        }
-      },
-      onFavorite: async () => {
-        try {
-          const next = !post.favorited;
-          setPost((prev) => ({
-            ...prev,
-            favorited: next,
-            favorites: Math.max(0, Number(prev.favorites || 0) + (next ? 1 : -1)),
-          }));
-          await api.toggleFavorite(post.id, author, next ? 'favorite' : 'unfavorite');
-          const fresh = await api.getPost(post.id);
-          setPost((prev) => ({
-            ...prev,
-            favorites: fresh.favorites,
-            favorited: Boolean(fresh.favorited),
-          }));
-        } catch (e) {
-          setPost((prev) => ({
-            ...prev,
-            favorites: Math.max(0, (prev.favorites || 0) + (prev.favorited ? -1 : 1)),
-            favorited: !prev.favorited,
-          }));
-        }
-      },
-    };
-  }, [author, post]);
+  const setBusy = useCallback((key, value) => {
+    setActionBusy((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const onLike = useCallback(async () => {
+    if (!post || actionBusy.like) return;
+    let base = null;
+
+    setPost((prev) => {
+      if (!prev) return prev;
+      base = prev;
+      const nextLiked = !prev.liked;
+      return {
+        ...prev,
+        liked: nextLiked,
+        likes: Math.max(0, Number(prev.likes || 0) + (nextLiked ? 1 : -1)),
+      };
+    });
+    if (!base) return;
+
+    setBusy('like', true);
+    try {
+      const next = !base.liked;
+      await api.toggleLike(base.id, author, next ? 'like' : 'unlike');
+      const fresh = await api.getPost(base.id);
+      setPost((prev) => ({
+        ...prev,
+        likes: fresh.likes,
+        liked: Boolean(fresh.liked),
+      }));
+    } catch (_e) {
+      setPost((prev) => ({
+        ...prev,
+        likes: base.likes,
+        liked: base.liked,
+      }));
+    } finally {
+      setBusy('like', false);
+    }
+  }, [author, actionBusy.like, post, setBusy]);
+
+  const onFavorite = useCallback(async () => {
+    if (!post || actionBusy.favorite) return;
+    let base = null;
+
+    setPost((prev) => {
+      if (!prev) return prev;
+      base = prev;
+      const nextFavorited = !prev.favorited;
+      return {
+        ...prev,
+        favorited: nextFavorited,
+        favorites: Math.max(0, Number(prev.favorites || 0) + (nextFavorited ? 1 : -1)),
+      };
+    });
+    if (!base) return;
+
+    setBusy('favorite', true);
+    try {
+      const next = !base.favorited;
+      await api.toggleFavorite(base.id, author, next ? 'favorite' : 'unfavorite');
+      const fresh = await api.getPost(base.id);
+      setPost((prev) => ({
+        ...prev,
+        favorites: fresh.favorites,
+        favorited: Boolean(fresh.favorited),
+      }));
+    } catch (_e) {
+      setPost((prev) => ({
+        ...prev,
+        favorites: base.favorites,
+        favorited: base.favorited,
+      }));
+    } finally {
+      setBusy('favorite', false);
+    }
+  }, [author, actionBusy.favorite, post, setBusy]);
 
   const onSendComment = useCallback(async () => {
     if (!comment.trim() || !post) return;
@@ -100,6 +130,8 @@ export default function PostDetailScreen({ route }) {
       await api.comment(post.id, author || '匿名拍友', comment.trim());
       setComment('');
       await load();
+    } catch (_e) {
+      // 失败时保留输入，允许用户重试
     } finally {
       setSending(false);
     }
@@ -169,8 +201,8 @@ export default function PostDetailScreen({ route }) {
             comments={post.comments?.length || 0}
             liked={post.liked}
             favorited={post.favorited}
-            onLike={postActions.onLike}
-            onFavorite={postActions.onFavorite}
+            onLike={onLike}
+            onFavorite={onFavorite}
             onComment={() => {}}
           />
 
