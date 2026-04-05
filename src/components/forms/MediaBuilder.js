@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS, MEDIA_KINDS } from '../../config';
+import VideoSurface from '../VideoSurface';
 
 const KIND_LABEL = {
   [MEDIA_KINDS.IMAGE]: '图片',
@@ -8,29 +9,75 @@ const KIND_LABEL = {
   [MEDIA_KINDS.LIVE]: '实况',
 };
 
-export default function MediaBuilder({ mediaList, onRemove }) {
+function toNumber(value) {
+  const valueNumber = Number(value || 0);
+  return Number.isFinite(valueNumber) ? valueNumber : 0;
+}
+
+function formatDuration(value) {
+  const normalized = toNumber(value);
+  if (!normalized) return null;
+  const seconds = normalized > 500 ? Math.round(normalized / 1000) : Math.round(normalized);
+  return `${Math.max(1, seconds)}s`;
+}
+
+export default function MediaBuilder({
+  mediaList,
+  onRemove,
+  coverIndex = -1,
+  onSetCover,
+}) {
+  const canSetCover = typeof onSetCover === 'function';
+  const safeCoverIndex = Number.isInteger(Number(coverIndex)) ? Number(coverIndex) : -1;
+
   if (!mediaList.length) {
     return <Text style={styles.empty}>建议上传 1~9 张图片/视频，内容更容易被发现</Text>;
   }
 
   return (
     <View style={styles.row}>
-      {mediaList.map((item, idx) => (
-        <View key={`${item.uri}-${idx}`} style={styles.card}>
-          <Image source={{ uri: item.uri }} style={styles.image} resizeMode="cover" />
-          <Text style={styles.kind}>{KIND_LABEL[item.kind] || item.kind}</Text>
-          <Text style={styles.badge}>
-            {idx + 1}
-          </Text>
-          {item.kind === MEDIA_KINDS.VIDEO && item.duration ? (
-            <Text style={styles.tag}>{Math.max(1, Math.floor(item.duration / 1000 || item.duration || 0))}s</Text>
-          ) : null}
+      {mediaList.map((item, idx) => {
+        const durationText = formatDuration(item.duration);
+        const isCover = safeCoverIndex === idx;
+        const isVideo = item.kind === MEDIA_KINDS.VIDEO;
 
-          <Pressable style={styles.delete} onPress={() => onRemove(idx)}>
-            <Text style={styles.deleteText}>−</Text>
-          </Pressable>
-        </View>
-      ))}
+        return (
+          <View key={`${item.uri}-${idx}`} style={styles.card}>
+            {isVideo ? (
+              <VideoSurface uri={item.uri} style={styles.image} />
+            ) : (
+              <Image source={{ uri: item.uri }} style={styles.image} resizeMode="cover" />
+            )}
+            <Text style={styles.kind}>{KIND_LABEL[item.kind] || item.kind}</Text>
+            <Text style={styles.badge}>
+              {idx + 1}
+            </Text>
+
+            {durationText ? (
+              <Text style={styles.tag}>{durationText}</Text>
+            ) : null}
+
+            {isCover ? (
+              <View style={styles.coverMark}>
+                <Text style={styles.coverMarkText}>封面</Text>
+              </View>
+            ) : null}
+
+            {canSetCover && !isCover && mediaList.length > 1 ? (
+              <Pressable
+                style={styles.coverBtn}
+                onPress={() => onSetCover(idx)}
+              >
+                <Text style={styles.coverBtnText}>设为封面</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable style={styles.delete} onPress={() => onRemove(idx)}>
+              <Text style={styles.deleteText}>−</Text>
+            </Pressable>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -92,12 +139,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
   },
-  empty: {
-    color: COLORS.muted,
-    fontSize: 12,
-    marginTop: 6,
-    marginBottom: 4,
-  },
   badge: {
     position: 'absolute',
     right: 6,
@@ -108,6 +149,40 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 6,
     paddingVertical: 1,
+    fontWeight: '700',
+  },
+  empty: {
+    color: COLORS.muted,
+    fontSize: 12,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  coverMark: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    backgroundColor: COLORS.accent,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  coverMarkText: {
+    color: COLORS.onAccent,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  coverBtn: {
+    position: 'absolute',
+    left: 6,
+    top: 28,
+    backgroundColor: 'rgba(0,0,0,0.74)',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  coverBtnText: {
+    color: COLORS.onAccent,
+    fontSize: 10,
     fontWeight: '700',
   },
 });
