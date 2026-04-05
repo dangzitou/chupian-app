@@ -11,4 +11,3 @@ export function clampText(value, maxLen, suffix = '…') {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, Math.max(0, maxLen - suffix.length))}${suffix}`;
 }
-

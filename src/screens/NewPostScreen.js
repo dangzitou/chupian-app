@@ -20,6 +20,9 @@ import PostInput from '../components/forms/PostInput';
 import OptionPills from '../components/forms/OptionPills';
 import MediaBuilder from '../components/forms/MediaBuilder';
 
+const MAX_MEDIA_COUNT = 9;
+const LIVE_MEDIA_URI = 'https://picsum.photos/seed/live-photo/900/1200';
+
 function reducer(state, action) {
   if (action.type === 'update') {
     return { ...state, ...action.payload };
@@ -30,15 +33,25 @@ function reducer(state, action) {
   return state;
 }
 
-function requestPermissions() {
+function hasGranted(status) {
+  return status.granted || status.status === 'granted';
+}
+
+function requestGalleryPermission() {
   if (Device.osName === 'web') return true;
-  return Promise.all([
-    ImagePicker.requestCameraPermissionsAsync(),
-    ImagePicker.requestMediaLibraryPermissionsAsync(),
-  ]).then(([camera, media]) => {
-    const cameraOk = camera.granted || camera.status === 'granted';
-    const mediaOk = media.granted || media.status === 'granted';
-    return cameraOk && mediaOk;
+  return ImagePicker.requestMediaLibraryPermissionsAsync().then((media) => {
+    if (hasGranted(media)) return true;
+    Alert.alert('无权限', '请先授权相册权限');
+    return false;
+  });
+}
+
+function requestCameraPermission() {
+  if (Device.osName === 'web') return true;
+  return ImagePicker.requestCameraPermissionsAsync().then((camera) => {
+    if (hasGranted(camera)) return true;
+    Alert.alert('无权限', '请先授权相机权限');
+    return false;
   });
 }
 
@@ -93,9 +106,8 @@ export default function NewPostScreen({ navigation }) {
   }, []);
 
   const pickFromLibrary = useCallback(async () => {
-    const ok = await requestPermissions();
+    const ok = await requestGalleryPermission();
     if (!ok) {
-      Alert.alert('无权限', '请先授权照片/相册权限');
       return;
     }
 
@@ -109,9 +121,13 @@ export default function NewPostScreen({ navigation }) {
     if (res.canceled || !res.assets?.length) return;
 
     setMediaList((prev) => {
+      if (prev.length >= MAX_MEDIA_COUNT) {
+        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
+        return prev;
+      }
       const next = [...prev];
       for (const asset of res.assets) {
-        if (next.length >= 9) break;
+        if (next.length >= MAX_MEDIA_COUNT) break;
         next.push({
           uri: asset.uri,
           kind: asset.type === 'video' ? MEDIA_KINDS.VIDEO : MEDIA_KINDS.IMAGE,
@@ -124,9 +140,8 @@ export default function NewPostScreen({ navigation }) {
   }, []);
 
   const shootWithCamera = useCallback(async () => {
-    const ok = await requestPermissions();
+    const ok = await requestCameraPermission();
     if (!ok) {
-      Alert.alert('无权限', '请先授权相机权限');
       return;
     }
 
@@ -139,31 +154,34 @@ export default function NewPostScreen({ navigation }) {
 
     const asset = res.assets[0];
     setMediaList((prev) => {
-      if (prev.length >= 9) return prev;
+      if (prev.length >= MAX_MEDIA_COUNT) {
+        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
+        return prev;
+      }
       return [...prev, {
         uri: asset.uri,
         kind: asset.type === 'video' ? MEDIA_KINDS.VIDEO : MEDIA_KINDS.IMAGE,
         mime: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
         duration: asset.duration || 0,
-      }].slice(0, 9);
+      }].slice(0, MAX_MEDIA_COUNT);
     });
   }, []);
 
   const addLivePhoto = useCallback(() => {
     setMediaList((prev) => {
-      if (prev.length >= 9) {
-        Alert.alert('提示', '素材最多支持 9 个');
+      if (prev.length >= MAX_MEDIA_COUNT) {
+        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
         return prev;
       }
       if (prev.some((x) => x.kind === MEDIA_KINDS.LIVE)) {
         return prev.filter((x) => x.kind !== MEDIA_KINDS.LIVE).concat({
-          uri: 'https://picsum.photos/seed/live-photo/900/1200',
+          uri: LIVE_MEDIA_URI,
           kind: MEDIA_KINDS.LIVE,
           mime: 'image/jpeg',
         });
       }
       return [...prev, {
-        uri: 'https://picsum.photos/seed/live-photo/900/1200',
+        uri: LIVE_MEDIA_URI,
         kind: MEDIA_KINDS.LIVE,
         mime: 'image/jpeg',
       }];
@@ -469,7 +487,8 @@ export default function NewPostScreen({ navigation }) {
           <Pressable style={styles.mediaBtn} onPress={addLivePhoto}>
             <Text style={styles.mediaBtnText}>实况</Text>
           </Pressable>
-          <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/9</Text></View>
+          <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/{MAX_MEDIA_COUNT}</Text></View>
+          {mediaList.length >= MAX_MEDIA_COUNT ? <Text style={styles.mediaCountWarn}>已达上限</Text> : null}
         </View>
 
         <MediaBuilder mediaList={mediaList} onRemove={removeMedia} />
@@ -578,6 +597,13 @@ const styles = StyleSheet.create({
   mediaCountText: {
     color: COLORS.muted,
     fontSize: 11.5,
+  },
+  mediaCountWarn: {
+    position: 'absolute',
+    right: 0,
+    top: 46,
+    color: '#a34a2a',
+    fontSize: 11,
   },
   publishBtn: {
     marginTop: 14,

@@ -19,6 +19,9 @@ export default function MediaBuilder({ mediaList, onRemove }) {
         <View key={`${item.uri}-${idx}`} style={styles.card}>
           <Image source={{ uri: item.uri }} style={styles.image} resizeMode="cover" />
           <Text style={styles.kind}>{KIND_LABEL[item.kind] || item.kind}</Text>
+          <Text style={styles.badge}>
+            {idx + 1}
+          </Text>
           {item.kind === MEDIA_KINDS.VIDEO && item.duration ? (
             <Text style={styles.tag}>{Math.max(1, Math.floor(item.duration / 1000 || item.duration || 0))}s</Text>
           ) : null}
@@ -94,5 +97,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     marginBottom: 4,
+  },
+  badge: {
+    position: 'absolute',
+    right: 6,
+    top: 6,
+    fontSize: 10,
+    color: COLORS.onAccent,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    fontWeight: '700',
   },
 });
