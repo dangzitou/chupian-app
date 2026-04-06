@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
 import CATEGORIES from '../data/categories';
+import { APP_ROUTES } from '../constants/routes';
 
 export default function SpotsScreen({ navigation }) {
   const [spots, setSpots] = useState([]);
@@ -31,6 +32,19 @@ export default function SpotsScreen({ navigation }) {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
+  const onCreatePost = useCallback((spot) => {
+    const parent = navigation.getParent && navigation.getParent();
+    const prefillSpot = {
+      id: String(spot.id || ''),
+      name: spot.name || '',
+      district: spot.district || '',
+    };
+    if (parent) {
+      parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
+      return;
+    }
+    navigation.navigate(APP_ROUTES.CREATE, { prefillSpot });
+  }, [navigation]);
 
   const cats = [{ id: 'all', name: '全部' }, ...CATEGORIES];
 
@@ -94,8 +108,8 @@ export default function SpotsScreen({ navigation }) {
         renderItem={({ item }) => (
           <Pressable
             style={styles.card}
-              onPress={() => navigation.navigate('SpotDetail', { spotId: item.id, name: item.name })}
-            >
+            onPress={() => navigation.navigate('SpotDetail', { spotId: item.id, name: item.name })}
+          >
             <Image source={{ uri: item.cover }} style={styles.cover} />
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>{item.name}</Text>
@@ -108,6 +122,9 @@ export default function SpotsScreen({ navigation }) {
                   <Text key={t} style={styles.tag}>{t}</Text>
                 ))}
               </View>
+              <Pressable style={styles.quickPostBtn} onPress={() => onCreatePost(item)}>
+                <Text style={styles.quickPostText}>发布此点</Text>
+              </Pressable>
             </View>
           </Pressable>
         )}
@@ -157,6 +174,21 @@ const styles = StyleSheet.create({
   tag: {
     fontSize: 11, color: '#6d3112', backgroundColor: COLORS.accentSoft,
     borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden',
+  },
+  quickPostBtn: {
+    marginTop: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.accentBg,
+  },
+  quickPostText: {
+    color: COLORS.accent,
+    fontSize: 11.5,
+    fontWeight: '600',
   },
   empty: { textAlign: 'center', color: COLORS.muted, marginTop: 40 },
 });

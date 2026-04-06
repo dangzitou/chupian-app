@@ -65,7 +65,7 @@ services:
     depends_on:
       - backend
     expose:
-      - "3001"
+      - "80"
 
   nginx:
     image: nginx:1.27-alpine

@@ -9,52 +9,68 @@ export default function ActionBar({
   comments = 0,
   liked = false,
   favorited = false,
+  onShare,
   onLike,
   onFavorite,
   onComment,
   likeBusy = false,
   favoriteBusy = false,
 }) {
+  const actionItems = [
+    {
+      key: 'like',
+      active: liked,
+      disabled: likeBusy || !onLike,
+      icon: liked ? '❤️' : '♡',
+      label: formatCount(likes),
+      onPress: onLike,
+      showBusy: likeBusy,
+    },
+    {
+      key: 'comment',
+      disabled: !onComment,
+      icon: '💬',
+      label: formatCount(comments),
+      onPress: onComment,
+    },
+    {
+      key: 'favorite',
+      active: favorited,
+      disabled: favoriteBusy || !onFavorite,
+      icon: favorited ? '⭐' : '☆',
+      label: formatCount(favorites),
+      onPress: onFavorite,
+      showBusy: favoriteBusy,
+    },
+  ];
+
   return (
     <View style={styles.row}>
-      <Pressable
-        style={[styles.item, (likeBusy || onLike === null) && styles.itemDisabled]}
-        onPress={onLike}
-        disabled={likeBusy || !onLike}
-        android_ripple={{ color: '#ddd' }}
-      >
-        <Text style={[styles.icon, liked && styles.active]}>{liked ? '❤️' : '🤍'}</Text>
-        <Text style={[styles.text, liked && styles.activeText]}>
-          {likeBusy ? '…' : formatCount(likes)}
-        </Text>
-      </Pressable>
+      {actionItems.map((item) => (
+        <Pressable
+          key={item.key}
+          style={[styles.item, item.disabled && styles.itemDisabled]}
+          onPress={item.onPress}
+          disabled={item.disabled}
+          android_ripple={{ color: '#ddd' }}
+        >
+          <Text style={[styles.icon, item.active && styles.active]}>
+            {item.showBusy ? '…' : item.icon}
+          </Text>
+          <Text style={[styles.text, item.active && styles.activeText]}>{item.label}</Text>
+        </Pressable>
+      ))}
 
-      <Pressable
-        style={[styles.item, !onComment && styles.itemDisabled]}
-        onPress={onComment}
-        disabled={!onComment}
-        android_ripple={{ color: '#ddd' }}
-      >
-        <Text style={styles.icon}>💬</Text>
-        <Text style={styles.text}>{formatCount(comments)}</Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.item, (favoriteBusy || !onFavorite) && styles.itemDisabled]}
-        onPress={onFavorite}
-        disabled={favoriteBusy || !onFavorite}
-        android_ripple={{ color: '#ddd' }}
-      >
-        <Text style={[styles.icon, favorited && styles.active]}>{favorited ? '🔖' : '📌'}</Text>
-        <Text style={[styles.text, favorited && styles.activeText]}>
-          {favoriteBusy ? '…' : formatCount(favorites)}
-        </Text>
-      </Pressable>
-
-      <View style={[styles.item, styles.shareItem]}>
-        <Text style={styles.icon}>↗️</Text>
-        <Text style={styles.text}>分享</Text>
-      </View>
+      {onShare ? (
+        <Pressable
+          style={styles.item}
+          onPress={onShare}
+          android_ripple={{ color: '#ddd' }}
+        >
+          <Text style={styles.icon}>↗️</Text>
+          <Text style={styles.text}>分享</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -65,23 +81,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 10,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+    paddingTop: 9,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
+    gap: 3,
+    paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 20,
+    minWidth: 52,
+    justifyContent: 'center',
   },
   itemDisabled: {
     opacity: 0.5,
   },
-  shareItem: {
-    opacity: 0.9,
-  },
   icon: { fontSize: 16, color: COLORS.ink },
-  text: { fontSize: 12.5, color: COLORS.mutedText || COLORS.muted },
+  text: { fontSize: 11.8, color: COLORS.mutedText || COLORS.muted },
   active: { color: COLORS.accent },
   activeText: { color: COLORS.accent, fontWeight: '700' },
 });

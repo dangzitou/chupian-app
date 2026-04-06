@@ -7,6 +7,7 @@ export default function PostInput({
   value,
   onChange,
   placeholder,
+  error,
   multiline = false,
   maxLength,
   help,
@@ -14,12 +15,18 @@ export default function PostInput({
   numberOfLines = 1,
 }) {
   const lengthHint = maxLength ? `${String(value || '').length}/${maxLength}` : null;
+  const currentHelp = error || help;
+  const hasFooter = currentHelp || lengthHint;
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, error && styles.labelError]}>{label}</Text>
       <TextInput
-        style={[styles.input, multiline && styles.multiline]}
+        style={[
+          styles.input,
+          multiline && styles.multiline,
+          error && styles.inputError,
+        ]}
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
@@ -29,10 +36,14 @@ export default function PostInput({
         maxLength={maxLength}
         keyboardType={keyboardType}
       />
-      <View style={styles.footer}>
-        {help ? <Text style={styles.help}>{help}</Text> : null}
-        {lengthHint ? <Text style={styles.length}>{lengthHint}</Text> : null}
-      </View>
+      {hasFooter ? (
+        <View style={styles.footer}>
+          {currentHelp ? (
+            <Text style={[styles.help, error && styles.error]}>{currentHelp}</Text>
+          ) : null}
+          {lengthHint ? <Text style={styles.length}>{lengthHint}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -60,6 +71,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  labelError: {
+    color: '#b84b4b',
+  },
   help: { color: COLORS.muted, fontSize: 11.5 },
+  error: { color: '#b84b4b' },
+  inputError: {
+    borderColor: '#da7474',
+  },
   length: { color: COLORS.muted, fontSize: 11 },
 });

@@ -5,8 +5,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
+import { APP_ROUTES } from '../constants/routes';
 
-export default function SpotDetailScreen({ route }) {
+export default function SpotDetailScreen({ navigation, route }) {
   const { spotId, name } = route.params;
   const [spot, setSpot] = useState(null);
   const [error, setError] = useState(null);
@@ -71,6 +72,24 @@ export default function SpotDetailScreen({ route }) {
             onPress={() => Linking.openURL(`https://www.openstreetmap.org/?mlat=${spot.lat}&mlon=${spot.lng}#map=17/${spot.lat}/${spot.lng}`)}
           >
             <Text style={styles.navBtnText}>🧭 打开导航</Text>
+          </Pressable>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => {
+              const parent = navigation.getParent && navigation.getParent();
+              const prefillSpot = {
+                id: String(spot.id || ''),
+                name: spot.name || '',
+                district: spot.district || '',
+              };
+              if (parent) {
+                parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
+                return;
+              }
+              navigation.navigate(APP_ROUTES.CREATE, { prefillSpot });
+            }}
+          >
+            <Text style={styles.navBtnText}>＋ 去发布这个点</Text>
           </Pressable>
         </View>
       </ScrollView>

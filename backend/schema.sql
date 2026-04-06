@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS posts (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(200) NOT NULL,
   content TEXT NOT NULL,
+  author_id VARCHAR(64) DEFAULT '',
   author_name VARCHAR(64) NOT NULL DEFAULT '匿名拍友',
   author_bio VARCHAR(120) DEFAULT '',
   spot_id BIGINT UNSIGNED DEFAULT NULL,
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_posts_created (created_at, id),
   INDEX idx_posts_spot (spot_id),
+  INDEX idx_posts_shot_at (shot_at),
   CONSTRAINT fk_posts_spot FOREIGN KEY (spot_id) REFERENCES spots (id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -127,6 +129,17 @@ ALTER TABLE posts
   ADD INDEX IF NOT EXISTS idx_posts_status_created_id (status, created_at, id),
   ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id),
   ADD INDEX IF NOT EXISTS idx_posts_status_favorites (status, stats_favorites, created_at, id);
+
+ALTER TABLE posts
+  ADD INDEX IF NOT EXISTS idx_posts_author_id (author_id),
+  ADD INDEX IF NOT EXISTS idx_posts_author_status_created (author_id, status, created_at, id),
+  ADD INDEX IF NOT EXISTS idx_posts_status_author (status, author_id, created_at, id);
+
+ALTER TABLE posts
+  ADD INDEX IF NOT EXISTS idx_posts_spot_name (spot_name),
+  ADD INDEX IF NOT EXISTS idx_posts_district (district),
+  ADD INDEX IF NOT EXISTS idx_posts_best_time (best_time),
+  ADD FULLTEXT INDEX IF NOT EXISTS ft_posts_search (title, content, spot_name, district);
 
 ALTER TABLE post_comments
   ADD INDEX IF NOT EXISTS idx_comment_post_created_id (post_id, created_at, id);

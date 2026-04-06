@@ -22,10 +22,17 @@ export function normalizeMediaItem(item = {}) {
 }
 
 export function toShotParamPairs(post) {
+  const shotTime = (() => {
+    if (!post.shotAt) return '';
+    const str = String(post.shotAt).replace('T', ' ');
+    if (str.length <= 19) return str;
+    return str.slice(0, 16);
+  })();
   const rows = [
     ['机位', post.angle || post.direction || ''],
     ['方向', post.direction || ''],
     ['地点', post.spotName || post.locationName || ''],
+    ['拍摄时间', shotTime],
     ['时间窗口', post.timeWindow || post.shotTime || ''],
     ['时段', post.bestTime || ''],
     ['相机', post.gear?.camera || post.camera || ''],
@@ -82,6 +89,7 @@ export function normalizePostShape(item = {}) {
           createdAt: c.createdAt || c.created_at || new Date().toISOString(),
         }))
       : [],
+    commentsCount: Number(item.commentsCount || item.comments_count || item.commentCount || item.comment_total || 0),
     likes: Number(item.likes || item.likeCount || 0),
     favorites: Number(item.favorites || item.favoriteCount || 0),
     views: Number(item.views || item.viewCount || 0),

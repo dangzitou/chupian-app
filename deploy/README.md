@@ -5,7 +5,7 @@
 - `backend/`：Express API（端口 3000）
 - `deploy/docker-compose.yml`：编排 MySQL、Redis、后端、前端静态站、Nginx
 - `deploy/nginx.conf`：Nginx 反向代理，把 `/api`、`/api/v1`、`/media`、`/health` 透传到后端，其余走前端
-- `deploy/web.Dockerfile`：构建前端静态资源并在 3001 提供服务
+- `deploy/web.Dockerfile`：构建前端静态资源并在 80 提供服务
 
 ## 一键启动
 
@@ -31,6 +31,8 @@ docker compose up -d --build
 
 - 前端（移动端发布配置）
   - `.env` 或 `EXPO_PUBLIC_API_BASE` 指向后端网关，如 `http://api.your-domain.com`
+
+> 前端静态站默认由 `nginx` 监听 80 对外输出。`web` 服务与 `api` 保持独立端口（80），仅通过内网反代。
 
 ## 常见运维建议（轻量高并发）
 

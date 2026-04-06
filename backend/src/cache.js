@@ -41,12 +41,58 @@ export async function cacheSetJson(key, value, ttlSeconds = 20) {
   }
 }
 
+export async function cacheSetIfNotExists(key, value, ttlSeconds = 60) {
+  try {
+    const raw = typeof value === "string" ? value : JSON.stringify(value);
+    const result = await redis.set(key, raw, "NX", "EX", ttlSeconds);
+    return result === "OK";
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function cacheIncrWithTtl(key, ttlSeconds = 60, startAt = 1) {
+  try {
+    const value = await redis.incr(key);
+    if (value === startAt) {
+      await redis.expire(key, ttlSeconds);
+    }
+    return value;
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function pingCache() {
+  try {
+    const result = await redis.ping();
+    return result === "PONG";
+  } catch (_err) {
+    return false;
+  }
+}
+
 export async function cacheDel(pattern) {
   try {
-    const keys = await redis.keys(pattern);
-    if (!keys.length) return 0;
-    return redis.del(keys);
+    let cursor = "0";
+    let deleted = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 300);
+      if (Array.isArray(keys) && keys.length) {
+        deleted += Number(await redis.del(...keys));
+      }
+      cursor = nextCursor;
+    } while (cursor !== "0");
+    return deleted;
   } catch (err) {
     return 0;
+  }
+}
+
+export async function closeCache() {
+  try {
+    await redis.quit();
+  } catch (err) {
+    // ignore
   }
 }
