@@ -3,6 +3,20 @@ import { useCallback, useRef, useState } from 'react';
 export function useFeedList(fetcher, options = {}) {
   const pageSize = Number.isFinite(options.limit) ? Number(options.limit) : 12;
 
+  const normalizeUniquePosts = (nextPosts) => {
+    const list = [];
+    const seen = new Set();
+    for (const item of nextPosts) {
+      const id = item?.id;
+      if (id == null) continue;
+      const key = String(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push(item);
+    }
+    return list;
+  };
+
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,7 +70,11 @@ export function useFeedList(fetcher, options = {}) {
       const nextCursorFromApi = payload?.nextCursor || null;
       const hasMoreFromApi = payload?.hasMore == null ? Boolean(nextCursorFromApi) : Boolean(payload.hasMore);
 
-      setPosts((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+      setPosts((prev) => {
+        if (!append) return nextPosts;
+        const merged = normalizeUniquePosts([...prev, ...nextPosts]);
+        return merged;
+      });
       setNextCursor(nextCursorFromApi);
       setHasMore(hasMoreFromApi);
       setSort(normalizedSort);
