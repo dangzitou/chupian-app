@@ -14,6 +14,8 @@ export const EMPTY_SHOT = {
   spotId: '',
   spotName: '',
   district: '',
+  latitude: '',
+  longitude: '',
   shotAt: '',
   content: '',
   angle: '',

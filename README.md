@@ -28,7 +28,8 @@ npm run start
 
 ## 服务器配置
 
-移动端默认请求 `http://42.194.251.188`，建议改为环境变量注入，避免硬编码 IP：
+移动端默认请求 `http://42.194.251.188`，建议改为环境变量注入，避免硬编码 IP。  
+Web 版本优先使用当前站点同源地址作为 API 基础地址，方便 Nginx 反代到 80 端口后直接打通 `/api` 与 `/media`。
 
 ```bash
 EXPO_PUBLIC_API_BASE=https://your-domain-or-ip
@@ -39,7 +40,8 @@ npm run start
 
 1. `EXPO_PUBLIC_API_BASE`
 2. `API_BASE`
-3. 内置默认地址（用于开发回退）
+3. Web 同源地址（`window.location.origin`）
+4. 内置默认地址（用于开发回退）
 
 ## 项目结构
 
@@ -61,6 +63,7 @@ chupian-app/
 
 - 健康检查
   - `GET /api/v1/health`
+  - `GET /api/v1/system/health`（与 `/api/v1/health` 等价）
 - 点位
   - `GET /api/v1/spots`
   - `GET /api/spots`（兼容）

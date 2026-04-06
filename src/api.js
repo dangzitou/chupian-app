@@ -1,5 +1,6 @@
 import { API_BASE, API_PREFIX } from './config';
 import { buildPostPayload, normalizePostShape } from './utils/postCodec';
+import { getActorId, getActorName } from './lib/actor';
 
 const NETWORK_TIMEOUT_MS = 12_000;
 const GET_CACHE_TTL_MS = 4000;
@@ -21,11 +22,7 @@ class ApiError extends Error {
 }
 
 const getDefaultAuthor = () => {
-  try {
-    return `影友${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-  } catch (e) {
-    return '匿名拍友';
-  }
+  return getActorName();
 };
 
 function sleep(ms) {
@@ -49,7 +46,7 @@ function buildCacheKey(method, path, options = {}) {
     .filter((key) => key.toLowerCase() !== 'authorization' && key.toLowerCase() !== 'cookie')
     .map((key) => `${key}:${headers[key]}`)
     .join('|');
-  return `${normalized}${filteredHeaders ? ` ${filteredHeaders}` : ''}`;
+  return `${normalized}${filteredHeaders ? ` ${filteredHeaders}` : ''} actor:${getActorId()}`;
 }
 
 function shouldRetry(status, method, error) {
@@ -80,7 +77,11 @@ async function doRequest(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && requestBody instanceof FormData;
   const timeout = Number.isFinite(options.timeout) ? Number(options.timeout) : NETWORK_TIMEOUT_MS;
   const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
-  const finalHeaders = { ...headers, ...(options.headers || {}) };
+  const finalHeaders = {
+    ...headers,
+    'x-actor-id': getActorId(),
+    ...(options.headers || {}),
+  };
 
   const controller = new AbortController();
   const timer = setTimeout(() => {
@@ -248,6 +249,43 @@ function normalizeCommunityFeedResponse(raw) {
   };
 }
 
+function normalizePostComment(raw = {}) {
+  const source = raw.comment || raw;
+  return {
+    id: source.id || source.commentId || source._id || `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    author: source.author || source.actorName || source.actor || '匿名拍友',
+    text: source.text || source.content || source.comment || '',
+    createdAt: source.createdAt || source.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizePostCommentsResponse(raw = {}) {
+  return {
+    comments: Array.isArray(raw.comments) ? raw.comments.map((item) => normalizePostComment(item)) : [],
+    nextCursor: raw.nextCursor || null,
+    hasMore: Boolean(raw.hasMore),
+    total: Number(raw.total || raw.totalComments || 0),
+  };
+}
+
+function buildPostQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.userId) query.set('userId', params.userId);
+  if (typeof params.withComments === 'boolean') {
+    query.set('withComments', params.withComments ? '1' : '0');
+  }
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+function buildCommentsQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.cursor) query.set('cursor', params.cursor);
+  query.set('limit', String(params.limit || 20));
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
 
 export const api = {
   async health() {
@@ -334,6 +372,51 @@ export const api = {
     return normalizeCommunityFeedResponse(raw);
   },
 
+  async meFollowing(params = {}) {
+    const queryString = buildFeedQuery({
+      q: params.q,
+      tag: params.tag,
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/following?${queryString}`,
+      `/api/community/me/following?${queryString}`,
+      { cacheTtl: 2500, noCache: params.noCache },
+    );
+    return normalizeCommunityFeedResponse(raw);
+  },
+
+  async getAuthorFollow(authorId) {
+    const target = String(authorId || '').trim();
+    if (!target) throw new Error('authorId required');
+    const encoded = encodeURIComponent(target);
+    return safeRequestWithFallback(
+      `${API_PREFIX}/authors/${encoded}/follow`,
+      `/api/authors/${encoded}/follow`,
+      { cacheTtl: 30000 },
+    );
+  },
+
+  async toggleFollow(authorId, action = 'toggle') {
+    const target = String(authorId || '').trim();
+    if (!target) throw new Error('authorId required');
+    const encoded = encodeURIComponent(target);
+    const body = { action, author: getDefaultAuthor() };
+    try {
+      return await request(`${API_PREFIX}/authors/${encoded}/follow`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    } catch (_err) {
+      return request(`/api/authors/${encoded}/follow`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    }
+  },
+
   async discovery(params = {}) {
     const query = new URLSearchParams({
       ...(params.type ? { type: String(params.type) } : {}),
@@ -354,10 +437,15 @@ export const api = {
 
   async getPost(id, options = {}) {
     const userId = options.userId || null;
-    const suffix = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const suffix = buildPostQuery({
+      userId,
+      withComments: Object.prototype.hasOwnProperty.call(options, 'withComments')
+        ? Boolean(options.withComments)
+        : null,
+    });
     const post = await safeRequestWithFallback(
       `${API_PREFIX}/posts/${id}${suffix}`,
-      `/api/posts/${id}`,
+      `/api/posts/${id}${suffix}`,
       { cacheTtl: 6000 },
     );
     const item = post.post || post;
@@ -375,7 +463,10 @@ export const api = {
       });
     } catch (err) {
       // legacy interface compatibility
-      const { spotId, spotName, district, camera, lens, focal, aperture, shutter, iso } = payload;
+      const {
+        spotId, spotName, district, latitude, longitude,
+        camera, lens, focal, aperture, shutter, iso,
+      } = payload;
       const mediaFirst = (payload.media || [])[0]?.url || '';
       return request('/api/posts', {
         method: 'POST',
@@ -389,6 +480,8 @@ export const api = {
           spotId,
           spotName,
           district,
+          latitude,
+          longitude,
           author: payload.author || getDefaultAuthor(),
           authorBio: payload.authorBio || '',
           gear: {
@@ -408,6 +501,19 @@ export const api = {
         }),
       });
     }
+  },
+
+  async getPostComments(id, options = {}) {
+    const query = buildCommentsQuery({
+      cursor: options.cursor,
+      limit: options.limit || 20,
+    });
+    const primary = await safeRequestWithFallback(
+      `${API_PREFIX}/posts/${id}/comments${query}`,
+      `/api/posts/${id}/comments${query}`,
+      { cacheTtl: 0, noCache: true },
+    );
+    return normalizePostCommentsResponse(primary);
   },
 
   async toggleLike(id, author, action = 'toggle') {
@@ -493,24 +599,36 @@ export const api = {
     });
   },
 
-  async uploadMedia(fileUri, mime = 'image/jpeg') {
+  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image') {
     const form = new FormData();
+    const normalizedMime = String(mime || '').toLowerCase();
+    const extension = normalizedMime.includes('video')
+      ? (normalizedMime.includes('quicktime') ? 'mov' : 'mp4')
+      : normalizedMime.includes('heic')
+        ? 'heic'
+        : normalizedMime.includes('heif')
+          ? 'heif'
+          : normalizedMime.includes('webp')
+            ? 'webp'
+            : normalizedMime.includes('png')
+              ? 'png'
+              : 'jpg';
     const file = {
       uri: fileUri,
-      name: `chupian-${Date.now()}.${mime.includes('video') ? 'mp4' : 'jpg'}`,
+      name: `chupian-${Date.now()}.${extension}`,
       type: mime,
     };
     form.append('file', file);
 
     try {
-      return request(`${API_PREFIX}/media/upload`, {
+      return await request(`${API_PREFIX}/media/upload`, {
         method: 'POST',
         headers: {},
         body: form,
       });
     } catch (err) {
       // backend 未接入上传时，直接透传 URI，前端仍可预览
-      return { ok: true, media: [{ kind: mime.includes('video') ? 'video' : 'image', url: fileUri }] };
+      return { ok: true, media: [{ kind, url: fileUri }] };
     }
   },
 };

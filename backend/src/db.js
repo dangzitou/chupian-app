@@ -10,6 +10,7 @@ const {
   MYSQL_PASSWORD = "",
   MYSQL_DATABASE = "chupian",
   MYSQL_CONNECTION_LIMIT = "12",
+  MYSQL_QUEUE_LIMIT = "1000",
 } = process.env;
 
 export const mysqlPool = mysql.createPool({
@@ -18,12 +19,15 @@ export const mysqlPool = mysql.createPool({
   user: MYSQL_USER,
   password: MYSQL_PASSWORD,
   database: MYSQL_DATABASE,
-  connectionLimit: Number(MYSQL_CONNECTION_LIMIT),
+  connectionLimit: Math.max(1, Number(MYSQL_CONNECTION_LIMIT) || 12),
   namedPlaceholders: false,
   dateStrings: true,
   charset: "utf8mb4",
   waitForConnections: true,
-  queueLimit: 0,
+  queueLimit: Math.max(0, Number(MYSQL_QUEUE_LIMIT) || 1000),
+  connectTimeout: 10_000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 2_000,
 });
 
 export const query = async (sql, params = []) => {

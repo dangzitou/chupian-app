@@ -27,10 +27,14 @@ docker compose up -d --build
   - `MYSQL_DATABASE=chupian`
   - `MYSQL_USER=chupian`
   - `MYSQL_PASSWORD=chupian_pwd`
-  - `REDIS_URL=redis://redis:6379`
+- `REDIS_URL=redis://redis:6379`
+- `MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD`：生产环境必须通过 `.env` 或部署系统注入，不要使用 compose 默认值
+- `MYSQL_CONNECTION_LIMIT`、`MYSQL_QUEUE_LIMIT`：分别控制连接池大小和排队上限
 
 - 前端（移动端发布配置）
   - `.env` 或 `EXPO_PUBLIC_API_BASE` 指向后端网关，如 `http://api.your-domain.com`
+
+> 如果你是用 `docker-compose` + Nginx 一体化部署，前端 web 包会自动使用当前域名同源地址作为 API 基础地址，无需额外设置 `EXPO_PUBLIC_API_BASE`。
 
 > 前端静态站默认由 `nginx` 监听 80 对外输出。`web` 服务与 `api` 保持独立端口（80），仅通过内网反代。
 

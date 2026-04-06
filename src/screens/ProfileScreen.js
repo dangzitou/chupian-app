@@ -163,14 +163,24 @@ export default function ProfileScreen({ navigation }) {
     postId,
     metricField: 'likes',
     stateField: 'liked',
-    actionResolver: async ({ post, next }) => api.toggleLike(post.id, post.author, next ? 'like' : 'unlike'),
+    actionResolver: async ({ post, next }) => api.toggleLike(post.id, undefined, next ? 'like' : 'unlike'),
   }), [api, toggleAction]);
 
   const onFavorite = useCallback((postId) => toggleAction({
     postId,
     metricField: 'favorites',
     stateField: 'favorited',
-    actionResolver: async ({ post, next }) => api.toggleFavorite(post.id, post.author, next ? 'favorite' : 'unfavorite'),
+    actionResolver: async ({ post, next }) => api.toggleFavorite(post.id, undefined, next ? 'favorite' : 'unfavorite'),
+  }), [api, toggleAction]);
+
+  const onFollow = useCallback((postId) => toggleAction({
+    postId,
+    metricField: 'followers',
+    stateField: 'followed',
+    actionResolver: async ({ post, next }) => {
+      const target = post.authorId || post.author;
+      return api.toggleFollow(target, next ? 'follow' : 'unfollow');
+    },
   }), [api, toggleAction]);
 
   const onShare = useCallback(async (item) => {
@@ -188,13 +198,15 @@ export default function ProfileScreen({ navigation }) {
       onPress={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, title: item.title } })}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
+      onFollow={() => onFollow(item.id)}
       onComment={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id } })}
       onShare={() => onShare(item)}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}
       favoriteBusy={isActionBusy(item.id, 'favorited', 'favorited')}
+      followBusy={isActionBusy(item.id, 'followed', 'followed')}
       style={styles.profileCard}
     />
-  ), [isActionBusy, onFavorite, onLike, onShare]);
+  ), [isActionBusy, onFavorite, onFollow, onLike, onShare]);
 
   const ListHeader = useMemo(() => (
     <View>

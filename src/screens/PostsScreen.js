@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -141,6 +141,7 @@ export default function PostsScreen({ navigation }) {
   const [signals, setSignals] = useState([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [signalsError, setSignalsError] = useState(null);
+  const bootstrappedRef = useRef(false);
 
   const {
     posts,
@@ -193,6 +194,8 @@ export default function PostsScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
     load();
     loadDiscovery();
   }, [load, loadDiscovery]);
@@ -243,14 +246,24 @@ export default function PostsScreen({ navigation }) {
     postId,
     metricField: 'likes',
     stateField: 'liked',
-    actionResolver: async ({ post, next }) => api.toggleLike(post.id, post.author, next ? 'like' : 'unlike'),
+    actionResolver: async ({ post, next }) => api.toggleLike(post.id, undefined, next ? 'like' : 'unlike'),
   }), [api, toggleAction]);
 
   const onFavorite = useCallback((postId) => toggleAction({
     postId,
     metricField: 'favorites',
     stateField: 'favorited',
-    actionResolver: async ({ post, next }) => api.toggleFavorite(post.id, post.author, next ? 'favorite' : 'unfavorite'),
+    actionResolver: async ({ post, next }) => api.toggleFavorite(post.id, undefined, next ? 'favorite' : 'unfavorite'),
+  }), [api, toggleAction]);
+
+  const onFollow = useCallback((postId) => toggleAction({
+    postId,
+    metricField: 'followers',
+    stateField: 'followed',
+    actionResolver: async ({ post, next }) => {
+      const target = post.authorId || post.author;
+      return api.toggleFollow(target, next ? 'follow' : 'unfollow');
+    },
   }), [api, toggleAction]);
 
   const onShare = useCallback(async (item) => {
@@ -280,13 +293,15 @@ export default function PostsScreen({ navigation }) {
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
+      onFollow={() => onFollow(item.id)}
       onComment={() => navigation.navigate('PostDetail', { postId: item.id })}
       onShare={() => onShare(item)}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}
       favoriteBusy={isActionBusy(item.id, 'favorited', 'favorited')}
+      followBusy={isActionBusy(item.id, 'followed', 'followed')}
       style={isMasonry ? styles.gridCard : styles.listCard}
     />
-  ), [isActionBusy, isMasonry, navigation, onFavorite, onLike, onShare]);
+  ), [isActionBusy, isMasonry, navigation, onFollow, onFavorite, onLike, onShare]);
 
   const ListHeader = useMemo(() => (
     <View style={styles.headerSection}>

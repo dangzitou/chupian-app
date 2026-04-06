@@ -31,6 +31,7 @@ export function useFeedList(fetcher, options = {}) {
   const [stats, setStats] = useState(null);
 
   const busyIdsRef = useRef(new Set());
+  const requestSeqRef = useRef(0);
 
   const ensureLoadingState = useCallback((append) => {
     if (append) {
@@ -54,6 +55,7 @@ export function useFeedList(fetcher, options = {}) {
     const normalizedQ = String(nextQ || '').trim();
     const normalizedTag = String(nextTag || '').trim();
     const useLimit = Math.min(Math.max(pageSize, 1), 40);
+    const requestSeq = ++requestSeqRef.current;
 
     ensureLoadingState(append);
 
@@ -70,6 +72,8 @@ export function useFeedList(fetcher, options = {}) {
       const nextCursorFromApi = payload?.nextCursor || null;
       const hasMoreFromApi = payload?.hasMore == null ? Boolean(nextCursorFromApi) : Boolean(payload.hasMore);
 
+      if (requestSeq !== requestSeqRef.current) return;
+
       setPosts((prev) => {
         if (!append) return nextPosts;
         const merged = normalizeUniquePosts([...prev, ...nextPosts]);
@@ -84,8 +88,10 @@ export function useFeedList(fetcher, options = {}) {
       setStats(payload?.stats || null);
       setError(null);
     } catch (e) {
+      if (requestSeq !== requestSeqRef.current) return;
       setError(e.message || 'network error');
     } finally {
+      if (requestSeq !== requestSeqRef.current) return;
       setLoading(false);
       setRefreshing(false);
       setLoadingMore(false);
