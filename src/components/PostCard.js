@@ -23,8 +23,11 @@ function PostCard({
   onComment,
   likeBusy = false,
   favoriteBusy = false,
+  compact = false,
+  style,
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [cardWidth, setCardWidth] = useState(0);
   const cardMedia = post.media || [];
   const mediaColumns = cardMedia.length > 1 ? Math.min(cardMedia.length, 3) : 1;
   const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, 3);
@@ -53,35 +56,49 @@ function PostCard({
   }, [post.comments?.length, post.likes, post.views]);
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
+    <Pressable
+      style={[styles.card, compact && styles.cardCompact, style]}
+      onPress={onPress}
+      onLayout={(event) => {
+        const nextWidth = Math.floor(event.nativeEvent.layout.width);
+        if (nextWidth && nextWidth > 0 && nextWidth !== cardWidth) {
+          setCardWidth(nextWidth);
+        }
+      }}
+    >
+      <View style={[styles.header, compact && styles.headerCompact]}>
+        <View style={[styles.avatar, compact && styles.avatarCompact]}>
           <AuthorAvatar name={post.author} />
         </View>
         <View style={styles.meta}>
-          <Text style={styles.author} numberOfLines={1}>
+          <Text style={[styles.author, compact && styles.authorCompact]} numberOfLines={1}>
             {post.author}
           </Text>
-          <Text style={styles.sub}>{locationText}</Text>
-          <Text style={styles.sub}>{created}</Text>
+          <Text style={[styles.sub, compact && styles.subCompact]}>{locationText}</Text>
+          <Text style={[styles.sub, compact && styles.subCompact]}>{created}</Text>
         </View>
-        <View>
+        <View style={compact && styles.followWrapCompact}>
           <Pressable style={styles.followBtn}>
             <Text style={styles.followText}>关注</Text>
           </Pressable>
         </View>
       </View>
 
-      <MediaGallery media={cardMedia} showAll columns={mediaColumns} />
+      <MediaGallery
+        media={cardMedia}
+        showAll
+        columns={compact ? 1 : mediaColumns}
+        containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
+      />
       {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
 
-      <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>
+      <View style={[styles.body, compact && styles.bodyCompact]}>
+        <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
           {post.title || '无标题'}
         </Text>
         {!!content && (
           <>
-            <Text style={styles.content} numberOfLines={expanded ? undefined : 2}>
+            <Text style={[styles.content, compact && styles.contentCompact]} numberOfLines={expanded ? undefined : 2}>
               {contentText}
             </Text>
             {content.length > 96 ? (
@@ -108,7 +125,7 @@ function PostCard({
 
         <ShotMetaPanel post={post} compact />
 
-        {subtitle ? <Text style={styles.subStat}>{subtitle}</Text> : null}
+        {compact ? null : subtitle ? <Text style={styles.subStat}>{subtitle}</Text> : null}
 
         <ActionBar
           likes={post.likes || 0}
@@ -145,11 +162,22 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
+  cardCompact: {
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
     gap: 8,
+  },
+  headerCompact: {
+    padding: 8,
+    gap: 6,
   },
   avatar: {
     width: 32,
@@ -159,6 +187,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarCompact: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
   avatarText: {
     color: COLORS.accent,
     fontSize: 14,
@@ -166,14 +199,39 @@ const styles = StyleSheet.create({
   },
   meta: { flex: 1 },
   author: { fontSize: 13.5, color: COLORS.ink, fontWeight: '700' },
+  authorCompact: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   sub: { fontSize: 11.5, color: COLORS.muted, marginTop: 1 },
+  subCompact: {
+    fontSize: 10.5,
+  },
+  followWrapCompact: {
+    opacity: 0.9,
+    transform: [{ scale: 0.92 }],
+  },
   body: { paddingHorizontal: 12, paddingTop: 6, gap: 6 },
+  bodyCompact: {
+    paddingHorizontal: 8,
+    paddingTop: 5,
+    gap: 5,
+  },
   title: { fontSize: 16, color: COLORS.ink, fontWeight: '700', lineHeight: 21 },
+  titleCompact: {
+    fontSize: 14,
+    lineHeight: 19,
+  },
   content: {
     marginTop: 6,
     color: COLORS.ink,
     fontSize: 13,
     lineHeight: 19,
+  },
+  contentCompact: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
   },
   tagPill: {
     backgroundColor: COLORS.accentBg,

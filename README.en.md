@@ -55,13 +55,19 @@ The app supports both `/api/v1` and legacy `/api` endpoints (prefers `/api/v1`):
   - `GET /api/spots` (compat)
 - Community
   - `GET /api/v1/community/feed`
+    - supports query params: `q` (keyword), `tag` (tag/style), `sort` (latest/hot), `cursor`, `limit`
   - `GET /api/v1/posts`
+    - supports query params: `q` (keyword), `tag` (tag/style), `sort` (latest/hot), `cursor`, `limit`
+  - `GET /api/v1/community/discovery`
+    - returns `signals` (trending tag/style list), optional `type=tag|style` and `limit`
   - `GET /api/v1/posts/{id}`
   - `POST /api/v1/posts`
   - `POST /api/v1/posts/{id}/like`
   - `POST /api/v1/posts/{id}/favorite`
   - `POST /api/v1/posts/{id}/comments`
   - `POST /api/v1/media/upload`
+  - `GET /api/v1/community/me/likes`
+  - `GET /api/v1/community/me/favorites`
   - `GET /api/v1/weather`
 - Compatibility endpoints
   - `GET /api/posts`

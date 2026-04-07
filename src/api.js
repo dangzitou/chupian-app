@@ -238,15 +238,19 @@ export const api = {
   },
 
   async feed(params = {}) {
-    const q = new URLSearchParams({
-      ...params,
+    const searchKeyword = params.q ? String(params.q).trim() : "";
+    const tag = params.tag ? String(params.tag).trim() : "";
+    const queryString = new URLSearchParams({
+      ...(searchKeyword ? { q: searchKeyword } : {}),
+      ...(tag ? { tag } : {}),
+      ...(params.cursor ? { cursor: params.cursor } : {}),
       limit: String(params.limit || 20),
       sort: params.sort || 'latest',
     }).toString();
 
     const primary = await safeRequestWithFallback(
-      `${API_PREFIX}/community/feed?${q}`,
-      `/api/posts?${q}`,
+      `${API_PREFIX}/community/feed?${queryString}`,
+      `/api/posts?${queryString}`,
       { cacheTtl: 2500, noCache: params.noCache },
     );
 
@@ -260,6 +264,24 @@ export const api = {
       hasMore: Boolean(primary.hasMore),
       total: Number(primary.total || primary.posts?.length || 0),
       stats: primary.stats || null,
+    };
+  },
+
+  async discovery(params = {}) {
+    const query = new URLSearchParams({
+      ...(params.type ? { type: String(params.type) } : {}),
+      limit: String(params.limit || 20),
+    }).toString();
+
+    const res = await safeRequestWithFallback(
+      `${API_PREFIX}/community/discovery?${query}`,
+      `/api/community/discovery?${query}`,
+      { cacheTtl: 30_000, noCache: false },
+    );
+    const list = Array.isArray(res.signals) ? res.signals : [];
+    return {
+      signals: list,
+      meta: res.meta || { type: params.type || 'all', count: list.length },
     };
   },
 

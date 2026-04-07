@@ -66,13 +66,19 @@ chupian-app/
   - `GET /api/spots`（兼容）
 - 社区
   - `GET /api/v1/community/feed`
+    - 支持查询参数：`q`（关键词）、`tag`（标签/风格）、`sort`（latest/hot）、`cursor`、`limit`
   - `GET /api/v1/posts`
+    - 支持查询参数：`q`（关键词）、`tag`（标签/风格）、`sort`（latest/hot）、`cursor`、`limit`
+  - `GET /api/v1/community/discovery`
+    - 返回 `signals`（热门标签/风格排行榜），可选 `type=tag|style` 与 `limit`
   - `GET /api/v1/posts/{id}`
   - `POST /api/v1/posts`
   - `POST /api/v1/posts/{id}/like`
   - `POST /api/v1/posts/{id}/favorite`
   - `POST /api/v1/posts/{id}/comments`
   - `POST /api/v1/media/upload`
+  - `GET /api/v1/community/me/likes`（我的点赞）
+  - `GET /api/v1/community/me/favorites`（我的收藏）
   - `GET /api/v1/weather`
 - 兼容端点
   - `GET /api/posts`

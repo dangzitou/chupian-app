@@ -37,16 +37,19 @@ function MediaCover({ item }) {
   );
 }
 
-export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true }) {
+export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true, containerWidth }) {
   const normalized = Array.isArray(media) ? media : [];
   if (!normalized.length) return null;
 
   const list = showAll ? normalized : normalized.slice(0, columns > 1 ? 4 : 1);
   const activeColumns = clampColumns(columns);
   const visibleCols = activeColumns > 1 ? Math.min(activeColumns, list.length) : 1;
+  const maxWidth = Number.isFinite(containerWidth) && containerWidth > 0
+    ? containerWidth
+    : CARD_WIDTH - 32;
   const width = visibleCols === 1
-    ? CARD_WIDTH - 32
-    : (CARD_WIDTH - 32 - COL_GAP * (visibleCols - 1)) / visibleCols;
+    ? maxWidth
+    : (maxWidth - COL_GAP * (visibleCols - 1)) / visibleCols;
 
   const renderStyle = (index, isLast) => ({
     width,

@@ -116,6 +116,41 @@ function isRateLimitHeaderPresent(res) {
   }
 
   if (dbReady) {
+    try {
+      const feedWithFilter = await request("/api/v1/community/feed?sort=latest&tag=tag-not-exist&limit=5");
+      assert(feedWithFilter.status === 200, `feed tag filter failed: ${feedWithFilter.status}`);
+      assert(Array.isArray(feedWithFilter.json?.posts), "tag-filter payload missing posts");
+      addResult("adversarial:feed-tag-filter", true, false);
+    } catch (err) {
+      addResult("adversarial:feed-tag-filter", false, false, err.message);
+    }
+
+    try {
+      const discovery = await request("/api/v1/community/discovery?limit=10");
+      assert(discovery.status === 200, `discovery failed: ${discovery.status}`);
+      addResult("adversarial:discovery-endpoint", true, false);
+    } catch (err) {
+      addResult("adversarial:discovery-endpoint", false, false, err.message);
+    }
+
+    try {
+      const likes = await request("/api/v1/community/me/likes?limit=5");
+      assert(likes.status === 200, `my likes failed: ${likes.status}`);
+      assert(Array.isArray(likes.json?.posts), "my likes payload missing posts");
+      addResult("adversarial:my-likes", true, false);
+    } catch (err) {
+      addResult("adversarial:my-likes", false, false, err.message);
+    }
+
+    try {
+      const favorites = await request("/api/v1/community/me/favorites?limit=5");
+      assert(favorites.status === 200, `my favorites failed: ${favorites.status}`);
+      assert(Array.isArray(favorites.json?.posts), "my favorites payload missing posts");
+      addResult("adversarial:my-favorites", true, false);
+    } catch (err) {
+      addResult("adversarial:my-favorites", false, false, err.message);
+    }
+
     const sqliPayload = {
       title: "x'); DROP TABLE posts;--",
       content: "<script>alert(1)</script>",

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,12 +16,13 @@ import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 
 const PAGE_SIZE = 12;
+const GRID_COLUMNS = 2;
 const SORT_OPTIONS = [
   { key: 'latest', label: '最新' },
   { key: 'hot', label: '热门' },
 ];
 
-function SearchBar({ value, onChange }) {
+function SearchBar({ value, onSubmit, onChange }) {
   return (
     <View style={styles.searchWrap}>
       <TextInput
@@ -29,6 +31,9 @@ function SearchBar({ value, onChange }) {
         placeholderTextColor={COLORS.muted}
         value={value}
         onChangeText={onChange}
+        returnKeyType="search"
+        blurOnSubmit={false}
+        onSubmitEditing={onSubmit}
         clearButtonMode="while-editing"
       />
     </View>
@@ -54,6 +59,47 @@ function SortTabs({ value, onChange }) {
   );
 }
 
+function SignalStrip({ items, activeTag, onSelect, loading }) {
+  if (!items.length) {
+    if (loading) {
+      return <View style={styles.signalWrap}><ActivityIndicator size="small" color={COLORS.accent} /></View>;
+    }
+    return null;
+  }
+
+  return (
+    <View style={styles.signalOuterWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.signalWrap}
+      >
+        <Pressable
+          style={[styles.signalPill, !activeTag && styles.signalPillActive]}
+          onPress={() => onSelect('')}
+        >
+          <Text style={[styles.signalText, !activeTag && styles.signalTextActive]}>全部</Text>
+        </Pressable>
+        {items.slice(0, 14).map((signal) => {
+          const key = `${signal.type}-${signal.name}`;
+          const active = activeTag === signal.name;
+          return (
+            <Pressable
+              key={key}
+              style={[styles.signalPill, active && styles.signalPillActive]}
+              onPress={() => onSelect(signal.name)}
+            >
+              <Text style={[styles.signalText, active && styles.signalTextActive]}>
+                #{signal.name} ({signal.count})
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function PostsScreen({ navigation }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,10 +109,29 @@ export default function PostsScreen({ navigation }) {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sort, setSort] = useState('latest');
-  const [keyword, setKeyword] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTag, setActiveTag] = useState('');
+  const [signals, setSignals] = useState([]);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+  const [signalsError, setSignalsError] = useState(null);
   const busyActionIdsRef = useRef(new Set());
 
-  const load = useCallback(async (targetCursor = null, append = false, nextSort = sort) => {
+  const loadDiscovery = useCallback(async () => {
+    setSignalsLoading(true);
+    setSignalsError(null);
+    try {
+      const payload = await api.discovery({ type: 'all', limit: 24 });
+      setSignals(Array.isArray(payload.signals) ? payload.signals : []);
+    } catch (err) {
+      setSignalsError(err.message);
+      setSignals([]);
+    } finally {
+      setSignalsLoading(false);
+    }
+  }, []);
+
+  const load = useCallback(async (targetCursor = null, append = false, nextSort = sort, nextQuery = searchQuery, nextTag = activeTag) => {
     if (append && loadingMore) return;
     if (!append) {
       setLoading(true);
@@ -76,6 +141,8 @@ export default function PostsScreen({ navigation }) {
         cursor: targetCursor || '',
         limit: PAGE_SIZE,
         sort: nextSort,
+        q: nextQuery,
+        tag: nextTag,
       });
       const next = Array.isArray(d.posts) ? d.posts : [];
       setPosts((prev) => (targetCursor ? [...prev, ...next] : next));
@@ -89,12 +156,10 @@ export default function PostsScreen({ navigation }) {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [loadingMore, sort]);
+  }, [loadingMore, sort, searchQuery, activeTag]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setNextCursor(null);
-    setHasMore(true);
     load(null, false);
   }, [load]);
 
@@ -104,34 +169,44 @@ export default function PostsScreen({ navigation }) {
     load(nextCursor, true);
   }, [hasMore, loadingMore, loading, nextCursor, load]);
 
-  const filteredPosts = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return posts;
-    return posts.filter((post) => {
-      const hitString = [
-        post.title,
-        post.content,
-        post.author,
-        post.spotName,
-        ...(post.tags || []),
-        ...(post.styles || []),
-      ].join(' ').toLowerCase();
-      return hitString.includes(q);
-    });
-  }, [posts, keyword]);
+  const onSearchSubmit = useCallback(() => {
+    const nextSearch = searchInput.trim();
+    if (nextSearch !== searchQuery) {
+      setSearchQuery(nextSearch);
+      setPosts([]);
+      setNextCursor(null);
+      setHasMore(true);
+      setError(null);
+    }
+  }, [searchInput, searchQuery]);
 
-  const safeLoad = useCallback((nextSort) => {
-    if (nextSort === sort) return;
-    setSort(nextSort);
+  const onTagSelect = useCallback((tag) => {
+    const nextTag = tag || '';
+    const next = nextTag === activeTag ? '' : nextTag;
+    if (next === activeTag) return;
+    setActiveTag(next);
+    setPosts([]);
     setNextCursor(null);
     setHasMore(true);
+    load(null, false, sort, searchQuery, next);
+  }, [activeTag, load, searchQuery, sort]);
+
+  const safeLoadSort = useCallback((nextSort) => {
+    if (nextSort === sort) return;
+    setSort(nextSort);
     setPosts([]);
+    setNextCursor(null);
+    setHasMore(true);
     load(null, false, nextSort);
   }, [load, sort]);
 
   useEffect(() => {
     load(null, false);
   }, [load]);
+
+  useEffect(() => {
+    loadDiscovery();
+  }, [loadDiscovery]);
 
   const setBusyForPost = useCallback((id, active) => {
     const key = String(id);
@@ -220,6 +295,7 @@ export default function PostsScreen({ navigation }) {
 
   const renderCard = useCallback(({ item }) => (
     <PostCard
+      compact
       post={item}
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
       onLike={() => onLike(item.id)}
@@ -227,6 +303,7 @@ export default function PostsScreen({ navigation }) {
       likeBusy={busyActionIdsRef.current.has(String(item.id))}
       favoriteBusy={busyActionIdsRef.current.has(String(item.id))}
       onComment={() => navigation.navigate('PostDetail', { postId: item.id })}
+      style={styles.gridCard}
     />
   ), [navigation, onFavorite, onLike]);
 
@@ -241,10 +318,21 @@ export default function PostsScreen({ navigation }) {
           <Text style={styles.newBtnText}>＋ 发帖</Text>
         </Pressable>
       </View>
-      <SearchBar value={keyword} onChange={setKeyword} />
-      <SortTabs value={sort} onChange={safeLoad} />
+      <SearchBar
+        value={searchInput}
+        onChange={setSearchInput}
+        onSubmit={onSearchSubmit}
+      />
+      <SortTabs value={sort} onChange={safeLoadSort} />
+      <SignalStrip
+        items={signals}
+        activeTag={activeTag}
+        onSelect={onTagSelect}
+        loading={signalsLoading}
+      />
+      {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
     </View>
-  ), [keyword, navigation, sort, safeLoad]);
+  ), [activeTag, navigation, onSearchSubmit, onTagSelect, safeLoadSort, searchInput, signals, signalsError, signalsLoading, sort]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore) return null;
@@ -253,13 +341,15 @@ export default function PostsScreen({ navigation }) {
   }, [hasMore, loadingMore]);
 
   const showSkeleton = loading && !refreshing && !posts.length;
-  const showEmpty = !loading && !loadingMore && !filteredPosts.length;
+  const showEmpty = !loading && !loadingMore && !posts.length;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <FlatList
-        data={filteredPosts}
+        data={posts}
         keyExtractor={(post) => String(post.id)}
+        numColumns={GRID_COLUMNS}
+        columnWrapperStyle={styles.columnWrap}
         refreshing={refreshing}
         onRefresh={onRefresh}
         onEndReached={onEndReached}
@@ -267,11 +357,12 @@ export default function PostsScreen({ navigation }) {
         ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.list}
         renderItem={renderCard}
+        key={GRID_COLUMNS}
         ListEmptyComponent={
-          showSkeleton ? <FeedSkeleton count={3} /> : (
+          showSkeleton ? <FeedSkeleton count={6} /> : (
             <View style={styles.emptyWrap}>
               {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
-              {showEmpty ? <Text style={styles.empty}>还没有攻略，先发布一条出片内容吧</Text> : null}
+              {showEmpty ? <Text style={styles.empty}>还没有匹配作品，试试调整关键词或标签</Text> : null}
               {showEmpty && !error ? (
                 <Pressable style={styles.retryBtn} onPress={() => load()}>
                   <Text style={styles.retryText}>刷新</Text>
@@ -289,13 +380,13 @@ export default function PostsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { paddingHorizontal: 0, paddingBottom: 40 },
+  list: { paddingHorizontal: 8, paddingBottom: 40 },
   headerWrap: { paddingBottom: 6 },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 12,
   },
@@ -309,8 +400,8 @@ const styles = StyleSheet.create({
   },
   newBtnText: { color: COLORS.onAccent, fontWeight: '700', fontSize: 12.5 },
   searchWrap: {
-    marginHorizontal: 16,
-    marginBottom: 10,
+    marginHorizontal: 8,
+    marginBottom: 8,
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
@@ -324,7 +415,7 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
     gap: 8,
-    marginHorizontal: 16,
+    marginHorizontal: 8,
     marginBottom: 8,
   },
   tab: {
@@ -341,6 +432,41 @@ const styles = StyleSheet.create({
   },
   tabText: { color: COLORS.muted, fontSize: 12.5, fontWeight: '600' },
   tabTextActive: { color: COLORS.accent },
+  signalOuterWrap: {
+    marginBottom: 6,
+  },
+  signalWrap: {
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingRight: 12,
+    paddingBottom: 6,
+  },
+  signalPill: {
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.card,
+  },
+  signalPillActive: {
+    backgroundColor: COLORS.accentBg,
+    borderColor: COLORS.accent,
+  },
+  signalText: {
+    color: COLORS.muted,
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  signalTextActive: {
+    color: COLORS.accent,
+  },
+  signalError: {
+    color: '#b15e2b',
+    marginHorizontal: 12,
+    fontSize: 11.5,
+    marginBottom: 4,
+  },
   error: { color: '#a34a2a', marginBottom: 6 },
   emptyWrap: {
     paddingTop: 80,
@@ -367,4 +493,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
   },
   retryText: { color: COLORS.accent, fontWeight: '700', fontSize: 12.5 },
+  columnWrap: {
+    justifyContent: 'space-between',
+  },
+  gridCard: {
+    width: '48.5%',
+    marginBottom: 10,
+  },
 });

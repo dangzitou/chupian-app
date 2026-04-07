@@ -84,6 +84,12 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
     assert(Array.isArray(res.json?.posts), "feed payload missing posts");
   }, dbReady);
 
+  await run("endpoint:GET /api/v1/community/discovery", async () => {
+    const res = await expect("/api/v1/community/discovery?limit=10");
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(Array.isArray(res.json?.signals), "discovery payload missing signals");
+  }, dbReady);
+
   await run("endpoint:GET /api/weather", async () => {
     const res = await expect("/api/weather");
     assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -92,7 +98,7 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
 
   await run("endpoint:legacy /api/posts", async () => {
     const res = await expect("/api/posts?limit=5");
-    if (dbReady) {
+  if (dbReady) {
       assert(res.status === 200, `expected 200, got ${res.status}`);
       assert(Array.isArray(res.json?.posts), "legacy posts payload missing posts");
     } else if (!REQUIRE_DB) {
@@ -182,6 +188,18 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
       const res = await expect("/api/posts?limit=20");
       assert(res.status === 200, `legacy posts status=${res.status}`);
       assert(Array.isArray(res.json?.posts), "legacy posts payload invalid");
+    }, true);
+
+    await run("endpoint:GET /api/v1/community/me/likes", async () => {
+      const res = await expect("/api/v1/community/me/likes?limit=5");
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(Array.isArray(res.json?.posts), "likes payload missing posts");
+    }, true);
+
+    await run("endpoint:GET /api/v1/community/me/favorites", async () => {
+      const res = await expect("/api/v1/community/me/favorites?limit=5");
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(Array.isArray(res.json?.posts), "favorites payload missing posts");
     }, true);
   }
 
