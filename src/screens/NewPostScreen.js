@@ -52,13 +52,16 @@ function buildMediaPayload(sourceAsset) {
   const uri = String(sourceAsset?.uri || '').trim();
   if (!uri) return null;
   const assetType = String(sourceAsset?.type || '').toLowerCase();
+  const pairedVideoAsset = sourceAsset?.pairedVideoAsset || null;
+  const pairedVideoUri = String(pairedVideoAsset?.uri || '').trim();
   const isVideo = assetType === 'video'
     || String(sourceAsset?.mimeType || '').toLowerCase().includes('video')
     || String(sourceAsset?.mediaType || '').toLowerCase() === 'video';
   const isLive = assetType === 'livephoto'
     || assetType === 'live_photo'
     || assetType === 'live'
-    || sourceAsset?.isLivePhoto === true;
+    || sourceAsset?.isLivePhoto === true
+    || Boolean(pairedVideoUri);
   const kind = isVideo
     ? MEDIA_KINDS.VIDEO
     : (isLive ? MEDIA_KINDS.LIVE : (sourceAsset?.kind || MEDIA_KINDS.IMAGE));
@@ -67,6 +70,11 @@ function buildMediaPayload(sourceAsset) {
     kind,
     mime: sourceAsset?.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
     duration: isVideo ? parseMediaDuration(sourceAsset?.duration, kind) : 0,
+    pairedVideo: pairedVideoUri ? {
+      uri: pairedVideoUri,
+      mime: pairedVideoAsset?.mimeType || 'video/quicktime',
+      duration: parseMediaDuration(pairedVideoAsset?.duration, MEDIA_KINDS.VIDEO),
+    } : null,
   };
 }
 
@@ -380,7 +388,7 @@ export default function NewPostScreen({ navigation, route }) {
     if (!ok) return;
 
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: Platform.OS === 'ios' ? ['livePhotos'] : ImagePicker.MediaTypeOptions.All,
       quality: 1,
       allowsMultipleSelection: false,
     });
@@ -462,7 +470,7 @@ export default function NewPostScreen({ navigation, route }) {
           ? [mediaList[coverIndex], ...mediaList.slice(0, coverIndex), ...mediaList.slice(coverIndex + 1)]
           : mediaList)
         : [];
-      const uploaded = await Promise.all(
+        const uploaded = await Promise.all(
         orderedMediaList.map(async (item) => {
           if (item.kind === MEDIA_KINDS.LIVE && item.uri.startsWith('http')) {
             return {
@@ -471,13 +479,33 @@ export default function NewPostScreen({ navigation, route }) {
               duration: item.duration || 0,
             };
           }
-          const res = await api.uploadMedia(item.uri, item.mime, item.kind);
-          const mediaRecord = (res.media || [])[0] || {};
+          const stillRes = await api.uploadMedia(
+            item.uri,
+            item.mime || 'image/jpeg',
+            item.kind === MEDIA_KINDS.LIVE ? MEDIA_KINDS.IMAGE : item.kind,
+          );
+          const stillRecord = (stillRes.media || [])[0] || {};
+          let mediaRecord = stillRecord;
+          if (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri) {
+            const videoRes = await api.uploadMedia(
+              item.pairedVideo.uri,
+              item.pairedVideo.mime || 'video/quicktime',
+              MEDIA_KINDS.VIDEO,
+            );
+            const videoRecord = (videoRes.media || [])[0] || {};
+            mediaRecord = {
+              ...videoRecord,
+              url: videoRecord.url || item.pairedVideo.uri,
+              cover: stillRecord.url || item.uri,
+              duration: videoRecord.duration || item.pairedVideo.duration || 0,
+            };
+          }
           return {
             kind: item.kind === MEDIA_KINDS.LIVE
               ? MEDIA_KINDS.LIVE
               : (mediaRecord.kind || item.kind || MEDIA_KINDS.IMAGE),
             url: mediaRecord.url || item.uri,
+            cover: mediaRecord.cover || mediaRecord.cover_url || '',
             width: mediaRecord.width || 0,
             height: mediaRecord.height || 0,
             duration: mediaRecord.duration || item.duration || 0,

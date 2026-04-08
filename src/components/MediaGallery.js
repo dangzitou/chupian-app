@@ -29,10 +29,12 @@ function MediaCover({ item }) {
     );
   }
 
+  const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
+
   return (
     <View>
-      <Image source={{ uri: item.url }} style={styles.mediaWrap} resizeMode="cover" />
-      {item.kind === 'live' ? <Text style={styles.liveMark}>实况</Text> : null}
+      <Image source={{ uri: imageUri }} style={styles.mediaWrap} resizeMode="cover" />
+      {item.kind === 'live' ? <Text style={styles.liveMark}>{item.cover ? '实况 · 动态' : '实况'}</Text> : null}
     </View>
   );
 }
