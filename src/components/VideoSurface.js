@@ -9,7 +9,7 @@ try {
   NativeVideo = null;
 }
 
-export default function VideoSurface({ uri, style }) {
+export default function VideoSurface({ uri, style, shouldPlay = false, loop = false }) {
   if (!uri) return null;
 
   if (NativeVideo) {
@@ -19,7 +19,8 @@ export default function VideoSurface({ uri, style }) {
         style={style}
         useNativeControls
         resizeMode="cover"
-        shouldPlay={false}
+        shouldPlay={shouldPlay}
+        isLooping={loop}
       />
     );
   }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import VideoSurface from './VideoSurface';
@@ -13,7 +13,7 @@ function clampColumns(value) {
   return Math.max(1, Math.min(3, value));
 }
 
-function MediaCover({ item }) {
+function MediaCover({ item, playing }) {
   if (!item) return null;
 
   if (item.kind === 'video') {
@@ -31,6 +31,15 @@ function MediaCover({ item }) {
 
   const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
 
+  if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
+    return (
+      <View style={styles.mediaWrap}>
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop />
+        <Text style={styles.liveMark}>实况 · 播放中</Text>
+      </View>
+    );
+  }
+
   return (
     <View>
       <Image source={{ uri: imageUri }} style={styles.mediaWrap} resizeMode="cover" />
@@ -41,6 +50,16 @@ function MediaCover({ item }) {
 
 export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true, containerWidth }) {
   const normalized = Array.isArray(media) ? media : [];
+  const [playingIndex, setPlayingIndex] = useState(-1);
+  const toggleLive = useCallback((index, item) => {
+    const playable = item?.kind === 'live' && item.cover && item.url && item.url !== item.cover;
+    if (!playable) {
+      onPressMedia?.(item, index);
+      return;
+    }
+    setPlayingIndex((current) => (current === index ? -1 : index));
+  }, [onPressMedia]);
+
   if (!normalized.length) return null;
 
   const list = showAll ? normalized : normalized.slice(0, columns > 1 ? 4 : 1);
@@ -67,9 +86,9 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
           <Pressable
             key={`${item.url}-${idx}`}
             style={renderStyle(idx, isLast)}
-            onPress={onPressMedia}
+            onPress={() => toggleLive(idx, item)}
           >
-            <MediaCover item={item} />
+            <MediaCover item={item} playing={playingIndex === idx} />
           </Pressable>
         );
       })}
