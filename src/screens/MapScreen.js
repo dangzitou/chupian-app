@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createElement, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  Platform,
   StyleSheet,
   View,
 } from 'react-native';
@@ -128,8 +129,12 @@ export default function MapScreen({ navigation }) {
             const fallbackName = '${DEFAULT_CENTER.label}';
             const markers = ${spotsPayload};
             const emit = (payload) => {
+              const message = JSON.stringify(payload || {});
               if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                window.ReactNativeWebView.postMessage(JSON.stringify(payload || {}));
+                window.ReactNativeWebView.postMessage(message);
+              }
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage(message, '*');
               }
             };
             const escapeText = (value) => {
@@ -287,7 +292,7 @@ export default function MapScreen({ navigation }) {
     navigation.navigate('PostDetail', { postId: String(postId) });
   }, [navigation]);
 
-  const onWebMessage = async (event) => {
+  const onWebMessage = useCallback(async (event) => {
     const raw = event?.nativeEvent?.data;
     if (!raw) return;
     try {
@@ -314,7 +319,17 @@ export default function MapScreen({ navigation }) {
     } catch (_err) {
       // ignore
     }
-  };
+  }, [onOpenCreate, onOpenPost]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const handleWindowMessage = (event) => {
+      if (typeof event?.data !== 'string') return;
+      onWebMessage({ nativeEvent: { data: event.data } });
+    };
+    window.addEventListener('message', handleWindowMessage);
+    return () => window.removeEventListener('message', handleWindowMessage);
+  }, [onWebMessage]);
 
   useEffect(() => {
     let alive = true;
@@ -346,28 +361,36 @@ export default function MapScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <WebView
-        source={{ html: mapHtml }}
-        style={styles.webview}
-        onMessage={onWebMessage}
-        javaScriptEnabled
-        domStorageEnabled
-        startInLoadingState
-        onError={() => setError(true)}
-        onHttpError={() => setError(true)}
-        allowsInlineMediaPlayback={true}
-        geolocationEnabled
-        scalesPageToFit={false}
-        injectedJavaScript={`
-          window.__chupianMapBootstrapped = true;
-        `}
-        originWhitelist={['*']}
-        renderLoading={() => (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={COLORS.accent} />
-          </View>
-        )}
-      />
+      {Platform.OS === 'web' ? createElement('iframe', {
+        title: '出片地图',
+        srcDoc: mapHtml,
+        allow: 'geolocation',
+        scrolling: 'no',
+        style: styles.webFrame,
+      }) : (
+        <WebView
+          source={{ html: mapHtml }}
+          style={styles.webview}
+          onMessage={onWebMessage}
+          javaScriptEnabled
+          domStorageEnabled
+          startInLoadingState
+          onError={() => setError(true)}
+          onHttpError={() => setError(true)}
+          allowsInlineMediaPlayback={true}
+          geolocationEnabled
+          scalesPageToFit={false}
+          injectedJavaScript={`
+            window.__chupianMapBootstrapped = true;
+          `}
+          originWhitelist={['*']}
+          renderLoading={() => (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color={COLORS.accent} />
+            </View>
+          )}
+        />
+      )}
       {!error ? (
         <View style={styles.actionsWrap} pointerEvents="box-none">
           <Pressable
@@ -422,4 +445,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   loadingWrap: { flex: 1, backgroundColor: '#e6edf3' },
+  webFrame: {
+    width: '100%',
+    height: '100%',
+    borderWidth: 0,
+    borderStyle: 'none',
+    display: 'block',
+  },
 });
