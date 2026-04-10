@@ -68,10 +68,12 @@ function buildMediaPayload(sourceAsset) {
   return {
     uri,
     kind,
+    file: sourceAsset?.file || null,
     mime: sourceAsset?.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
     duration: isVideo ? parseMediaDuration(sourceAsset?.duration, kind) : 0,
     pairedVideo: pairedVideoUri ? {
       uri: pairedVideoUri,
+      file: pairedVideoAsset?.file || null,
       mime: pairedVideoAsset?.mimeType || 'video/quicktime',
       duration: parseMediaDuration(pairedVideoAsset?.duration, MEDIA_KINDS.VIDEO),
     } : null,
@@ -483,6 +485,7 @@ export default function NewPostScreen({ navigation, route }) {
             item.uri,
             item.mime || 'image/jpeg',
             item.kind === MEDIA_KINDS.LIVE ? MEDIA_KINDS.IMAGE : item.kind,
+            item.file,
           );
           const stillRecord = (stillRes.media || [])[0] || {};
           let mediaRecord = stillRecord;
@@ -491,6 +494,7 @@ export default function NewPostScreen({ navigation, route }) {
               item.pairedVideo.uri,
               item.pairedVideo.mime || 'video/quicktime',
               MEDIA_KINDS.VIDEO,
+              item.pairedVideo.file,
             );
             const videoRecord = (videoRes.media || [])[0] || {};
             mediaRecord = {
