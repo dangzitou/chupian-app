@@ -25,6 +25,10 @@ const SORT_OPTIONS = [
   { key: 'latest', label: '最新' },
   { key: 'hot', label: '热门' },
 ];
+const FEED_OPTIONS = [
+  { key: 'recommend', label: '推荐' },
+  { key: 'following', label: '关注' },
+];
 const LAYOUT_OPTIONS = [
   { key: 'masonry', label: '网格' },
   { key: 'list', label: '列表' },
@@ -64,6 +68,22 @@ function SortTabs({ value, onChange }) {
             android_ripple={{ color: '#f5d7de' }}
           >
             <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function FeedTabs({ value, onChange }) {
+  return (
+    <View style={styles.feedTabs}>
+      {FEED_OPTIONS.map((item) => {
+        const active = value === item.key;
+        return (
+          <Pressable key={item.key} style={styles.feedTab} onPress={() => onChange(item.key)}>
+            <Text style={[styles.feedTabText, active && styles.feedTabTextActive]}>{item.label}</Text>
+            {active ? <View style={styles.feedTabUnderline} /> : null}
           </Pressable>
         );
       })}
@@ -136,12 +156,19 @@ function DiscoveryStatsBar({ stats, onOpenMap }) {
 
 export default function PostsScreen({ navigation }) {
   const [feedLayout, setFeedLayout] = useState('masonry');
+  const [feedMode, setFeedMode] = useState('recommend');
   const [searchInput, setSearchInput] = useState('');
   const [activeTag, setActiveTag] = useState('');
   const [signals, setSignals] = useState([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [signalsError, setSignalsError] = useState(null);
   const bootstrappedRef = useRef(false);
+  const feedModeRef = useRef('');
+
+  const feedFetcher = useCallback(
+    (params) => (feedMode === 'following' ? api.meFollowing(params) : api.feed(params)),
+    [feedMode],
+  );
 
   const {
     posts,
@@ -157,12 +184,22 @@ export default function PostsScreen({ navigation }) {
     onRefresh,
     onEndReached,
     patchById,
-  setSort,
+    setSort,
     setQ,
     setTag,
     setBusyForPost,
     isPostBusy,
-  } = useFeedList(api.feed, { limit: PAGE_SIZE, sort: 'latest' });
+  } = useFeedList(feedFetcher, { limit: PAGE_SIZE, sort: 'latest' });
+
+  const switchFeedMode = useCallback((nextMode) => {
+    if (nextMode === feedMode) return;
+    setFeedMode(nextMode);
+    setActiveTag('');
+    setSearchInput('');
+    setQ('');
+    setTag('');
+    setSort('latest');
+  }, [feedMode, setQ, setSort, setTag]);
 
   const getPostById = useCallback(
     (postId) => posts.find((item) => String(item.id) === String(postId)),
@@ -193,11 +230,14 @@ export default function PostsScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    if (bootstrappedRef.current) return;
-    bootstrappedRef.current = true;
-    load();
-    loadDiscovery();
-  }, [load, loadDiscovery]);
+    if (feedModeRef.current === feedMode) return;
+    feedModeRef.current = feedMode;
+    if (!bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+      loadDiscovery();
+    }
+    load({ append: false, cursor: null, nextSort: 'latest', nextQ: '', nextTag: '' });
+  }, [feedMode]);
 
   const applyTagFilter = useCallback((nextTag) => {
     const tag = nextTag || '';
@@ -311,6 +351,7 @@ export default function PostsScreen({ navigation }) {
           </Pressable>
         </View>
       </View>
+      <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       <SortTabs value={sort} onChange={applySort} />
       <SignalStrip
@@ -321,7 +362,7 @@ export default function PostsScreen({ navigation }) {
       />
       {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, isMasonry, searchInput, signals, signalsError, signalsLoading, sort]);
+  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, isMasonry, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -503,6 +544,37 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
   },
 
+  feedTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+    marginHorizontal: 8,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  feedTab: {
+    minWidth: 42,
+    alignItems: 'center',
+    paddingVertical: 6,
+    position: 'relative',
+  },
+  feedTabText: {
+    color: COLORS.muted,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  feedTabTextActive: {
+    color: COLORS.ink,
+    fontWeight: '800',
+  },
+  feedTabUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    width: 20,
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: COLORS.accent,
+  },
   tabs: {
     flexDirection: 'row',
     gap: 8,
