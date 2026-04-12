@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -82,8 +82,10 @@ export default function App() {
   if (!actorReady) {
     return (
       <SafeAreaProvider>
-        <View style={styles.bootScreen}>
-          <ActivityIndicator size="small" color="#d93657" />
+        <View style={styles.viewport}>
+          <View style={[styles.mobileShell, styles.bootScreen]}>
+            <ActivityIndicator size="small" color="#d93657" />
+          </View>
         </View>
         <StatusBar style="dark" />
       </SafeAreaProvider>
@@ -92,64 +94,86 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Tab.Navigator
-          initialRouteName={APP_ROUTES.MAP}
-          screenOptions={{
-            headerShown: false,
-            tabBarActiveTintColor: '#d93657',
-            tabBarInactiveTintColor: '#8f8987',
-            tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-            tabBarStyle: {
-              height: 58,
-              paddingTop: 5,
-              paddingBottom: 6,
-              borderTopWidth: 1,
-              borderTopColor: 'rgba(25,25,25,0.08)',
-              backgroundColor: '#ffffff',
-            },
-          }}
-        >
-          <Tab.Screen
-            name={APP_ROUTES.DISCOVERY}
-            component={DiscoveryStack}
-            options={{
-              tabBarLabel: '发现',
-              tabBarIcon: ({ focused }) => <TabIcon glyph="⌂" focused={focused} />,
-            }}
-          />
-          <Tab.Screen
-            name={APP_ROUTES.MAP}
-            component={MapStack}
-            options={{
-              tabBarLabel: '地图',
-              tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
-            }}
-          />
-          <Tab.Screen
-            name={APP_ROUTES.CREATE}
-            component={CreateStack}
-            options={{
-              tabBarLabel: '发布',
-              tabBarIcon: ({ focused }) => <TabIcon glyph="＋" focused={focused} primary />,
-            }}
-          />
-          <Tab.Screen
-            name={APP_ROUTES.PROFILE}
-            component={ProfileStack}
-            options={{
-              tabBarLabel: '我的',
-              tabBarIcon: ({ focused }) => <TabIcon glyph="○" focused={focused} />,
-            }}
-          />
-        </Tab.Navigator>
-      </NavigationContainer>
+      <View style={styles.viewport}>
+        <View style={styles.mobileShell}>
+          <NavigationContainer>
+            <Tab.Navigator
+              initialRouteName={APP_ROUTES.MAP}
+              screenOptions={{
+                headerShown: false,
+                tabBarActiveTintColor: '#d93657',
+                tabBarInactiveTintColor: '#8f8987',
+                tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+                tabBarItemStyle: { minWidth: 0 },
+                tabBarStyle: {
+                  height: 64,
+                  paddingTop: 5,
+                  paddingBottom: 7,
+                  borderTopWidth: 1,
+                  borderTopColor: 'rgba(25,25,25,0.08)',
+                  backgroundColor: '#ffffff',
+                },
+              }}
+            >
+              <Tab.Screen
+                name={APP_ROUTES.DISCOVERY}
+                component={DiscoveryStack}
+                options={{
+                  tabBarLabel: '发现',
+                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌂" focused={focused} />,
+                }}
+              />
+              <Tab.Screen
+                name={APP_ROUTES.MAP}
+                component={MapStack}
+                options={{
+                  tabBarLabel: '地图',
+                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
+                }}
+              />
+              <Tab.Screen
+                name={APP_ROUTES.CREATE}
+                component={CreateStack}
+                options={{
+                  tabBarLabel: '发布',
+                  tabBarIcon: ({ focused }) => <TabIcon glyph="＋" focused={focused} primary />,
+                }}
+              />
+              <Tab.Screen
+                name={APP_ROUTES.PROFILE}
+                component={ProfileStack}
+                options={{
+                  tabBarLabel: '我的',
+                  tabBarIcon: ({ focused }) => <TabIcon glyph="○" focused={focused} />,
+                }}
+              />
+            </Tab.Navigator>
+          </NavigationContainer>
+        </View>
+      </View>
       <StatusBar style="dark" />
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  viewport: {
+    flex: 1,
+    width: '100%',
+    minHeight: '100%',
+    alignItems: 'center',
+    backgroundColor: '#e9e6e2',
+  },
+  mobileShell: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 480,
+    overflow: 'hidden',
+    backgroundColor: '#f8f7f6',
+    ...(typeof document !== 'undefined' ? {
+      boxShadow: '0 0 42px rgba(38, 31, 28, 0.12)',
+    } : {}),
+  },
   tabIcon: {
     width: 25,
     height: 23,
@@ -177,7 +201,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   bootScreen: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f8f7f6',
