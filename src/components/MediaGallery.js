@@ -19,12 +19,13 @@ function MediaCover({ item, playing }) {
   if (item.kind === 'video') {
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} />
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
           </View>
         ) : null}
+        {playing ? <Text style={styles.liveMark}>视频 · 播放中</Text> : null}
       </View>
     );
   }
@@ -52,7 +53,8 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
   const toggleLive = useCallback((index, item) => {
-    const playable = item?.kind === 'live' && item.cover && item.url && item.url !== item.cover;
+    const playable = item?.kind === 'video'
+      || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
     if (!playable) {
       onPressMedia?.(item, index);
       return;

@@ -48,7 +48,7 @@ function normalizeComment(raw = {}, fallbackAuthor) {
   };
 }
 
-export default function PostDetailScreen({ route }) {
+export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -175,6 +175,19 @@ export default function PostDetailScreen({ route }) {
       metricField: 'favorites',
       stateField: 'favorited',
       actionResolver: async ({ post: resolvedPost, next }) => api.toggleFavorite(resolvedPost.id, undefined, next ? 'favorite' : 'unfavorite'),
+    });
+  }, [api, post, toggleAction]);
+
+  const onFollow = useCallback(() => {
+    if (!post?.authorId) return;
+    return toggleAction({
+      postId: post.id,
+      metricField: 'followers',
+      stateField: 'followed',
+      actionResolver: async ({ post: resolvedPost, next }) => api.toggleFollow(
+        resolvedPost.authorId,
+        next ? 'follow' : 'unfollow',
+      ),
     });
   }, [api, post, toggleAction]);
 
@@ -311,6 +324,24 @@ export default function PostDetailScreen({ route }) {
         </View>
 
         <View style={styles.contentWrap}>
+          <View style={styles.authorRow}>
+            <View style={styles.authorAvatar}>
+              <Text style={styles.authorAvatarText}>{String(post.author || '匿名拍友').slice(0, 2)}</Text>
+            </View>
+            <View style={styles.authorCopy}>
+              <Text style={styles.authorName} numberOfLines={1}>{post.author || '匿名拍友'}</Text>
+              <Text style={styles.authorBio} numberOfLines={1}>{post.authorBio || '出片位置记录者'}</Text>
+            </View>
+            <Pressable
+              style={[styles.followBtn, post.followed && styles.followBtnActive]}
+              onPress={onFollow}
+              disabled={!post.authorId || isPostBusy(post.id, 'followed', 'followed')}
+            >
+              <Text style={[styles.followText, post.followed && styles.followTextActive]}>
+                {isPostBusy(post.id, 'followed', 'followed') ? '...' : (post.followed ? '已关注' : '关注')}
+              </Text>
+            </Pressable>
+          </View>
           <Text style={styles.title}>{postMeta.title}</Text>
           <Text style={styles.subtitle}>{postMeta.subtitle}</Text>
 
@@ -362,7 +393,7 @@ export default function PostDetailScreen({ route }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onJumpToComment, onLike, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -437,6 +468,18 @@ export default function PostDetailScreen({ route }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         style={styles.flex}
       >
+        <View style={styles.detailTopBar}>
+          <Pressable
+            accessibilityLabel="返回"
+            accessibilityRole="button"
+            style={styles.backBtn}
+            onPress={() => navigation?.goBack?.()}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </Pressable>
+          <Text style={styles.topBarTitle} numberOfLines={1}>{postMeta.title}</Text>
+          <View style={styles.backBtn} />
+        </View>
         <FlatList
           ref={listRef}
           data={comments}
@@ -532,6 +575,37 @@ const styles = StyleSheet.create({
   metaTopSpacer: {
     height: 4,
   },
+  detailTopBar: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.panel,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.line,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+  },
+  backIcon: {
+    color: COLORS.ink,
+    fontSize: 32,
+    fontWeight: '300',
+    lineHeight: 34,
+  },
+  topBarTitle: {
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
   coverWrap: {
     marginHorizontal: 12,
     borderRadius: 16,
@@ -544,6 +618,35 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 2,
+  },
+  authorAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.bgDeep,
+  },
+  authorAvatarText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
+  authorCopy: { flex: 1 },
+  authorName: { color: COLORS.ink, fontSize: 13, fontWeight: '700' },
+  authorBio: { color: COLORS.muted, fontSize: 11.2, marginTop: 2 },
+  followBtn: {
+    minWidth: 58,
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.accent,
+  },
+  followBtnActive: { backgroundColor: '#ececf1' },
+  followText: { color: COLORS.onAccent, fontSize: 11.5, fontWeight: '700' },
+  followTextActive: { color: COLORS.muted },
   title: {
     color: COLORS.ink,
     fontSize: 20,
