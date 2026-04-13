@@ -15,6 +15,7 @@ export default function ActionBar({
   onComment,
   likeBusy = false,
   favoriteBusy = false,
+  compact = false,
 }) {
   const actionItems = [
     {
@@ -45,30 +46,30 @@ export default function ActionBar({
   ];
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, compact && styles.rowCompact]}>
       {actionItems.map((item) => (
         <Pressable
           key={item.key}
-          style={[styles.item, item.disabled && styles.itemDisabled]}
+          style={[styles.item, compact && styles.itemCompact, item.disabled && styles.itemDisabled]}
           onPress={item.onPress}
           disabled={item.disabled}
           android_ripple={{ color: '#ddd' }}
         >
-          <Text style={[styles.icon, item.active && styles.active]}>
+          <Text style={[styles.icon, compact && styles.iconCompact, item.active && styles.active]}>
             {item.showBusy ? '…' : item.icon}
           </Text>
-          <Text style={[styles.text, item.active && styles.activeText]}>{item.label}</Text>
+          <Text style={[styles.text, compact && styles.textCompact, item.active && styles.activeText]}>{item.label}</Text>
         </Pressable>
       ))}
 
       {onShare ? (
         <Pressable
-          style={styles.item}
+          style={[styles.item, compact && styles.itemCompact]}
           onPress={onShare}
           android_ripple={{ color: '#ddd' }}
         >
-          <Text style={styles.icon}>↗️</Text>
-          <Text style={styles.text}>分享</Text>
+          <Text style={[styles.icon, compact && styles.iconCompact]}>↗️</Text>
+          <Text style={[styles.text, compact && styles.textCompact]}>分享</Text>
         </Pressable>
       ) : null}
     </View>
@@ -86,6 +87,14 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.line,
     paddingTop: 9,
   },
+  rowCompact: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    marginTop: 0,
+    paddingVertical: 0,
+    paddingTop: 0,
+    borderTopWidth: 0,
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -96,11 +105,19 @@ const styles = StyleSheet.create({
     minWidth: 52,
     justifyContent: 'center',
   },
+  itemCompact: {
+    minWidth: 0,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    gap: 2,
+  },
   itemDisabled: {
     opacity: 0.5,
   },
   icon: { fontSize: 16, color: COLORS.ink },
+  iconCompact: { fontSize: 14 },
   text: { fontSize: 11.8, color: COLORS.mutedText || COLORS.muted },
+  textCompact: { fontSize: 10.5 },
   active: { color: COLORS.accent },
   activeText: { color: COLORS.accent, fontWeight: '700' },
 });
