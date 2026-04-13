@@ -28,24 +28,24 @@ const PROFILE_TABS = [
   { key: 'meFavorites', label: '我的收藏' },
 ];
 
-function ProfileStats({ spotCount, posts, authors, likes }) {
+function ProfileStats({ spotCount, posts, liked, saved }) {
   return (
     <View style={styles.statsRow}>
-      <View style={styles.statCard}>
-        <Text style={styles.statNum}>{spotCount}</Text>
-        <Text style={styles.statLabel}>点位</Text>
-      </View>
       <View style={styles.statCard}>
         <Text style={styles.statNum}>{posts}</Text>
         <Text style={styles.statLabel}>发布</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNum}>{authors}</Text>
-        <Text style={styles.statLabel}>创作者</Text>
+        <Text style={styles.statNum}>{spotCount}</Text>
+        <Text style={styles.statLabel}>点位</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNum}>{likes}</Text>
-        <Text style={styles.statLabel}>点赞</Text>
+        <Text style={styles.statNum}>{liked}</Text>
+        <Text style={styles.statLabel}>赞过</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statNum}>{saved}</Text>
+        <Text style={styles.statLabel}>收藏</Text>
       </View>
     </View>
   );
@@ -58,6 +58,7 @@ export default function ProfileScreen({ navigation }) {
   const [statsError, setStatsError] = useState(null);
   const [spotCount, setSpotCount] = useState(0);
   const [section, setSection] = useState('mePosts');
+  const [weatherOpen, setWeatherOpen] = useState(false);
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -95,8 +96,6 @@ export default function ProfileScreen({ navigation }) {
   });
 
   const [totalPosts, setTotalPosts] = useState(0);
-  const [authors, setAuthors] = useState(0);
-  const [likes, setLikes] = useState(0);
   const [meSectionStats, setMeSectionStats] = useState({
     mePosts: 0,
     meLikes: 0,
@@ -105,21 +104,22 @@ export default function ProfileScreen({ navigation }) {
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, globalFeed, s] = await Promise.all([
+      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, s] = await Promise.all([
         api.weather(),
         api.mePosts({ limit: 1, sort: 'latest' }),
-        api.feed({ limit: 1 }),
+        api.meLikes({ limit: 1, sort: 'latest' }),
+        api.meFavorites({ limit: 1, sort: 'latest' }),
         api.spots(),
       ]);
 
       setWeather(w);
       setTotalPosts(Number(userPostsFeed?.total || 0));
-      setAuthors(Number(globalFeed?.stats?.authors || 0));
-      setLikes(Number(globalFeed?.stats?.totalLikes || 0));
       setSpotCount((s.spots || []).length);
       setMeSectionStats((prev) => ({
         ...prev,
         mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
+        meLikes: Number(userLikesFeed?.total || userLikesFeed.posts?.length || 0),
+        meFavorites: Number(userFavoritesFeed?.total || userFavoritesFeed.posts?.length || 0),
       }));
       setStatsError(null);
     } catch (err) {
@@ -196,6 +196,7 @@ export default function ProfileScreen({ navigation }) {
   const renderCard = useCallback(({ item }) => (
       <PostCard
         post={item}
+      compact
       onPress={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, title: item.title } })}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
@@ -219,23 +220,35 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
+        <Pressable style={styles.profileAction} onPress={() => Share.share({ message: `来看看${actorName}的出片档案` })}>
+          <Text style={styles.profileActionText}>分享</Text>
+        </Pressable>
       </View>
 
       <ProfileStats
         spotCount={spotCount}
         posts={totalPosts}
-        authors={authors}
-        likes={likes}
+        liked={meSectionStats.meLikes}
+        saved={meSectionStats.meFavorites}
       />
 
       {weather?.ok && (
-        <View style={styles.weatherCard}>
-          <Text style={styles.weatherTitle}>☀️ 广州天气</Text>
-          <Text style={styles.weatherMain}>
-            {weather.label} {Math.round(weather.temp)}°C（体感 {Math.round(weather.feelsLike)}°）
-          </Text>
-          <Text style={styles.weatherHint}>湿度 {weather.humidity}% · 风速 {weather.wind} km/h</Text>
-        </View>
+        <Pressable style={styles.weatherCard} onPress={() => setWeatherOpen((value) => !value)}>
+          <View style={styles.weatherSummary}>
+            <View>
+              <Text style={styles.weatherTitle}>今日拍摄条件 · 广州</Text>
+              <Text style={styles.weatherMain}>
+                {weather.label} {Math.round(weather.temp)}°C
+              </Text>
+            </View>
+            <Text style={styles.weatherChevron}>{weatherOpen ? '−' : '+'}</Text>
+          </View>
+          {weatherOpen ? (
+            <Text style={styles.weatherHint}>
+              体感 {Math.round(weather.feelsLike)}° · 湿度 {weather.humidity}% · 风速 {weather.wind} km/h
+            </Text>
+          ) : null}
+        </Pressable>
       )}
 
       <ScrollView
@@ -247,7 +260,7 @@ export default function ProfileScreen({ navigation }) {
         {PROFILE_TABS.map((tab) => (
           <Pressable
             key={tab.key}
-            style={[styles.tabPill, section === tab.key && styles.tabPillActive]}
+            style={[styles.tabItem, section === tab.key && styles.tabItemActive]}
             onPress={() => onSwitchSection(tab.key)}
           >
             <Text style={[styles.tabLabel, section === tab.key && styles.tabLabelActive]}>
@@ -256,11 +269,12 @@ export default function ProfileScreen({ navigation }) {
                 {`  (${meSectionStats[tab.key] || 0})`}
               </Text>
             </Text>
+            {section === tab.key ? <View style={styles.tabUnderline} /> : null}
           </Pressable>
         ))}
       </ScrollView>
     </View>
-  ), [actorName, authors, likes, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather]);
+  ), [actorName, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -284,6 +298,8 @@ export default function ProfileScreen({ navigation }) {
       <FlatList
         data={posts}
         keyExtractor={(post) => String(post.id)}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
         onRefresh={onRefresh}
         refreshing={refreshing}
         onEndReached={onEndReached}
@@ -306,7 +322,7 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { paddingBottom: 40, paddingHorizontal: 12 },
+  list: { paddingBottom: 40, paddingHorizontal: 6 },
   heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -329,6 +345,14 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   heroMeta: { flex: 1 },
+  profileAction: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  profileActionText: { color: COLORS.muted, fontSize: 11.5, fontWeight: '700' },
   name: { fontSize: 20, color: COLORS.ink, fontWeight: '700' },
   bio: { color: COLORS.muted, marginTop: 3, fontSize: 12.8 },
   statsRow: { flexDirection: 'row', gap: 8 },
@@ -349,28 +373,40 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 14,
   },
+  weatherSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   weatherTitle: { color: '#6d3112', fontWeight: '600', fontSize: 13 },
   weatherMain: { color: '#6d3112', marginTop: 4, fontWeight: '700', fontSize: 15 },
   weatherHint: { color: '#a16b44', marginTop: 4, fontSize: 11.5 },
+  weatherChevron: { color: '#6d3112', fontSize: 24, fontWeight: '300', paddingHorizontal: 4 },
 
   menuCard: { marginTop: 12 },
   menuRow: { gap: 8, paddingBottom: 4 },
-  tabPill: {
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 999,
-    backgroundColor: COLORS.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  tabItem: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    position: 'relative',
   },
-  tabPillActive: {
-    borderColor: COLORS.accent,
-    backgroundColor: COLORS.accentBg,
-  },
+  tabItemActive: { },
   tabLabel: { color: COLORS.muted, fontWeight: '600', fontSize: 12.6 },
   tabLabelActive: { color: COLORS.accent },
   tabCount: { color: COLORS.mutedText || COLORS.muted, fontSize: 11 },
+  tabUnderline: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 3,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: COLORS.accent,
+  },
+  columnWrapper: { gap: 8 },
   profileCard: {
+    flex: 1,
     marginBottom: 8,
   },
   error: { color: '#a34a2a', fontSize: 12.5, textAlign: 'center', marginTop: 10 },
