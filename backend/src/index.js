@@ -1639,10 +1639,32 @@ app.post("/api/v1/media/upload", (req, res, next) => {
     if (err) return next(err);
     if (!req.file) return res.status(400).json({ error: "file required" });
 
-    const rawUrl = `${req.protocol}://${req.get("host")}/media/${req.file.filename}`;
-    const kind = req.file.mimetype?.startsWith("video/") ? "video" : "image";
+    const actor = readActorId(req, req.body || {});
+    const filePath = req.file.path;
+    const uploadPayload = {
+      ok: true,
+      media: [{
+        kind: req.file.mimetype?.startsWith("video/") ? "video" : "image",
+        url: `${req.protocol}://${req.get("host")}/media/${req.file.filename}`,
+        duration: 0,
+      }],
+    };
 
-    return res.json({ ok: true, media: [{ kind, url: rawUrl, duration: 0 }] });
+    runWithIdempotency({
+      req,
+      actor,
+      scope: "media:upload",
+      handler: async () => uploadPayload,
+    }).then(async (result) => {
+      if (result.replay) {
+        await fs.promises.unlink(filePath).catch(() => {});
+      }
+      if (result.replay) res.setHeader("X-Idempotency-Replay", "1");
+      return res.json(result.payload);
+    }).catch(async (uploadError) => {
+      await fs.promises.unlink(filePath).catch(() => {});
+      return next(uploadError);
+    });
   });
 });
 
