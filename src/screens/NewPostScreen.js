@@ -155,6 +155,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [spots, setSpots] = useState([]);
   const [loadingSpots, setLoadingSpots] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -504,14 +505,19 @@ export default function NewPostScreen({ navigation, route }) {
           ? [mediaList[coverIndex], ...mediaList.slice(0, coverIndex), ...mediaList.slice(coverIndex + 1)]
           : mediaList)
         : [];
+      setUploadProgress({ completed: 0, total: orderedMediaList.length });
         const uploaded = await Promise.all(
         orderedMediaList.map(async (item) => {
           if (item.kind === MEDIA_KINDS.LIVE && item.uri.startsWith('http')) {
-            return {
+            const result = {
               kind: item.kind,
               url: item.uri,
               duration: item.duration || 0,
             };
+            setUploadProgress((current) => current
+              ? { ...current, completed: Math.min(current.total, current.completed + 1) }
+              : current);
+            return result;
           }
           const stillRes = await api.uploadMedia(
             item.uri,
@@ -538,7 +544,7 @@ export default function NewPostScreen({ navigation, route }) {
               duration: videoRecord.duration || item.pairedVideo.duration || 0,
             };
           }
-          return {
+          const result = {
             kind: item.kind === MEDIA_KINDS.LIVE
               ? MEDIA_KINDS.LIVE
               : (mediaRecord.kind || item.kind || MEDIA_KINDS.IMAGE),
@@ -548,6 +554,10 @@ export default function NewPostScreen({ navigation, route }) {
             height: mediaRecord.height || 0,
             duration: mediaRecord.duration || item.duration || 0,
           };
+          setUploadProgress((current) => current
+            ? { ...current, completed: Math.min(current.total, current.completed + 1) }
+            : current);
+          return result;
         })
       );
 
@@ -585,6 +595,7 @@ export default function NewPostScreen({ navigation, route }) {
       await clearDraft();
       await api.createPost(payload, idempotencyKeyRef.current);
       mediaIdempotencyRef.current.clear();
+      setUploadProgress(null);
       Alert.alert('发布成功', '作品已发送审核，预计短时间内上架');
       dispatch({ type: 'reset' });
       setMediaList([]);
@@ -602,6 +613,7 @@ export default function NewPostScreen({ navigation, route }) {
       Alert.alert('发布失败', err.message || '网络异常，请稍后再试');
     } finally {
       setSubmitting(false);
+      setUploadProgress(null);
     }
   }, [api, clearDraft, coverIndex, dispatch, getMediaUploadKey, mediaList, navigation, selectedSpot, state, validation]);
 
@@ -919,6 +931,11 @@ export default function NewPostScreen({ navigation, route }) {
         >
           {submitting ? <ActivityIndicator color={COLORS.onAccent} /> : <Text style={styles.publishText}>发布出片</Text>}
         </Pressable>
+        {submitting && uploadProgress ? (
+          <Text style={styles.uploadProgress}>
+            正在上传素材 {uploadProgress.completed}/{uploadProgress.total}
+          </Text>
+        ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
