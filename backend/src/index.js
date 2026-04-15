@@ -39,6 +39,9 @@ const HTTP_HEADERS_TIMEOUT_MS = Number.parseInt(process.env.HTTP_HEADERS_TIMEOUT
 const HTTP_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS || "180000", 10) || 180000;
 const IDEMPOTENCY_TTL_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "3600", 10) || 3600;
 const IDEMPOTENCY_LOCK_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_LOCK_SECONDS || "60", 10) || 60;
+const ACTOR_SESSION_TTL_SECONDS = Number.parseInt(process.env.ACTOR_SESSION_TTL_SECONDS || String(60 * 60 * 24 * 180), 10) || 60 * 60 * 24 * 180;
+const ACTOR_SESSION_SECRET = String(process.env.ACTOR_SESSION_SECRET || "chupian-dev-session-secret");
+const REQUIRE_ACTOR_SESSION = String(process.env.REQUIRE_ACTOR_SESSION || "true").toLowerCase() === "true";
 const API_RATE_LIMIT_WINDOW_SECONDS = 60;
 const API_RATE_LIMIT_MAX = 240;
 const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
@@ -253,14 +256,53 @@ function ipToActorFingerprint(req) {
   return crypto.createHash("sha256").update(`${salt}|${ip}`).digest("hex").slice(0, 24);
 }
 
+function encodeSessionPart(value) {
+  return Buffer.from(String(value)).toString("base64url");
+}
+
+function decodeSessionPart(value) {
+  return Buffer.from(String(value), "base64url").toString("utf8");
+}
+
+function signActorSession(actorId, now = Math.floor(Date.now() / 1000)) {
+  const payload = encodeSessionPart(JSON.stringify({
+    actorId: String(actorId),
+    iat: now,
+    exp: now + ACTOR_SESSION_TTL_SECONDS,
+  }));
+  const signature = crypto.createHmac("sha256", ACTOR_SESSION_SECRET).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function readActorSession(req) {
+  const raw = String(req.headers["x-actor-token"] || "").trim();
+  const [payload, signature] = raw.split(".");
+  if (!payload || !signature) return "";
+  const expected = crypto.createHmac("sha256", ACTOR_SESSION_SECRET).update(payload).digest("base64url");
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) return "";
+  try {
+    const decoded = JSON.parse(decodeSessionPart(payload));
+    if (!decoded?.actorId || Number(decoded.exp) <= Math.floor(Date.now() / 1000)) return "";
+    return String(decoded.actorId).slice(0, 64);
+  } catch (_err) {
+    return "";
+  }
+}
+
 function readActorId(req, body = {}) {
+  const sessionActorId = readActorSession(req);
   const candidate = String(
-    req.headers["x-actor-id"] ||
-      body.actorId ||
-      body.authorId ||
-      ipToActorFingerprint(req) ||
-      req.ip ||
-      "anonymous"
+    sessionActorId ||
+      (REQUIRE_ACTOR_SESSION ? ipToActorFingerprint(req) : (
+        req.headers["x-actor-id"] ||
+        body.actorId ||
+        body.authorId ||
+        ipToActorFingerprint(req) ||
+        req.ip ||
+        "anonymous"
+      ))
   );
   return crypto.createHash("md5").update(candidate).digest("hex").slice(0, 24);
 }
@@ -1302,6 +1344,16 @@ app.get("/api/v1/health", healthHandler);
 app.get("/api/v1/system/health", healthHandler);
 app.get("/api/weather", weatherHandler);
 app.get("/api/v1/weather", weatherHandler);
+
+app.post("/api/v1/auth/anonymous", asyncHandler(async (_req, res) => {
+  const actorId = `anon-${randomUUID()}`;
+  const now = Math.floor(Date.now() / 1000);
+  res.status(201).json({
+    actorId,
+    token: signActorSession(actorId, now),
+    expiresAt: new Date((now + ACTOR_SESSION_TTL_SECONDS) * 1000).toISOString(),
+  });
+}));
 
 async function spotsHandler(_req, res) {
   const cacheKey = "spots:list:v2";

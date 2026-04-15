@@ -1,6 +1,6 @@
 import { API_BASE, API_PREFIX } from './config';
 import { buildPostPayload, normalizePostShape } from './utils/postCodec';
-import { getActorId, getActorName } from './lib/actor';
+import { getActorId, getActorName, getActorToken } from './lib/actor';
 
 const NETWORK_TIMEOUT_MS = 12_000;
 const GET_CACHE_TTL_MS = 4000;
@@ -77,9 +77,11 @@ async function doRequest(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && requestBody instanceof FormData;
   const timeout = Number.isFinite(options.timeout) ? Number(options.timeout) : NETWORK_TIMEOUT_MS;
   const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
+  const actorToken = getActorToken();
   const finalHeaders = {
     ...headers,
     'x-actor-id': getActorId(),
+    ...(actorToken ? { 'x-actor-token': actorToken } : {}),
     ...(options.headers || {}),
   };
 
