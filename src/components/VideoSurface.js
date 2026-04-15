@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View, createElement } from 'react-native';
 
 let NativeVideo = null;
 
@@ -11,6 +11,20 @@ try {
 
 export default function VideoSurface({ uri, style, shouldPlay = false, loop = false }) {
   if (!uri) return null;
+
+  if (Platform.OS === 'web') {
+    return createElement('video', {
+      src: uri,
+      style,
+      controls: true,
+      autoPlay: shouldPlay,
+      loop,
+      muted: shouldPlay,
+      playsInline: true,
+      preload: 'metadata',
+      'aria-label': '出片视频',
+    });
+  }
 
   if (NativeVideo) {
     return (
@@ -26,10 +40,10 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
   }
 
   return (
-    <View style={[style, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#121212' }]}>
+    <View style={[style, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#121212' }]}> 
       <Pressable onPress={() => {}} style={{ alignItems: 'center' }}>
-        <Text style={{ color: '#fff', fontSize: 12 }}>🎬 视频文件</Text>
-        <Text style={{ color: '#ddd', fontSize: 11, marginTop: 4 }}>打开 App 后可播放</Text>
+        <Text style={{ color: '#fff', fontSize: 12 }}>视频暂不可播放</Text>
+        <Text style={{ color: '#ddd', fontSize: 11, marginTop: 4 }}>请检查视频地址</Text>
       </Pressable>
     </View>
   );
