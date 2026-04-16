@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
+import { APP_ROUTES } from '../constants/routes';
 import { usePostListActions } from '../hooks/usePostListActions';
 import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
