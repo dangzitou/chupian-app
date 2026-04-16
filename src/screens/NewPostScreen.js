@@ -20,6 +20,7 @@ import { APP_ROUTES } from '../constants/routes';
 import { EMPTY_SHOT, SHOT_PRESETS } from '../constants/shotForm';
 import { splitTags } from '../utils/postCodec';
 import { validatePostDraft } from '../utils/postValidation';
+import { mapWithConcurrency } from '../utils/async';
 import ShotMetaBoard from '../components/ShotMetaBoard';
 import PostInput from '../components/forms/PostInput';
 import OptionPills from '../components/forms/OptionPills';
@@ -505,18 +506,23 @@ export default function NewPostScreen({ navigation, route }) {
           ? [mediaList[coverIndex], ...mediaList.slice(0, coverIndex), ...mediaList.slice(coverIndex + 1)]
           : mediaList)
         : [];
-      setUploadProgress({ completed: 0, total: orderedMediaList.length });
-        const uploaded = await Promise.all(
-        orderedMediaList.map(async (item) => {
+      const uploadTotal = orderedMediaList.reduce((total, item) => (
+        total + (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri ? 2 : 1)
+      ), 0);
+      setUploadProgress({ completed: 0, total: uploadTotal });
+      const markUploadComplete = () => {
+        setUploadProgress((current) => current
+          ? { ...current, completed: Math.min(current.total, current.completed + 1) }
+          : current);
+      };
+      const uploaded = await mapWithConcurrency(orderedMediaList, async (item) => {
           if (item.kind === MEDIA_KINDS.LIVE && item.uri.startsWith('http')) {
             const result = {
               kind: item.kind,
               url: item.uri,
               duration: item.duration || 0,
             };
-            setUploadProgress((current) => current
-              ? { ...current, completed: Math.min(current.total, current.completed + 1) }
-              : current);
+            markUploadComplete();
             return result;
           }
           const stillRes = await api.uploadMedia(
@@ -526,6 +532,7 @@ export default function NewPostScreen({ navigation, route }) {
             item.file,
             getMediaUploadKey(item, 'still'),
           );
+          markUploadComplete();
           const stillRecord = (stillRes.media || [])[0] || {};
           let mediaRecord = stillRecord;
           if (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri) {
@@ -536,6 +543,7 @@ export default function NewPostScreen({ navigation, route }) {
               item.pairedVideo.file,
               getMediaUploadKey(item.pairedVideo, 'paired'),
             );
+            markUploadComplete();
             const videoRecord = (videoRes.media || [])[0] || {};
             mediaRecord = {
               ...videoRecord,
@@ -554,12 +562,8 @@ export default function NewPostScreen({ navigation, route }) {
             height: mediaRecord.height || 0,
             duration: mediaRecord.duration || item.duration || 0,
           };
-          setUploadProgress((current) => current
-            ? { ...current, completed: Math.min(current.total, current.completed + 1) }
-            : current);
           return result;
-        })
-      );
+        }, 2);
 
       const payload = {
         title: state.title.trim(),
