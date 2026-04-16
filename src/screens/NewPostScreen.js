@@ -21,6 +21,7 @@ import { EMPTY_SHOT, SHOT_PRESETS } from '../constants/shotForm';
 import { splitTags } from '../utils/postCodec';
 import { validatePostDraft } from '../utils/postValidation';
 import { mapWithConcurrency } from '../utils/async';
+import { buildShotDefaultsFromExif } from '../utils/exif';
 import ShotMetaBoard from '../components/ShotMetaBoard';
 import PostInput from '../components/forms/PostInput';
 import OptionPills from '../components/forms/OptionPills';
@@ -90,6 +91,7 @@ function buildMediaPayload(sourceAsset) {
     uri,
     kind,
     file: sourceAsset?.file || null,
+    exif: sourceAsset?.exif || null,
     mime: sourceAsset?.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
     duration: isVideo ? parseMediaDuration(sourceAsset?.duration, kind) : 0,
     pairedVideo: pairedVideoUri ? {
@@ -340,6 +342,15 @@ export default function NewPostScreen({ navigation, route }) {
     dispatch({ type: 'update', payload: { bestTime: value } });
   }, []);
 
+  const applyExifDefaults = useCallback((rawExif) => {
+    const defaults = buildShotDefaultsFromExif(rawExif);
+    const next = {};
+    for (const key of ['camera', 'lens', 'focal', 'aperture', 'shutter', 'iso', 'whiteBalance', 'shotAt']) {
+      if (!String(state[key] || '').trim() && defaults[key]) next[key] = defaults[key];
+    }
+    if (Object.keys(next).length) dispatch({ type: 'update', payload: next });
+  }, [state]);
+
   const pickFromLibrary = useCallback(async () => {
     const ok = await requestGalleryPermission();
     if (!ok) {
@@ -349,11 +360,13 @@ export default function NewPostScreen({ navigation, route }) {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 1,
+      exif: true,
       allowsMultipleSelection: true,
       selectionLimit: 9,
     });
 
     if (res.canceled || !res.assets?.length) return;
+    applyExifDefaults(res.assets[0]?.exif);
     const candidates = res.assets
       .map((asset) => buildMediaPayload(asset))
       .filter(Boolean)
@@ -393,11 +406,13 @@ export default function NewPostScreen({ navigation, route }) {
     const res = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 1,
+      exif: true,
       videoMaxDuration: 40,
     });
     if (res.canceled || !res.assets?.length) return;
 
     const asset = res.assets[0];
+    applyExifDefaults(asset.exif);
     const normalized = buildMediaPayload(asset);
     if (!normalized) return;
     if (normalized.kind === MEDIA_KINDS.VIDEO && normalized.duration > MAX_VIDEO_SECONDS) {
@@ -417,7 +432,7 @@ export default function NewPostScreen({ navigation, route }) {
       }
       return [...prev, normalized].slice(0, MAX_MEDIA_COUNT);
     });
-  }, []);
+  }, [applyExifDefaults]);
 
   const addLivePhoto = useCallback(async () => {
     const ok = await requestGalleryPermission();
