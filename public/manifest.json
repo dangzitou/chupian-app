@@ -8,9 +8,9 @@
   "lang": "zh-CN",
   "icons": [
     {
-      "src": "/favicon.png",
+      "src": "/favicon.ico",
       "sizes": "any",
-      "type": "image/png"
+      "type": "image/x-icon"
     }
   ]
 }
