@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  Share,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +16,7 @@ import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
-import { buildPostShareMessage } from '../utils/share';
+import { sharePost, shareText } from '../utils/share';
 import { getActorName } from '../lib/actor';
 
 const PAGE_SIZE = 8;
@@ -194,7 +193,7 @@ export default function ProfileScreen({ navigation }) {
   const onShare = useCallback(async (item) => {
     if (!item) return;
     try {
-      await Share.share({ message: buildPostShareMessage(item) });
+      await sharePost(item);
     } catch (_err) {
       // share unsupported in current runtime, fail silently for list usage
     }
@@ -227,7 +226,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
-        <Pressable style={styles.profileAction} onPress={() => Share.share({ message: `来看看${actorName}的出片档案` })}>
+        <Pressable style={styles.profileAction} onPress={() => shareText(`来看看${actorName}的出片档案`, actorName)}>
           <Text style={styles.profileActionText}>分享</Text>
         </Pressable>
       </View>

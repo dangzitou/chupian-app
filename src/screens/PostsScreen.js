@@ -4,7 +4,6 @@ import {
   FlatList,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -18,7 +17,7 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { APP_ROUTES } from '../constants/routes';
-import { buildPostShareMessage } from '../utils/share';
+import { sharePost } from '../utils/share';
 
 const PAGE_SIZE = 12;
 const SORT_OPTIONS = [
@@ -308,7 +307,7 @@ export default function PostsScreen({ navigation }) {
   const onShare = useCallback(async (item) => {
     if (!item) return;
     try {
-      await Share.share({ message: buildPostShareMessage(item) });
+      await sharePost(item);
     } catch (_err) {
       // share unsupported in current runtime, fail silently for list usage
     }

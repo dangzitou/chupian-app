@@ -6,7 +6,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Share,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -23,7 +22,7 @@ import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
 import ShotMetaBoard from '../components/ShotMetaBoard';
 import { formatRelativeTime } from '../utils/time';
-import { buildPostShareMessage } from '../utils/share';
+import { sharePost } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
 import { getActorName } from '../lib/actor';
 
@@ -214,7 +213,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const onShare = useCallback(async () => {
     if (!post) return;
     try {
-      await Share.share({ message: buildPostShareMessage(post) });
+      await sharePost(post);
     } catch (_err) {
       Alert.alert('分享失败', '暂不支持当前环境分享');
     }
