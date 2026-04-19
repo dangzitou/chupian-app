@@ -19,6 +19,7 @@ function TagPill({ children }) {
 function PostCard({
   post,
   onPress,
+  onAuthorPress,
   onLike,
   onFavorite,
   onComment,
@@ -111,7 +112,7 @@ function PostCard({
             </View>
           ) : null}
           <View style={styles.compactFooter}>
-            <Pressable style={styles.compactAuthor} onPress={onPress}>
+            <Pressable style={styles.compactAuthor} onPress={onAuthorPress || onPress}>
               <View style={styles.avatarCompact}>
                 <AuthorAvatar name={post.author} />
               </View>
@@ -148,7 +149,7 @@ function PostCard({
       }}
     >
       <View style={[styles.header, compact && styles.headerCompact]}>
-        <Pressable style={styles.authorTap} onPress={onPress}>
+        <Pressable style={styles.authorTap} onPress={onAuthorPress || onPress}>
           <View style={[styles.avatar, compact && styles.avatarCompact]}>
             <AuthorAvatar name={post.author} />
           </View>

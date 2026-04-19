@@ -394,6 +394,21 @@ export const api = {
     return normalizeCommunityFeedResponse(raw);
   },
 
+  async authorPosts(authorId, params = {}) {
+    const target = String(authorId || '').trim();
+    if (!target) throw new Error('authorId required');
+    const queryString = buildFeedQuery({
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
+    const raw = await request(`${API_PREFIX}/authors/${encodeURIComponent(target)}/posts?${queryString}`, {
+      cacheTtl: 2500,
+      noCache: params.noCache,
+    });
+    return normalizeCommunityFeedResponse(raw);
+  },
+
   async getAuthorFollow(authorId) {
     const target = String(authorId || '').trim();
     if (!target) throw new Error('authorId required');

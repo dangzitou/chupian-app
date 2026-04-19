@@ -320,6 +320,9 @@ export default function PostsScreen({ navigation }) {
       compact={isMasonry}
       showFollow={!isMasonry}
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
+      onAuthorPress={item.authorId
+        ? () => navigation.navigate('AuthorProfile', { authorId: item.authorId, authorName: item.author })
+        : undefined}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
       onFollow={() => onFollow(item.id)}
