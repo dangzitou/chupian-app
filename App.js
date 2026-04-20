@@ -118,19 +118,19 @@ export default function App() {
               }}
             >
               <Tab.Screen
+                name={APP_ROUTES.MAP}
+                component={MapStack}
+                options={{
+                  tabBarLabel: '首页',
+                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
+                }}
+              />
+              <Tab.Screen
                 name={APP_ROUTES.DISCOVERY}
                 component={DiscoveryStack}
                 options={{
                   tabBarLabel: '发现',
                   tabBarIcon: ({ focused }) => <TabIcon glyph="⌂" focused={focused} />,
-                }}
-              />
-              <Tab.Screen
-                name={APP_ROUTES.MAP}
-                component={MapStack}
-                options={{
-                  tabBarLabel: '地图',
-                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
                 }}
               />
               <Tab.Screen
