@@ -172,6 +172,9 @@ async function apiLimiter(req, res, next) {
   res.setHeader("X-Rate-Limit-Limit", String(API_RATE_LIMIT_MAX));
   res.setHeader("X-Rate-Limit-Remaining", String(remainingCount));
   res.setHeader("X-Rate-Limit-Reset", String(Math.ceil(bucketResetMs / 1000)));
+  res.setHeader("RateLimit-Limit", String(API_RATE_LIMIT_MAX));
+  res.setHeader("RateLimit-Remaining", String(remainingCount));
+  res.setHeader("RateLimit-Reset", String(Math.ceil(bucketResetMs / 1000)));
 
   if (count > API_RATE_LIMIT_MAX) {
     const retryAfterSeconds = Math.max(1, Math.ceil((bucketResetMs - now) / 1000));
