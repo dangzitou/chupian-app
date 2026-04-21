@@ -53,11 +53,21 @@ export async function cacheSetIfNotExists(key, value, ttlSeconds = 60) {
 
 export async function cacheIncrWithTtl(key, ttlSeconds = 60, startAt = 1) {
   try {
-    const value = await redis.incr(key);
-    if (value === startAt) {
-      await redis.expire(key, ttlSeconds);
-    }
-    return value;
+    const value = await redis.eval(
+      `
+        local value = redis.call('INCR', KEYS[1])
+        local ttl = redis.call('TTL', KEYS[1])
+        if ttl < 0 then
+          redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
+        return value
+      `,
+      1,
+      key,
+      Math.max(1, Number(ttlSeconds) || 1),
+      Math.max(1, Number(startAt) || 1),
+    );
+    return Number(value);
   } catch (err) {
     return null;
   }
