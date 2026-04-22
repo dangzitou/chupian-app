@@ -1,6 +1,6 @@
 import { API_BASE, API_PREFIX } from './config';
 import { buildPostPayload, normalizePostShape } from './utils/postCodec';
-import { getActorId, getActorName, getActorToken } from './lib/actor';
+import { getActorId, getActorName, getActorToken, refreshActorSession } from './lib/actor';
 
 const NETWORK_TIMEOUT_MS = 12_000;
 const GET_CACHE_TTL_MS = 4000;
@@ -163,6 +163,7 @@ async function request(path, options = {}) {
 
   const attemptRequest = async () => {
     let lastError;
+    let refreshedSession = false;
     for (let i = 0; i <= MAX_RETRIES; i += 1) {
       try {
         const value = await doRequest(path, options);
@@ -175,6 +176,11 @@ async function request(path, options = {}) {
         return value;
       } catch (err) {
         lastError = err;
+        if (err?.status === 401 && !refreshedSession && !path.endsWith('/auth/anonymous')) {
+          refreshedSession = true;
+          const actorId = await refreshActorSession();
+          if (actorId && getActorToken()) continue;
+        }
         if (!shouldRetry(err.status, method, err) || i >= MAX_RETRIES) {
           throw err;
         }
