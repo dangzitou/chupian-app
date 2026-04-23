@@ -24,6 +24,7 @@ export default function ActionBar({
       disabled: likeBusy || !onLike,
       icon: liked ? '❤️' : '♡',
       label: formatCount(likes),
+      accessibilityLabel: liked ? `取消点赞，${formatCount(likes)}个赞` : `点赞，${formatCount(likes)}个赞`,
       onPress: onLike,
       showBusy: likeBusy,
     },
@@ -32,6 +33,7 @@ export default function ActionBar({
       disabled: !onComment,
       icon: '💬',
       label: formatCount(comments),
+      accessibilityLabel: `评论，${formatCount(comments)}条评论`,
       onPress: onComment,
     },
     {
@@ -40,6 +42,7 @@ export default function ActionBar({
       disabled: favoriteBusy || !onFavorite,
       icon: favorited ? '⭐' : '☆',
       label: formatCount(favorites),
+      accessibilityLabel: favorited ? `取消收藏，${formatCount(favorites)}个收藏` : `收藏，${formatCount(favorites)}个收藏`,
       onPress: onFavorite,
       showBusy: favoriteBusy,
     },
@@ -53,6 +56,9 @@ export default function ActionBar({
           style={[styles.item, compact && styles.itemCompact, item.disabled && styles.itemDisabled]}
           onPress={item.onPress}
           disabled={item.disabled}
+          accessibilityRole="button"
+          accessibilityLabel={item.accessibilityLabel}
+          accessibilityHint={item.disabled ? '当前不可用' : undefined}
           android_ripple={{ color: '#ddd' }}
         >
           <Text style={[styles.icon, compact && styles.iconCompact, item.active && styles.active]}>
@@ -66,6 +72,8 @@ export default function ActionBar({
         <Pressable
           style={[styles.item, compact && styles.itemCompact]}
           onPress={onShare}
+          accessibilityRole="button"
+          accessibilityLabel="分享这条出片记录"
           android_ripple={{ color: '#ddd' }}
         >
           <Text style={[styles.icon, compact && styles.iconCompact]}>↗️</Text>
