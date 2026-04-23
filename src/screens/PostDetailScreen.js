@@ -191,6 +191,23 @@ export default function PostDetailScreen({ route, navigation }) {
     });
   }, [api, post, toggleAction]);
 
+  const onOpenAuthor = useCallback(() => {
+    if (!post?.authorId) return;
+    const params = {
+      authorId: post.authorId,
+      authorName: post.author || '创作者主页',
+    };
+    const parent = navigation?.getParent?.();
+    if (parent) {
+      parent.navigate(APP_ROUTES.DISCOVERY, {
+        screen: 'AuthorProfile',
+        params,
+      });
+      return;
+    }
+    navigation?.navigate?.('AuthorProfile', params);
+  }, [navigation, post]);
+
   const scrollToBottom = useCallback(() => {
     if (listRef.current) {
       listRef.current.scrollToEnd({ animated: true });
@@ -343,13 +360,21 @@ export default function PostDetailScreen({ route, navigation }) {
 
         <View style={styles.contentWrap}>
           <View style={styles.authorRow}>
-            <View style={styles.authorAvatar}>
-              <Text style={styles.authorAvatarText}>{String(post.author || '匿名拍友').slice(0, 2)}</Text>
-            </View>
-            <View style={styles.authorCopy}>
-              <Text style={styles.authorName} numberOfLines={1}>{post.author || '匿名拍友'}</Text>
-              <Text style={styles.authorBio} numberOfLines={1}>{post.authorBio || '出片位置记录者'}</Text>
-            </View>
+            <Pressable
+              style={styles.authorPress}
+              onPress={onOpenAuthor}
+              disabled={!post.authorId}
+              accessibilityRole="button"
+              accessibilityLabel={`查看${post.author || '创作者'}主页`}
+            >
+              <View style={styles.authorAvatar}>
+                <Text style={styles.authorAvatarText}>{String(post.author || '匿名拍友').slice(0, 2)}</Text>
+              </View>
+              <View style={styles.authorCopy}>
+                <Text style={styles.authorName} numberOfLines={1}>{post.author || '匿名拍友'}</Text>
+                <Text style={styles.authorBio} numberOfLines={1}>{post.authorBio || '出片位置记录者'}</Text>
+              </View>
+            </Pressable>
             <Pressable
               style={[styles.followBtn, post.followed && styles.followBtnActive]}
               onPress={onFollow}
@@ -414,7 +439,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenMap, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -644,6 +669,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
     marginBottom: 2,
+  },
+  authorPress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
   },
   authorAvatar: {
     width: 38,
