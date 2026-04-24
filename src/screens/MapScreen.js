@@ -4,6 +4,7 @@ import {
   Pressable,
   Platform,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { COLORS } from '../config';
@@ -34,6 +35,7 @@ const sanitize = (value) => String(value || '')
 
 export default function MapScreen({ navigation, route }) {
   const [error, setError] = useState(false);
+  const [mapRevision, setMapRevision] = useState(0);
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(DEFAULT_CENTER);
@@ -380,9 +382,15 @@ export default function MapScreen({ navigation, route }) {
     lng: currentLocation.lng,
   }), [currentLocation, onOpenCreate]);
 
+  const retryMap = useCallback(() => {
+    setError(false);
+    setMapRevision((value) => value + 1);
+  }, []);
+
   return (
     <View style={styles.container}>
       {Platform.OS === 'web' ? createElement('iframe', {
+        key: mapRevision,
         title: '出片地图',
         srcDoc: mapHtml,
         allow: 'geolocation',
@@ -390,6 +398,7 @@ export default function MapScreen({ navigation, route }) {
         style: styles.webFrame,
       }) : (
         <WebView
+          key={mapRevision}
           source={{ html: mapHtml }}
           style={styles.webview}
           onMessage={onWebMessage}
@@ -422,6 +431,15 @@ export default function MapScreen({ navigation, route }) {
           >
             <View style={styles.plusHorizontal} />
             <View style={styles.plusVertical} />
+          </Pressable>
+        </View>
+      ) : null}
+      {error ? (
+        <View style={styles.errorOverlay}>
+          <Text style={styles.errorTitle}>地图暂时加载失败</Text>
+          <Text style={styles.errorHint}>请检查网络后重试，已保存的作品不会受影响。</Text>
+          <Pressable style={styles.retryBtn} onPress={retryMap} accessibilityRole="button">
+            <Text style={styles.retryText}>重新加载地图</Text>
           </Pressable>
         </View>
       ) : null}
@@ -466,6 +484,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   loadingWrap: { flex: 1, backgroundColor: '#e6edf3' },
+  errorOverlay: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    top: '40%',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  errorTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700' },
+  errorHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
+  retryBtn: {
+    marginTop: 12,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: COLORS.accent,
+  },
+  retryText: { color: COLORS.onAccent, fontSize: 12.5, fontWeight: '700' },
   webFrame: {
     width: '100%',
     height: '100%',
