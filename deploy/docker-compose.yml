@@ -59,6 +59,12 @@ services:
       REQUIRE_ACTOR_SESSION: ${REQUIRE_ACTOR_SESSION:-true}
       SPOT_CACHE_TTL: 90
       MAX_FEED_LIMIT: 40
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
+      start_period: 15s
     volumes:
       - backend_uploads:/app/uploads
 
@@ -78,8 +84,10 @@ services:
     container_name: chupian-nginx
     restart: unless-stopped
     depends_on:
-      - backend
-      - web
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_started
     ports:
       - "80:80"
     volumes:
