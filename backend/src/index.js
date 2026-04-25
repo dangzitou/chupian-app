@@ -91,6 +91,7 @@ app.use(
     allowedHeaders: [
       "Content-Type",
       "x-actor-id",
+      "x-actor-token",
       "x-forwarded-for",
       "authorization",
       "idempotency-key",
