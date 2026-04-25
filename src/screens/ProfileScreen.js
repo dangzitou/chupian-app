@@ -229,7 +229,16 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
-        <Pressable style={styles.profileAction} onPress={() => shareText(`来看看${actorName}的出片档案`, actorName)}>
+        <Pressable
+          style={styles.profileAction}
+          onPress={async () => {
+            try {
+              await shareText(`来看看${actorName}的出片档案`, actorName);
+            } catch (_err) {
+              // Sharing is best-effort; unsupported browsers should not surface an unhandled rejection.
+            }
+          }}
+        >
           <Text style={styles.profileActionText}>分享</Text>
         </Pressable>
       </View>
