@@ -36,6 +36,7 @@ const sanitize = (value) => String(value || '')
 export default function MapScreen({ navigation, route }) {
   const [error, setError] = useState(false);
   const [mapRevision, setMapRevision] = useState(0);
+  const [webLocation, setWebLocation] = useState(null);
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(DEFAULT_CENTER);
@@ -46,6 +47,21 @@ export default function MapScreen({ navigation, route }) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     return { lat, lng, label: String(raw?.label || '出片位置') };
   }, [route?.params?.focusLocation]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || focusLocation || typeof navigator === 'undefined') return undefined;
+    if (!navigator.geolocation) return undefined;
+    navigator.geolocation.getCurrentPosition((position) => {
+      const lat = Number(position.coords.latitude);
+      const lng = Number(position.coords.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setWebLocation({ lat, lng, label: '我的位置' });
+      }
+    }, () => {
+      // The map HTML keeps its city fallback when location permission is denied.
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    return undefined;
+  }, [focusLocation]);
 
   const mapHtml = useMemo(() => {
     const safeSpots = Array.isArray(spots) ? spots.filter((item) => {
@@ -75,7 +91,7 @@ export default function MapScreen({ navigation, route }) {
     })) : [];
 
     const spotsPayload = JSON.stringify([...safeSpots, ...safePosts]);
-    const initialLocation = focusLocation || DEFAULT_CENTER;
+    const initialLocation = focusLocation || webLocation || DEFAULT_CENTER;
 
     return `<!doctype html>
     <html>
@@ -145,7 +161,7 @@ export default function MapScreen({ navigation, route }) {
             const fallbackLat = ${initialLocation.lat};
             const fallbackLng = ${initialLocation.lng};
             const fallbackName = '${sanitize(initialLocation.label)}';
-            const hasFocusLocation = ${focusLocation ? 'true' : 'false'};
+            const hasFocusLocation = ${focusLocation || webLocation ? 'true' : 'false'};
             const markers = ${spotsPayload};
             const emit = (payload) => {
               const message = JSON.stringify(payload || {});
@@ -287,7 +303,7 @@ export default function MapScreen({ navigation, route }) {
         </script>
       </body>
     </html>`;
-  }, [focusLocation, posts, spots]);
+  }, [focusLocation, posts, spots, webLocation]);
 
   const onOpenCreate = useCallback((spot) => {
     if (!navigation || !APP_ROUTES || !APP_ROUTES.CREATE) return;
