@@ -100,7 +100,10 @@ cd backend && npm install
 cd ..
 npm run qa:integration      # 联调核验（健康检查、接口兼容、核心业务流程）
 npm run qa:adversarial      # 攻防/对抗性测试（异常参数、边界输入、非法文件类型、签名）
+npm run qa:load              # 只读并发 smoke（默认 40 请求、8 并发）
 ```
+
+并发 smoke 可通过 `LOAD_TARGET_URL`、`LOAD_REQUESTS` 和 `LOAD_CONCURRENCY` 覆盖默认值；它只访问健康检查和 Feed，不写入业务数据。
 
 无数据库可用时，`qa:integration` 会标记数据库依赖项为“待补环境”而非失败；若要做完整验收，请启动 MySQL/Redis 并执行：
 

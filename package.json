@@ -30,6 +30,7 @@
     "web:serve": "npx serve web-build -l 80",
     "qa:integration": "node scripts/qa-integration.mjs",
     "qa:adversarial": "node scripts/qa-adversarial.mjs",
+    "qa:load": "node scripts/qa-load.mjs",
     "qa": "npm run qa:integration && npm run qa:adversarial"
   },
   "private": true
