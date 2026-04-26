@@ -1651,13 +1651,20 @@ app.post("/api/v1/posts/:id/like", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
   const action = String(req.body?.action || "toggle");
-  const result = await applyActionOnPost({
-    postId,
-    action,
+  const idempotent = await runWithIdempotency({
+    req,
     actor,
-    actorName,
-    kind: "like",
+    scope: `post:${postId}:like`,
+    handler: () => applyActionOnPost({
+      postId,
+      action,
+      actor,
+      actorName,
+      kind: "like",
+    }),
   });
+  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+  const result = idempotent.payload;
   await invalidatePostCaches(postId);
   return res.json({ ok: true, likes: result.count, liked: result.active });
 }));
@@ -1668,13 +1675,20 @@ app.post("/api/v1/posts/:id/favorite", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
   const action = String(req.body?.action || "toggle");
-  const result = await applyActionOnPost({
-    postId,
-    action,
+  const idempotent = await runWithIdempotency({
+    req,
     actor,
-    actorName,
-    kind: "favorite",
+    scope: `post:${postId}:favorite`,
+    handler: () => applyActionOnPost({
+      postId,
+      action,
+      actor,
+      actorName,
+      kind: "favorite",
+    }),
   });
+  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+  const result = idempotent.payload;
   await invalidatePostCaches(postId);
   return res.json({ ok: true, favorites: result.count, favorited: result.active });
 }));
