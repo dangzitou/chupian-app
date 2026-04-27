@@ -42,6 +42,13 @@ const EMPTY_DRAFT_STATE = {
   mediaList: [],
 };
 
+function isUsableDraftMedia(item) {
+  const uri = String(item?.uri || '').trim();
+  if (!uri) return false;
+  if (Platform.OS === 'web' && /^blob:/i.test(uri)) return false;
+  return true;
+}
+
 function FormSection({ title, summary, expanded, onToggle, children }) {
   return (
     <View style={styles.formSection}>
@@ -162,6 +169,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftMediaWarning, setDraftMediaWarning] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [state, dispatch] = useReducer(reducer, EMPTY_SHOT);
@@ -196,7 +204,8 @@ export default function NewPostScreen({ navigation, route }) {
 
   const applyDraft = useCallback((draft = EMPTY_DRAFT_STATE) => {
     const nextState = draft.state || EMPTY_DRAFT_STATE.state;
-    const nextMedia = Array.isArray(draft.mediaList) ? draft.mediaList.filter(Boolean) : [];
+    const storedMedia = Array.isArray(draft.mediaList) ? draft.mediaList.filter(Boolean) : [];
+    const nextMedia = storedMedia.filter(isUsableDraftMedia);
     const nextCover = Number.isInteger(draft.coverIndex) ? draft.coverIndex : -1;
 
     dispatch({ type: 'reset' });
@@ -209,6 +218,11 @@ export default function NewPostScreen({ navigation, route }) {
     });
     setMediaList(nextMedia);
     setCoverIndex(nextMedia.length > 0 ? Math.min(Math.max(nextCover, 0), nextMedia.length - 1) : -1);
+    setDraftMediaWarning(
+      storedMedia.length !== nextMedia.length
+        ? '浏览器临时素材已失效，请重新选择图片或视频；文字和拍摄参数已保留。'
+        : ''
+    );
   }, []);
 
   const saveDraft = useCallback(async () => {
@@ -222,6 +236,7 @@ export default function NewPostScreen({ navigation, route }) {
   const clearDraft = useCallback(async () => {
     await draftStorage.remove();
     hasHydratedDraftRef.current = false;
+    setDraftMediaWarning('');
     dispatch({ type: 'reset' });
     setMediaList([]);
     setCoverIndex(-1);
@@ -232,6 +247,7 @@ export default function NewPostScreen({ navigation, route }) {
     if (hasHydratedDraftRef.current) return;
     const raw = await draftStorage.read();
     if (!raw || !raw.state) {
+      setDraftMediaWarning('');
       hasHydratedDraftRef.current = true;
       return;
     }
@@ -239,6 +255,7 @@ export default function NewPostScreen({ navigation, route }) {
       await draftStorage.remove();
       hasHydratedDraftRef.current = true;
       setDraftLoaded(false);
+      setDraftMediaWarning('');
       return;
     }
     applyDraft(raw);
@@ -681,6 +698,7 @@ export default function NewPostScreen({ navigation, route }) {
           <Text style={styles.subtitle}>完善拍摄参数 + 发布照片/视频，打造可收藏的广州出片帖</Text>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
+          {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
 
           <View style={styles.formActions}>
             <Pressable
@@ -1090,6 +1108,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#8a6d43',
     fontSize: 12,
+  },
+  draftMediaWarning: {
+    marginTop: 4,
+    color: '#a34a2a',
+    fontSize: 12,
+    lineHeight: 18,
   },
   formActions: {
     marginTop: 10,
