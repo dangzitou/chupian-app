@@ -693,7 +693,7 @@ export default function NewPostScreen({ navigation, route }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         style={styles.flex}
       >
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>发布出片</Text>
           <Text style={styles.subtitle}>完善拍摄参数 + 发布照片/视频，打造可收藏的广州出片帖</Text>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
@@ -962,22 +962,24 @@ export default function NewPostScreen({ navigation, route }) {
           />
         </View>
 
-        <Pressable
-          style={[
-            styles.publishBtn,
-            (submitting || !validation.isValid) && styles.publishBtnDisabled,
-          ]}
-          onPress={publish}
-          disabled={submitting || !validation.isValid}
-        >
-          {submitting ? <ActivityIndicator color={COLORS.onAccent} /> : <Text style={styles.publishText}>发布出片</Text>}
-        </Pressable>
-        {submitting && uploadProgress ? (
-          <Text style={styles.uploadProgress}>
-            正在上传素材 {uploadProgress.completed}/{uploadProgress.total}
-          </Text>
-        ) : null}
         </ScrollView>
+        <View style={styles.publishDock}>
+          <Pressable
+            style={[
+              styles.publishBtn,
+              (submitting || !validation.isValid) && styles.publishBtnDisabled,
+            ]}
+            onPress={publish}
+            disabled={submitting || !validation.isValid}
+          >
+            {submitting ? <ActivityIndicator color={COLORS.onAccent} /> : <Text style={styles.publishText}>发布出片</Text>}
+          </Pressable>
+          {submitting && uploadProgress ? (
+            <Text style={styles.uploadProgress}>
+              正在上传素材 {uploadProgress.completed}/{uploadProgress.total}
+            </Text>
+          ) : null}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -986,7 +988,7 @@ export default function NewPostScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.bg },
-  body: { padding: 16, paddingBottom: 60 },
+  body: { padding: 16, paddingBottom: 96 },
   title: { fontSize: 24, color: COLORS.ink, fontWeight: '700' },
   subtitle: { color: COLORS.muted, marginTop: 3, marginBottom: 12, fontSize: 12.5 },
   sectionTitle: {
@@ -1139,7 +1141,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   publishBtn: {
-    marginTop: 14,
     borderRadius: 999,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1147,6 +1148,20 @@ const styles = StyleSheet.create({
   },
   publishBtnDisabled: {
     opacity: 0.6,
+  },
+  publishDock: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+    backgroundColor: COLORS.panel,
+  },
+  uploadProgress: {
+    marginTop: 5,
+    color: COLORS.muted,
+    fontSize: 11.5,
+    textAlign: 'center',
   },
   publishText: {
     color: COLORS.onAccent,
