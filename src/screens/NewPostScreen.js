@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Device from 'expo-device';
 import * as ImagePicker from 'expo-image-picker';
 
 import { api } from '../api';
@@ -125,7 +124,7 @@ function hasGranted(status) {
 }
 
 function requestGalleryPermission() {
-  if (Device.osName === 'web') return true;
+  if (Platform.OS === 'web') return true;
   return ImagePicker.requestMediaLibraryPermissionsAsync().then((media) => {
     if (hasGranted(media)) return true;
     Alert.alert('无权限', '请先授权相册权限');
@@ -134,7 +133,7 @@ function requestGalleryPermission() {
 }
 
 function requestCameraPermission() {
-  if (Device.osName === 'web') return true;
+  if (Platform.OS === 'web') return true;
   return ImagePicker.requestCameraPermissionsAsync().then((camera) => {
     if (hasGranted(camera)) return true;
     Alert.alert('无权限', '请先授权相机权限');
