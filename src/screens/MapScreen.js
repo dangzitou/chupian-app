@@ -186,6 +186,7 @@ export default function MapScreen({ navigation, route }) {
             const fallbackName = '${sanitize(initialLocation.label)}';
             const hasFocusLocation = ${focusLocation || webLocation ? 'true' : 'false'};
             const markers = ${spotsPayload};
+            let mapBootTimer = null;
             const emit = (payload) => {
               const message = JSON.stringify(payload || {});
               if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -227,6 +228,11 @@ export default function MapScreen({ navigation, route }) {
             };
 
             function render(lat, lng, label) {
+              if (!window.L) {
+                emit({ type: 'mapError' });
+                return;
+              }
+              if (mapBootTimer) window.clearTimeout(mapBootTimer);
               emit({
                 type: 'locationReady',
                 location: { lat: Number(lat), lng: Number(lng), label: label || fallbackName },
@@ -309,6 +315,12 @@ export default function MapScreen({ navigation, route }) {
               });
             }
 
+            mapBootTimer = window.setTimeout(() => {
+              if (!window.L || !document.querySelector('.leaflet-container')) {
+                emit({ type: 'mapError' });
+              }
+            }, 12000);
+
             if (hasFocusLocation || !('geolocation' in navigator)) {
               return render(fallbackLat, fallbackLng, fallbackName);
             }
@@ -373,6 +385,10 @@ export default function MapScreen({ navigation, route }) {
             label: String(payload?.location?.label || '我的位置'),
           });
         }
+        return;
+      }
+      if (payload?.type === 'mapError') {
+        setError(true);
         return;
       }
       if (payload?.type === 'openCreate') {
