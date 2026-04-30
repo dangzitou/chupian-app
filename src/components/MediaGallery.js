@@ -33,7 +33,14 @@ function MediaCover({ item, playing }) {
     if (!item.url) return <MediaFallback kind="video" />;
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} controls={playing} onError={handleError} />
+        <VideoSurface
+          uri={item.url}
+          style={styles.videoSurface}
+          shouldPlay={playing}
+          controls={playing}
+          poster={item.cover || item.thumbnail}
+          onError={handleError}
+        />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
@@ -50,7 +57,15 @@ function MediaCover({ item, playing }) {
   if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop controls onError={handleError} />
+        <VideoSurface
+          uri={item.url}
+          style={styles.videoSurface}
+          shouldPlay
+          loop
+          controls
+          poster={item.cover}
+          onError={handleError}
+        />
         <Text style={styles.liveMark}>实况 · 播放中</Text>
       </View>
     );
