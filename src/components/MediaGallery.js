@@ -33,13 +33,13 @@ function MediaCover({ item, playing }) {
     if (!item.url) return <MediaFallback kind="video" />;
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} onError={handleError} />
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} controls={playing} onError={handleError} />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
           </View>
         ) : null}
-        {playing ? <Text style={styles.liveMark}>视频 · 播放中</Text> : null}
+        {playing ? <Text style={styles.liveMark}>视频 · 播放中</Text> : <Text style={styles.playBadge}>▶</Text>}
       </View>
     );
   }
@@ -50,7 +50,7 @@ function MediaCover({ item, playing }) {
   if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop onError={handleError} />
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop controls onError={handleError} />
         <Text style={styles.liveMark}>实况 · 播放中</Text>
       </View>
     );
@@ -169,5 +169,21 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
     fontWeight: '700',
+  },
+  playBadge: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 34,
+    height: 34,
+    marginLeft: -17,
+    marginTop: -17,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    color: COLORS.onAccent,
+    fontSize: 15,
+    lineHeight: 34,
+    textAlign: 'center',
+    overflow: 'hidden',
   },
 });
