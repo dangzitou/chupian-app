@@ -21,6 +21,26 @@ import AuthorProfileScreen from './src/screens/AuthorProfileScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const linking = {
+  prefixes: ['chupian://'],
+  config: {
+    screens: {
+      [APP_ROUTES.MAP]: 'map',
+      [APP_ROUTES.DISCOVERY]: {
+        screens: {
+          PostsList: 'discover',
+          PostDetail: 'post/:postId',
+          AuthorProfile: 'author/:authorId',
+          SpotsList: 'spots',
+          SpotDetail: 'spot/:spotId',
+        },
+      },
+      [APP_ROUTES.CREATE]: 'publish',
+      [APP_ROUTES.PROFILE]: 'profile',
+    },
+  },
+};
+
 function TabIcon({ glyph, focused, primary = false }) {
   return (
     <View style={[styles.tabIcon, primary && styles.tabIconPrimary]}>
@@ -98,7 +118,7 @@ export default function App() {
     <SafeAreaProvider>
       <View style={styles.viewport}>
         <View style={styles.mobileShell}>
-          <NavigationContainer>
+          <NavigationContainer linking={linking}>
             <Tab.Navigator
               initialRouteName={APP_ROUTES.MAP}
               screenOptions={{
