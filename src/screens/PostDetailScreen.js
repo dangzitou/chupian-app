@@ -3,8 +3,10 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -20,6 +22,7 @@ import { APP_ROUTES } from '../constants/routes';
 import { usePostListActions } from '../hooks/usePostListActions';
 import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
+import VideoSurface from '../components/VideoSurface';
 import ShotMetaBoard from '../components/ShotMetaBoard';
 import { formatRelativeTime } from '../utils/time';
 import { sharePost } from '../utils/share';
@@ -54,6 +57,71 @@ function normalizeComment(raw = {}, fallbackAuthor) {
   };
 }
 
+function isPlayableMedia(item) {
+  return item?.kind === 'video'
+    || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
+}
+
+function MediaViewer({ item, index, count, onClose, onStep }) {
+  if (!item) return null;
+  const playable = isPlayableMedia(item);
+  const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.viewerBackdrop}>
+        <Pressable
+          style={styles.viewerClose}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="关闭媒体预览"
+        >
+          <Text style={styles.viewerCloseText}>×</Text>
+        </Pressable>
+        <View style={styles.viewerStage}>
+          {playable ? (
+            <VideoSurface
+              uri={item.url}
+              style={styles.viewerVideo}
+              shouldPlay
+              controls
+              loop={item.kind === 'live'}
+              poster={item.cover}
+            />
+          ) : (
+            imageUri ? (
+              <Image source={{ uri: imageUri }} style={styles.viewerImage} resizeMode="contain" />
+            ) : (
+              <Text style={styles.viewerError}>素材地址已失效</Text>
+            )
+          )}
+        </View>
+        <View style={styles.viewerControls}>
+          <Pressable
+            style={[styles.viewerArrow, index <= 0 && styles.viewerArrowDisabled]}
+            onPress={() => onStep(-1)}
+            disabled={index <= 0}
+            accessibilityRole="button"
+            accessibilityLabel="上一份素材"
+          >
+            <Text style={styles.viewerArrowText}>‹</Text>
+          </Pressable>
+          <Text style={styles.viewerIndex}>{index + 1} / {count}</Text>
+          <Pressable
+            style={[styles.viewerArrow, index >= count - 1 && styles.viewerArrowDisabled]}
+            onPress={() => onStep(1)}
+            disabled={index >= count - 1}
+            accessibilityRole="button"
+            accessibilityLabel="下一份素材"
+          >
+            <Text style={styles.viewerArrowText}>›</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
   const [post, setPost] = useState(null);
@@ -68,6 +136,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const [commentsCursor, setCommentsCursor] = useState(null);
   const [commentsHasMore, setCommentsHasMore] = useState(false);
   const [commentsLoadError, setCommentsLoadError] = useState(null);
+  const [viewerIndex, setViewerIndex] = useState(-1);
 
   const listRef = useRef(null);
   const commentInputRef = useRef(null);
@@ -260,6 +329,10 @@ export default function PostDetailScreen({ route, navigation }) {
     navigation?.navigate?.(APP_ROUTES.MAP, params);
   }, [navigation, post]);
 
+  const onOpenMedia = useCallback((_item, index) => {
+    setViewerIndex(Number.isInteger(index) ? index : -1);
+  }, []);
+
   const onSubmitComment = useCallback(async () => {
     const text = String(commentInput || '').trim();
     if (!text || !post || commentSending) return;
@@ -355,13 +428,21 @@ export default function PostDetailScreen({ route, navigation }) {
     };
   }, [post]);
 
+  const onStepMedia = useCallback((delta) => {
+    setViewerIndex((current) => {
+      const next = current + Number(delta || 0);
+      if (next < 0 || next >= postMeta.media.length) return current;
+      return next;
+    });
+  }, [postMeta.media.length]);
+
   const renderHeader = useMemo(() => {
     if (!post) return null;
     return (
       <View>
         {loading ? null : <View style={styles.metaTopSpacer} />}
         <View style={styles.coverWrap}>
-          <MediaGallery media={postMeta.media} showAll columns={1} />
+          <MediaGallery media={postMeta.media} showAll columns={1} onPressMedia={onOpenMedia} />
         </View>
 
         <View style={styles.contentWrap}>
@@ -445,7 +526,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -585,6 +666,13 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
         {!!commentError ? <Text style={styles.commentErr}>评论发送失败：{commentError}</Text> : null}
       </KeyboardAvoidingView>
+      <MediaViewer
+        item={viewerIndex >= 0 ? postMeta.media[viewerIndex] : null}
+        index={viewerIndex}
+        count={postMeta.media.length}
+        onClose={() => setViewerIndex(-1)}
+        onStep={onStepMedia}
+      />
     </SafeAreaView>
   );
 }
@@ -665,6 +753,78 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8,10,14,0.98)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 24,
+  },
+  viewerClose: {
+    alignSelf: 'flex-end',
+    width: 42,
+    height: 42,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerCloseText: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 30,
+  },
+  viewerStage: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  viewerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  viewerVideo: {
+    width: '100%',
+    height: '76%',
+    backgroundColor: '#000',
+  },
+  viewerError: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+  },
+  viewerControls: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 22,
+    paddingHorizontal: 18,
+  },
+  viewerArrow: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  viewerArrowDisabled: { opacity: 0.3 },
+  viewerArrowText: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 31,
+  },
+  viewerIndex: {
+    minWidth: 54,
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 12,
+    textAlign: 'center',
   },
   contentWrap: {
     padding: 12,
