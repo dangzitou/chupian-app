@@ -24,11 +24,13 @@ function PostCard({
   onFavorite,
   onComment,
   onShare,
+  onManage,
   onFollow,
   showFollow = true,
   likeBusy = false,
   favoriteBusy = false,
   followBusy = false,
+  manageBusy = false,
   compact = false,
   style,
 }) {
@@ -132,6 +134,17 @@ function PostCard({
               onComment={onComment}
               onShare={null}
             />
+            {onManage ? (
+              <Pressable
+                style={styles.manageBtn}
+                onPress={onManage}
+                disabled={manageBusy}
+                accessibilityRole="button"
+                accessibilityLabel="管理这条出片记录"
+              >
+                <Text style={styles.manageText}>{manageBusy ? '…' : '⋯'}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </View>
@@ -444,5 +457,17 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.muted,
     fontSize: 10.5,
+  },
+  manageBtn: {
+    width: 24,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  manageText: {
+    color: COLORS.muted,
+    fontSize: 18,
+    lineHeight: 20,
   },
 });

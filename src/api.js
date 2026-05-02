@@ -492,6 +492,20 @@ export const api = {
     return toPostShape(item);
   },
 
+  async archivePost(id) {
+    const target = String(id || '').trim();
+    if (!target) throw new Error('post id required');
+    const headers = {
+      'Idempotency-Key': buildSessionIdempotencyKey('post-archive', target),
+    };
+    const result = await request(`${API_PREFIX}/posts/${encodeURIComponent(target)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    clearNetworkCaches({ postId: target });
+    return result;
+  },
+
   async createPost(body, idempotencyKey) {
     const payload = buildPostPayload(body);
     const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;

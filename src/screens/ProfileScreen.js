@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -63,6 +64,7 @@ export default function ProfileScreen({ navigation }) {
   const [spotCount, setSpotCount] = useState(0);
   const [section, setSection] = useState('mePosts');
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState('');
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -179,6 +181,33 @@ export default function ProfileScreen({ navigation }) {
     navigation?.navigate?.(APP_ROUTES.MAP);
   }, [navigation]);
 
+  const onDeletePost = useCallback((postId) => {
+    const target = String(postId || '').trim();
+    if (!target || deletingPostId) return;
+    Alert.alert(
+      '删除这条出片？',
+      '作品会从公开内容和你的发布列表中移除，已上传素材不会被物理删除。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingPostId(target);
+            try {
+              await api.archivePost(target);
+              await load({ append: false, cursor: null });
+            } catch (err) {
+              Alert.alert('删除失败', err?.message || '网络异常，请稍后重试');
+            } finally {
+              setDeletingPostId('');
+            }
+          },
+        },
+      ],
+    );
+  }, [deletingPostId, load]);
+
   const onLike = useCallback((postId) => toggleAction({
     postId,
     metricField: 'likes',
@@ -225,9 +254,11 @@ export default function ProfileScreen({ navigation }) {
       onFollow={() => onFollow(item.id)}
       onComment={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id } })}
       onShare={() => onShare(item)}
+      onManage={section === 'mePosts' ? () => onDeletePost(item.id) : undefined}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}
       favoriteBusy={isActionBusy(item.id, 'favorited', 'favorited')}
       followBusy={isActionBusy(item.id, 'followed', 'followed')}
+      manageBusy={deletingPostId === String(item.id)}
       style={styles.profileCard}
     />
   ), [isActionBusy, onFavorite, onFollow, onLike, onShare]);
