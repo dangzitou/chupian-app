@@ -1,10 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { COLORS } from '../config';
 import VideoSurface from './VideoSurface';
 
 const COL_GAP = 6;
-const CARD_WIDTH = Dimensions.get('window').width;
 
 const IMAGE_RATIO = 16 / 10;
 const LIVE_CARD_COLOR = '#0d0d0d';
@@ -80,6 +79,7 @@ function MediaCover({ item, playing }) {
 }
 
 export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true, containerWidth }) {
+  const { width: windowWidth } = useWindowDimensions();
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
   const toggleLive = useCallback((index, item) => {
@@ -97,9 +97,10 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
   const list = showAll ? normalized : normalized.slice(0, columns > 1 ? 4 : 1);
   const activeColumns = clampColumns(columns);
   const visibleCols = activeColumns > 1 ? Math.min(activeColumns, list.length) : 1;
+  const shellWidth = Platform.OS === 'web' ? Math.min(windowWidth, 480) : windowWidth;
   const maxWidth = Number.isFinite(containerWidth) && containerWidth > 0
     ? containerWidth
-    : CARD_WIDTH - 32;
+    : Math.max(0, shellWidth - 32);
   const width = visibleCols === 1
     ? maxWidth
     : (maxWidth - COL_GAP * (visibleCols - 1)) / visibleCols;
