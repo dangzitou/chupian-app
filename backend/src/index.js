@@ -273,6 +273,7 @@ function decodeSessionPart(value) {
 
 function signActorSession(actorId, now = Math.floor(Date.now() / 1000)) {
   const payload = encodeSessionPart(JSON.stringify({
+    kind: "anonymous",
     actorId: String(actorId),
     iat: now,
     exp: now + ACTOR_SESSION_TTL_SECONDS,
@@ -281,7 +282,19 @@ function signActorSession(actorId, now = Math.floor(Date.now() / 1000)) {
   return `${payload}.${signature}`;
 }
 
-function readActorSession(req) {
+function signUserSession(userId, now = Math.floor(Date.now() / 1000)) {
+  const payload = encodeSessionPart(JSON.stringify({
+    kind: "user",
+    userId: String(userId),
+    actorId: String(userId),
+    iat: now,
+    exp: now + ACTOR_SESSION_TTL_SECONDS,
+  }));
+  const signature = crypto.createHmac("sha256", ACTOR_SESSION_SECRET).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function readSignedSession(req) {
   const raw = String(req.headers["x-actor-token"] || "").trim();
   const [payload, signature] = raw.split(".");
   if (!payload || !signature) return "";
@@ -292,10 +305,31 @@ function readActorSession(req) {
   try {
     const decoded = JSON.parse(decodeSessionPart(payload));
     if (!decoded?.actorId || Number(decoded.exp) <= Math.floor(Date.now() / 1000)) return "";
-    return String(decoded.actorId).slice(0, 64);
+    return decoded;
   } catch (_err) {
     return "";
   }
+}
+
+function readActorSession(req) {
+  const decoded = readSignedSession(req);
+  return decoded?.actorId ? String(decoded.actorId).slice(0, 64) : "";
+}
+
+function readUserSession(req) {
+  const decoded = readSignedSession(req);
+  if (decoded?.kind !== "user" || !decoded?.userId) return "";
+  return String(decoded.userId).slice(0, 64);
+}
+
+function actorHash(candidate) {
+  return crypto.createHash("md5").update(String(candidate || "")).digest("hex").slice(0, 24);
+}
+
+function readAnonymousActorId(req) {
+  const decoded = readSignedSession(req);
+  if (!decoded?.actorId || decoded.kind === "user") return "";
+  return actorHash(decoded.actorId);
 }
 
 function readActorId(req, body = {}) {
@@ -311,7 +345,33 @@ function readActorId(req, body = {}) {
         "anonymous"
       ))
   );
-  return crypto.createHash("md5").update(candidate).digest("hex").slice(0, 24);
+  return actorHash(candidate);
+}
+
+function derivePassword(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(
+      String(password),
+      String(salt),
+      64,
+      { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 },
+      (error, derivedKey) => (error ? reject(error) : resolve(derivedKey))
+    );
+  });
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = await derivePassword(password, salt);
+  return `scrypt$${salt}$${derivedKey.toString("hex")}`;
+}
+
+async function verifyPassword(password, encoded) {
+  const [scheme, salt, digest] = String(encoded || "").split("$");
+  if (scheme !== "scrypt" || !salt || !digest || !/^[a-f0-9]+$/i.test(digest)) return false;
+  const derivedKey = await derivePassword(password, salt);
+  const expected = Buffer.from(digest, "hex");
+  return expected.length === derivedKey.length && crypto.timingSafeEqual(expected, derivedKey);
 }
 
 function resolveIdempotencyKey(req) {
@@ -857,6 +917,25 @@ async function ensureFollowSchemaCompatibility() {
   }
 }
 
+async function ensureAuthSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(32) NOT NULL UNIQUE,
+        display_name VARCHAR(64) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        bio VARCHAR(160) NOT NULL DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_users_display_name (display_name)
+      ) ENGINE=InnoDB
+    `);
+  } catch (err) {
+    console.warn(`[schema] ensureAuthSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
 async function getFollowState(actor, targetAuthorId) {
   if (!actor || !targetAuthorId) {
     return { isFollowing: false, followers: 0 };
@@ -1355,6 +1434,68 @@ app.get("/api/v1/system/health", healthHandler);
 app.get("/api/weather", weatherHandler);
 app.get("/api/v1/weather", weatherHandler);
 
+function publicUser(row) {
+  return {
+    id: String(row?.id || ""),
+    username: String(row?.username || ""),
+    displayName: String(row?.display_name || row?.username || ""),
+    bio: String(row?.bio || ""),
+  };
+}
+
+function parseAuthCredentials(body = {}, { registration = false } = {}) {
+  const username = safeText(body.username, 32).toLowerCase();
+  const password = String(body.password || "");
+  const displayName = safeText(body.displayName || username, 64);
+  if (!/^[a-z0-9_\u4e00-\u9fff-]{3,32}$/iu.test(username)) {
+    throw Object.assign(new Error("用户名需为 3-32 位中文、字母、数字、下划线或短横线"), { status: 400 });
+  }
+  if (password.length < 8 || password.length > 128) {
+    throw Object.assign(new Error("密码需为 8-128 位"), { status: 400 });
+  }
+  if (registration && (displayName.length < 1 || displayName.length > 64)) {
+    throw Object.assign(new Error("昵称长度不合法"), { status: 400 });
+  }
+  return { username, password, displayName };
+}
+
+function authResponse(row, now = Math.floor(Date.now() / 1000)) {
+  return {
+    user: publicUser(row),
+    token: signUserSession(row.id, now),
+    expiresAt: new Date((now + ACTOR_SESSION_TTL_SECONDS) * 1000).toISOString(),
+  };
+}
+
+async function transferAnonymousActor(conn, fromActorId, user) {
+  if (!fromActorId) return;
+  const targetActorId = actorHash(user.id);
+  await conn.execute(
+    "UPDATE posts SET author_id = ?, author_name = ? WHERE author_id = ?",
+    [targetActorId, user.display_name, fromActorId]
+  );
+  await conn.execute(
+    "UPDATE post_likes SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
+    [targetActorId, user.display_name, fromActorId]
+  );
+  await conn.execute(
+    "UPDATE post_favorites SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
+    [targetActorId, user.display_name, fromActorId]
+  );
+  await conn.execute(
+    "UPDATE post_comments SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
+    [targetActorId, user.display_name, fromActorId]
+  );
+  await conn.execute(
+    "UPDATE author_follows SET follower_id = ?, actor_name = ? WHERE follower_id = ?",
+    [targetActorId, user.display_name, fromActorId]
+  );
+  await conn.execute(
+    "UPDATE author_follows SET followed_id = ? WHERE followed_id = ?",
+    [targetActorId, fromActorId]
+  );
+}
+
 app.post("/api/v1/auth/anonymous", asyncHandler(async (_req, res) => {
   const actorId = `anon-${randomUUID()}`;
   const now = Math.floor(Date.now() / 1000);
@@ -1363,6 +1504,63 @@ app.post("/api/v1/auth/anonymous", asyncHandler(async (_req, res) => {
     token: signActorSession(actorId, now),
     expiresAt: new Date((now + ACTOR_SESSION_TTL_SECONDS) * 1000).toISOString(),
   });
+}));
+
+app.post("/api/v1/auth/register", asyncHandler(async (req, res) => {
+  const credentials = parseAuthCredentials(req.body, { registration: true });
+  const user = {
+    id: `usr-${randomUUID()}`,
+    username: credentials.username,
+    display_name: credentials.displayName,
+    password_hash: await hashPassword(credentials.password),
+    bio: "",
+  };
+  const anonymousActorId = readAnonymousActorId(req);
+  try {
+    await tx(async (conn) => {
+      await conn.execute(
+        `INSERT INTO users (id, username, display_name, password_hash, bio)
+         VALUES (?, ?, ?, ?, ?)`,
+        [user.id, user.username, user.display_name, user.password_hash, user.bio]
+      );
+      await transferAnonymousActor(conn, anonymousActorId, user);
+    });
+  } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ error: "用户名已存在" });
+    }
+    throw err;
+  }
+  await invalidateAllPostsCaches();
+  return res.status(201).json(authResponse(user));
+}));
+
+app.post("/api/v1/auth/login", asyncHandler(async (req, res) => {
+  const credentials = parseAuthCredentials(req.body);
+  const rows = await query(
+    "SELECT id, username, display_name, password_hash, bio FROM users WHERE username = ? LIMIT 1",
+    [credentials.username]
+  );
+  const user = rows[0];
+  if (!user || !(await verifyPassword(credentials.password, user.password_hash))) {
+    return res.status(401).json({ error: "用户名或密码不正确" });
+  }
+  return res.json(authResponse(user));
+}));
+
+app.get("/api/v1/auth/me", asyncHandler(async (req, res) => {
+  const userId = readUserSession(req);
+  if (!userId) return res.status(401).json({ error: "login required" });
+  const rows = await query(
+    "SELECT id, username, display_name, bio FROM users WHERE id = ? LIMIT 1",
+    [userId]
+  );
+  if (!rows.length) return res.status(401).json({ error: "account not found" });
+  return res.json({ user: publicUser(rows[0]) });
+}));
+
+app.post("/api/v1/auth/logout", asyncHandler(async (_req, res) => {
+  return res.json({ ok: true });
 }));
 
 async function spotsHandler(_req, res) {
@@ -1893,6 +2091,7 @@ app.use(createErrorHandler);
 
 await ensurePostsSchemaCompatibility();
 await ensureFollowSchemaCompatibility();
+await ensureAuthSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;
