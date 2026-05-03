@@ -70,6 +70,10 @@ chupian-app/
   - `POST /api/v1/auth/login`
   - `GET /api/v1/auth/me`
   - `POST /api/v1/auth/logout`
+- 互动通知
+  - `GET /api/v1/notifications`
+  - `POST /api/v1/notifications/{id}/read`
+  - `POST /api/v1/notifications/read-all`
 - 点位
   - `GET /api/v1/spots`
   - `GET /api/spots`（兼容）
@@ -146,6 +150,7 @@ docker compose up -d --build
 
 - 后端使用 **MySQL + Redis + Node**：已内置连接池、请求限流、缓存和缓存失效逻辑；
 - 身份支持用户名/密码账号；注册会将当前匿名设备的作品和互动迁移到账号，登录后可跨设备恢复；
+- 点赞、收藏、评论和关注会写入通知中心，支持未读数、游标分页和已读状态；
 - 评论/点赞/收藏统一通过 `postId + actorId` 幂等化，支持高并发幂等写入；
 - feed 查询已补充高频索引（`schema.sql`）：热点列表按 `status + created_at` 与 `status + stats_likes` 多维索引；
 - 上线前执行：

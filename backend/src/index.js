@@ -936,6 +936,56 @@ async function ensureAuthSchemaCompatibility() {
   }
 }
 
+async function ensureNotificationSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        recipient_id VARCHAR(64) NOT NULL,
+        actor_id VARCHAR(64) NOT NULL,
+        actor_name VARCHAR(80) NOT NULL DEFAULT '匿名拍友',
+        type ENUM('like', 'favorite', 'comment', 'follow') NOT NULL,
+        post_id BIGINT UNSIGNED DEFAULT NULL,
+        post_title VARCHAR(200) NOT NULL DEFAULT '',
+        content VARCHAR(300) NOT NULL DEFAULT '',
+        is_read TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_notifications_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE SET NULL,
+        INDEX idx_notifications_recipient_created (recipient_id, created_at, id),
+        INDEX idx_notifications_recipient_read (recipient_id, is_read, created_at, id)
+      ) ENGINE=InnoDB
+    `);
+  } catch (err) {
+    console.warn(`[schema] ensureNotificationSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
+async function insertNotification(conn, {
+  recipientId,
+  actorId,
+  actorName,
+  type,
+  postId = null,
+  postTitle = '',
+  content = '',
+}) {
+  if (!recipientId || !actorId || String(recipientId) === String(actorId)) return;
+  await conn.execute(
+    `INSERT INTO notifications
+      (recipient_id, actor_id, actor_name, type, post_id, post_title, content)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      String(recipientId),
+      String(actorId),
+      safeText(actorName || '匿名拍友', 80),
+      type,
+      postId || null,
+      safeText(postTitle || '', 200),
+      safeText(content || '', 300),
+    ]
+  );
+}
+
 async function getFollowState(actor, targetAuthorId) {
   if (!actor || !targetAuthorId) {
     return { isFollowing: false, followers: 0 };
@@ -992,10 +1042,19 @@ async function applyAuthorFollow({ actor, actorName, targetAuthorId, action = "t
     const shouldFollow = normalizedAction === "toggle" ? !isFollowing : normalizedAction === "follow";
 
     if (shouldFollow && !isFollowing) {
-      await conn.execute(
+      const [insertResult] = await conn.execute(
         "INSERT IGNORE INTO author_follows (follower_id, followed_id, actor_name) VALUES (?, ?, ?)",
         [actor, targetAuthorId, actorName]
       );
+      if (insertResult.affectedRows === 1) {
+        await insertNotification(conn, {
+          recipientId: targetAuthorId,
+          actorId: actor,
+          actorName,
+          type: "follow",
+          content: "关注了你",
+        });
+      }
     }
 
     if (!shouldFollow && isFollowing) {
@@ -1101,7 +1160,7 @@ async function getPostCommentsPayload(req) {
     throw err;
   }
 
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
+  const [exists] = await query("SELECT id, author_id, title FROM posts WHERE id = ?", [postId]);
   if (!exists?.id) {
     const err = new Error("post not found");
     err.status = 404;
@@ -1261,8 +1320,9 @@ async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
   }
 
   return tx(async (conn) => {
-    const [postRows] = await conn.execute("SELECT id FROM posts WHERE id = ?", [postId]);
+    const [postRows] = await conn.execute("SELECT id, author_id, title FROM posts WHERE id = ?", [postId]);
     if (!postRows.length) throw new Error("post not found");
+    const post = postRows[0];
 
     const [existsRows] = await conn.execute(
       `SELECT EXISTS(SELECT 1 FROM ${actionTable} WHERE post_id = ? AND actor_id = ?) AS exist`,
@@ -1284,6 +1344,15 @@ async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
       );
       if (insertResult.affectedRows === 1) {
         await conn.execute(`UPDATE posts SET ${countColumn} = ${countColumn} + 1 WHERE id = ?`, [postId]);
+        await insertNotification(conn, {
+          recipientId: post.author_id,
+          actorId: actor,
+          actorName,
+          type: isLike ? "like" : "favorite",
+          postId,
+          postTitle: post.title,
+          content: isLike ? "赞了你的出片" : "收藏了你的出片",
+        });
       }
     }
 
@@ -1336,10 +1405,22 @@ async function createCommentHandler(req) {
     throw err;
   }
 
-  const result = await query(
-    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-    [postId, actor, author, text]
-  );
+  const result = await tx(async (conn) => {
+    const [insertResult] = await conn.execute(
+      "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
+      [postId, actor, author, text]
+    );
+    await insertNotification(conn, {
+      recipientId: exists.author_id,
+      actorId: actor,
+      actorName: author,
+      type: "comment",
+      postId,
+      postTitle: exists.title,
+      content: `评论了你的出片：${text}`,
+    });
+    return insertResult;
+  });
   await invalidatePostCaches(postId);
   const insertedId = Number(result?.insertId || 0);
   const [insertedComment] = insertedId
@@ -1740,6 +1821,71 @@ app.get("/api/v1/community/me/following", asyncHandler(async (req, res) => {
   res.json(payload);
 }));
 
+app.get("/api/v1/notifications", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const where = ["n.recipient_id = ?"];
+  const params = [actor];
+  if (cursor) {
+    where.push("(n.created_at < ? OR (n.created_at = ? AND n.id < ?))");
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+  const [rows, unreadRows] = await Promise.all([
+    query(
+      `SELECT n.id, n.type, n.actor_id, n.actor_name, n.post_id, n.post_title,
+              n.content, n.is_read, n.created_at
+       FROM notifications n
+       WHERE ${where.join(" AND ")}
+       ORDER BY n.created_at DESC, n.id DESC
+       LIMIT ?`,
+      [...params, limit + 1]
+    ),
+    query("SELECT COUNT(*) AS c FROM notifications WHERE recipient_id = ? AND is_read = 0", [actor]),
+  ]);
+  const useRows = rows.slice(0, limit);
+  const last = useRows.at(-1);
+  return res.json({
+    notifications: useRows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      actorId: row.actor_id,
+      actorName: row.actor_name,
+      postId: row.post_id,
+      postTitle: row.post_title,
+      content: row.content,
+      read: Boolean(Number(row.is_read || 0)),
+      createdAt: row.created_at,
+    })),
+    unread: Number(unreadRows[0]?.c || 0),
+    nextCursor: rows.length > limit && last ? makeCursor(last.created_at, last.id) : null,
+    hasMore: rows.length > limit,
+  });
+}));
+
+app.post("/api/v1/notifications/read-all", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const result = await query(
+    "UPDATE notifications SET is_read = 1 WHERE recipient_id = ? AND is_read = 0",
+    [actor]
+  );
+  return res.json({ ok: true, updated: Number(result?.affectedRows || 0) });
+}));
+
+app.post("/api/v1/notifications/:id/read", asyncHandler(async (req, res) => {
+  const notificationId = Number(req.params.id);
+  if (!Number.isInteger(notificationId) || notificationId <= 0) {
+    return res.status(400).json({ error: "invalid notification id" });
+  }
+  const actor = readActorId(req, req.body || {});
+  const result = await query(
+    "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?",
+    [notificationId, actor]
+  );
+  if (result?.affectedRows !== 1) return res.status(404).json({ error: "notification not found" });
+  return res.json({ ok: true, notificationId });
+}));
+
 app.get("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const targetAuthorId = String(req.params.authorId || "").trim();
@@ -1841,7 +1987,7 @@ app.delete("/api/v1/posts/:id", asyncHandler(async (req, res) => {
   }
 
   const actor = readActorId(req, req.body || {});
-  const [result] = await query(
+  const result = await query(
     "UPDATE posts SET status = 'archived' WHERE id = ? AND author_id = ? AND status = 'published'",
     [postId, actor],
   );
@@ -2092,6 +2238,7 @@ app.use(createErrorHandler);
 await ensurePostsSchemaCompatibility();
 await ensureFollowSchemaCompatibility();
 await ensureAuthSchemaCompatibility();
+await ensureNotificationSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;

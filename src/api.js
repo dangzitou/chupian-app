@@ -314,6 +314,32 @@ function buildCommentsQuery(params = {}) {
   return queryString ? `?${queryString}` : '';
 }
 
+function buildNotificationsQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.cursor) query.set('cursor', String(params.cursor));
+  query.set('limit', String(params.limit || 20));
+  return `?${query.toString()}`;
+}
+
+function normalizeNotificationsResponse(raw = {}) {
+  return {
+    notifications: Array.isArray(raw.notifications) ? raw.notifications.map((item) => ({
+      id: item.id,
+      type: item.type || 'comment',
+      actorId: item.actorId || item.actor_id || '',
+      actorName: item.actorName || item.actor_name || '匿名拍友',
+      postId: item.postId || item.post_id || null,
+      postTitle: item.postTitle || item.post_title || '',
+      content: item.content || '',
+      read: Boolean(item.read || item.is_read),
+      createdAt: item.createdAt || item.created_at || new Date().toISOString(),
+    })) : [],
+    unread: Number(raw.unread || 0),
+    nextCursor: raw.nextCursor || null,
+    hasMore: Boolean(raw.hasMore),
+  };
+}
+
 
 export const api = {
   async register(username, password, displayName) {
@@ -450,6 +476,33 @@ export const api = {
       { cacheTtl: 2500, noCache: params.noCache },
     );
     return normalizeCommunityFeedResponse(raw);
+  },
+
+  async notifications(params = {}) {
+    const raw = await request(`${API_PREFIX}/notifications${buildNotificationsQuery(params)}`, {
+      noCache: true,
+    });
+    return normalizeNotificationsResponse(raw);
+  },
+
+  async markNotificationRead(id) {
+    const target = String(id || '').trim();
+    if (!target) throw new Error('notification id required');
+    return request(`${API_PREFIX}/notifications/${encodeURIComponent(target)}/read`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read', target) },
+      body: JSON.stringify({}),
+      noCache: true,
+    });
+  },
+
+  async markAllNotificationsRead() {
+    return request(`${API_PREFIX}/notifications/read-all`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read-all', 'current') },
+      body: JSON.stringify({}),
+      noCache: true,
+    });
   },
 
   async authorPosts(authorId, params = {}) {
