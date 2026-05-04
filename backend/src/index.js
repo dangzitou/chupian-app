@@ -960,6 +960,28 @@ async function ensureNotificationSchemaCompatibility() {
   }
 }
 
+async function ensureReportSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS post_reports (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        post_id BIGINT UNSIGNED NOT NULL,
+        reporter_id VARCHAR(64) NOT NULL,
+        reason ENUM('misleading', 'copyright', 'unsafe', 'spam', 'other') NOT NULL,
+        details VARCHAR(500) NOT NULL DEFAULT '',
+        status ENUM('open', 'reviewed', 'dismissed') NOT NULL DEFAULT 'open',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_post_reports_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
+        UNIQUE KEY uniq_post_reporter (post_id, reporter_id),
+        INDEX idx_reports_status_created (status, created_at, id),
+        INDEX idx_reports_post (post_id, created_at, id)
+      ) ENGINE=InnoDB
+    `);
+  } catch (err) {
+    console.warn(`[schema] ensureReportSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
 async function insertNotification(conn, {
   recipientId,
   actorId,
@@ -1398,7 +1420,7 @@ async function createCommentHandler(req) {
 
   const actor = readActorId(req, req.body || {});
   const author = safeText(req.body?.author || "匿名拍友", 80);
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
+  const [exists] = await query("SELECT id, author_id, title FROM posts WHERE id = ?", [postId]);
   if (!exists?.id) {
     const err = new Error("post not found");
     err.status = 404;
@@ -1436,6 +1458,43 @@ async function createCommentHandler(req) {
       createdAt: insertedComment?.created_at || new Date().toISOString(),
     },
   };
+}
+
+const REPORT_REASONS = new Set(["misleading", "copyright", "unsafe", "spam", "other"]);
+
+async function createPostReportHandler(req) {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    throw Object.assign(new Error("invalid post id"), { status: 400 });
+  }
+  const actor = readActorId(req, req.body || {});
+  const reason = String(req.body?.reason || "").trim().toLowerCase();
+  if (!REPORT_REASONS.has(reason)) {
+    throw Object.assign(new Error("invalid report reason"), { status: 400 });
+  }
+  const details = safeText(req.body?.details || "", 500);
+
+  return tx(async (conn) => {
+    const [postRows] = await conn.execute(
+      "SELECT id, author_id FROM posts WHERE id = ? AND status = 'published'",
+      [postId]
+    );
+    if (!postRows.length) throw Object.assign(new Error("post not found"), { status: 404 });
+    if (String(postRows[0].author_id || "") === String(actor)) {
+      throw Object.assign(new Error("cannot report your own post"), { status: 400 });
+    }
+    const [result] = await conn.execute(
+      `INSERT IGNORE INTO post_reports (post_id, reporter_id, reason, details)
+       VALUES (?, ?, ?, ?)`,
+      [postId, actor, reason, details]
+    );
+    return {
+      reported: true,
+      duplicate: result.affectedRows !== 1,
+      postId,
+      reason,
+    };
+  });
 }
 
 function createErrorHandler(err, req, res, _next) {
@@ -1980,6 +2039,17 @@ app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res
 }));
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
+app.post("/api/v1/posts/:id/report", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const idempotent = await runWithIdempotency({
+    req,
+    actor,
+    scope: `post:${req.params.id}:report`,
+    handler: () => createPostReportHandler(req),
+  });
+  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+  return res.json({ ok: true, ...idempotent.payload });
+}));
 app.delete("/api/v1/posts/:id", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
   if (!Number.isInteger(postId) || postId <= 0) {
@@ -2239,6 +2309,7 @@ await ensurePostsSchemaCompatibility();
 await ensureFollowSchemaCompatibility();
 await ensureAuthSchemaCompatibility();
 await ensureNotificationSchemaCompatibility();
+await ensureReportSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;

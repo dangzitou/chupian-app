@@ -311,6 +311,31 @@ export default function PostDetailScreen({ route, navigation }) {
     }
   }, [post]);
 
+  const submitReport = useCallback(async (reason) => {
+    if (!post) return;
+    try {
+      const result = await api.reportPost(post.id, reason);
+      Alert.alert(
+        result?.duplicate ? '你已举报过' : '举报已提交',
+        '感谢反馈，我们会按社区规则核查这条出片。',
+      );
+    } catch (err) {
+      Alert.alert('举报失败', err?.cause || err?.message || '网络异常，请稍后重试');
+    }
+  }, [post]);
+
+  const onReport = useCallback(() => {
+    if (!post) return;
+    Alert.alert('举报这条出片', '请选择最符合的原因', [
+      { text: '内容不实或误导', onPress: () => submitReport('misleading') },
+      { text: '侵犯版权或肖像', onPress: () => submitReport('copyright') },
+      { text: '不安全或违规内容', onPress: () => submitReport('unsafe') },
+      { text: '广告或垃圾内容', onPress: () => submitReport('spam') },
+      { text: '其他', onPress: () => submitReport('other') },
+      { text: '取消', style: 'cancel' },
+    ]);
+  }, [post, submitReport]);
+
   const onOpenMap = useCallback(() => {
     if (!post) return;
     const lat = Number(post.latitude);
@@ -462,15 +487,25 @@ export default function PostDetailScreen({ route, navigation }) {
                 <Text style={styles.authorBio} numberOfLines={1}>{post.authorBio || '出片位置记录者'}</Text>
               </View>
             </Pressable>
-            <Pressable
-              style={[styles.followBtn, post.followed && styles.followBtnActive]}
-              onPress={onFollow}
-              disabled={!post.authorId || isPostBusy(post.id, 'followed', 'followed')}
-            >
-              <Text style={[styles.followText, post.followed && styles.followTextActive]}>
-                {isPostBusy(post.id, 'followed', 'followed') ? '...' : (post.followed ? '已关注' : '关注')}
-              </Text>
-            </Pressable>
+            <View style={styles.authorActions}>
+              <Pressable
+                style={[styles.followBtn, post.followed && styles.followBtnActive]}
+                onPress={onFollow}
+                disabled={!post.authorId || isPostBusy(post.id, 'followed', 'followed')}
+              >
+                <Text style={[styles.followText, post.followed && styles.followTextActive]}>
+                  {isPostBusy(post.id, 'followed', 'followed') ? '...' : (post.followed ? '已关注' : '关注')}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.moreBtn}
+                onPress={onReport}
+                accessibilityRole="button"
+                accessibilityLabel="举报这条出片"
+              >
+                <Text style={styles.moreText}>•••</Text>
+              </Pressable>
+            </View>
           </View>
           <Text style={styles.title}>{postMeta.title}</Text>
           <Pressable style={styles.locationLink} onPress={onOpenMap}>
@@ -526,7 +561,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onReport, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -836,6 +871,11 @@ const styles = StyleSheet.create({
     gap: 9,
     marginBottom: 2,
   },
+  authorActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   authorPress: {
     flex: 1,
     flexDirection: 'row',
@@ -865,6 +905,14 @@ const styles = StyleSheet.create({
   followBtnActive: { backgroundColor: '#ececf1' },
   followText: { color: COLORS.onAccent, fontSize: 11.5, fontWeight: '700' },
   followTextActive: { color: COLORS.muted },
+  moreBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreText: { color: COLORS.muted, fontSize: 16, letterSpacing: 1, lineHeight: 18 },
   title: {
     color: COLORS.ink,
     fontSize: 20,
