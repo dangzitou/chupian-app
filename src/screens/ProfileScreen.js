@@ -190,6 +190,10 @@ export default function ProfileScreen({ navigation }) {
     navigation.navigate('Notifications');
   }, [navigation]);
 
+  const onOpenBlockedAuthors = useCallback(() => {
+    navigation.navigate('BlockedAuthors');
+  }, [navigation]);
+
   useFocusEffect(useCallback(() => {
     setActorName(getActorName());
     setAuthenticated(isAuthenticated());
@@ -382,8 +386,12 @@ export default function ProfileScreen({ navigation }) {
           </Pressable>
         ))}
       </ScrollView>
+      <Pressable style={styles.blockedManage} onPress={onOpenBlockedAuthors} accessibilityRole="button">
+        <Text style={styles.blockedManageText}>屏蔽管理</Text>
+        <Text style={styles.blockedManageHint}>管理不想再看到的创作者</Text>
+      </Pressable>
     </View>
-  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -431,6 +439,21 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  blockedManage: {
+    marginHorizontal: 6,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  blockedManageText: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  blockedManageHint: { color: COLORS.muted, fontSize: 12 },
   list: { paddingBottom: 40, paddingHorizontal: 6 },
   heroCard: {
     flexDirection: 'row',

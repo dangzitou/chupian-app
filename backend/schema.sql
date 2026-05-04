@@ -178,6 +178,16 @@ CREATE TABLE IF NOT EXISTS post_reports (
   INDEX idx_reports_post (post_id, created_at, id)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS blocked_authors (
+  blocker_id VARCHAR(64) NOT NULL,
+  blocked_id VARCHAR(64) NOT NULL,
+  blocked_name VARCHAR(80) NOT NULL DEFAULT '匿名拍友',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (blocker_id, blocked_id),
+  INDEX idx_blocked_blocker_created (blocker_id, created_at),
+  INDEX idx_blocked_target (blocked_id)
+) ENGINE=InnoDB;
+
 ALTER TABLE posts
   ADD INDEX IF NOT EXISTS idx_posts_status_created_id (status, created_at, id),
   ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id),

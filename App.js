@@ -19,6 +19,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import AuthorProfileScreen from './src/screens/AuthorProfileScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import BlockedAuthorsScreen from './src/screens/BlockedAuthorsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -118,6 +119,7 @@ function ProfileStack() {
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
       <Stack.Screen name="Auth" component={AuthScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="BlockedAuthors" component={BlockedAuthorsScreen} />
     </Stack.Navigator>
   );
 }
