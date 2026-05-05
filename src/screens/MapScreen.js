@@ -137,14 +137,22 @@ export default function MapScreen({ navigation, route }) {
             color: #232323;
           }
           .spot-popup button {
-            margin-top: 7px;
             border: none;
             border-radius: 999px;
             background: #d93657;
             color: #fff;
             padding: 6px 10px;
-            width: 100%;
+            flex: 1;
             cursor: pointer;
+          }
+          .popup-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 7px;
+          }
+          .spot-popup .popup-secondary {
+            background: #f1eeec;
+            color: #3d3735;
           }
           .map-pin {
             width: 22px;
@@ -207,13 +215,14 @@ export default function MapScreen({ navigation, route }) {
             const renderMarkerPopup = (item) => {
               const name = escapeText(item.name || '未知点位');
               const district = escapeText(item.district || '');
+              const idLiteral = JSON.stringify(String(item.id || ''));
               if (item.type === 'post') {
                 return (
                   '<div class="spot-popup">' +
                     '<strong>' + name + '</strong><br/>' +
                     (district ? district + '<br/>' : '') +
                     '<button type="button" onclick="(function(){ window.__openPost && window.__openPost(' +
-                    item.id + ') })()">查看帖子</button>' +
+                    idLiteral + ') })()">查看帖子</button>' +
                   '</div>'
                 );
               }
@@ -221,8 +230,12 @@ export default function MapScreen({ navigation, route }) {
                 '<div class=\"spot-popup\">' +
                   '<strong>' + name + '</strong><br/>' +
                   (district ? district + '<br/>' : '') +
-                  '<button type=\"button\" onclick=\"(function(){ window.__pickSpot && window.__pickSpot(' +
-                  item.id + ') })()\">发布此点</button>' +
+                  '<div class=\"popup-actions\">' +
+                    '<button class=\"popup-secondary\" type=\"button\" onclick=\"(function(){ window.__openSpot && window.__openSpot(' +
+                    idLiteral + ') })()\">查看点位</button>' +
+                    '<button type=\"button\" onclick=\"(function(){ window.__pickSpot && window.__pickSpot(' +
+                    idLiteral + ') })()\">发布此点</button>' +
+                  '</div>' +
                 '</div>'
               );
             };
@@ -295,6 +308,12 @@ export default function MapScreen({ navigation, route }) {
                 const target = markers.find((item) => item.type === 'post' && String(item.id) === String(id));
                 if (!target) return;
                 emit({ type: 'openPost', postId: String(target.id) });
+              };
+
+              window.__openSpot = (id) => {
+                const target = markers.find((item) => item.type === 'spot' && String(item.id) === String(id));
+                if (!target) return;
+                emit({ type: 'openSpot', spotId: String(target.id) });
               };
 
               markers.forEach((item) => {
@@ -370,6 +389,19 @@ export default function MapScreen({ navigation, route }) {
     navigation.navigate('PostDetail', { postId: String(postId) });
   }, [navigation]);
 
+  const onOpenSpot = useCallback((spotId) => {
+    const parent = navigation?.getParent && navigation.getParent();
+    const params = { spotId: String(spotId) };
+    if (parent) {
+      parent.navigate(APP_ROUTES.DISCOVERY, {
+        screen: 'SpotDetail',
+        params,
+      });
+      return;
+    }
+    navigation.navigate('SpotDetail', params);
+  }, [navigation]);
+
   const onWebMessage = useCallback(async (event) => {
     const raw = event?.nativeEvent?.data;
     if (!raw) return;
@@ -397,11 +429,15 @@ export default function MapScreen({ navigation, route }) {
       }
       if (payload?.type === 'openPost' && payload?.postId) {
         onOpenPost(payload.postId);
+        return;
+      }
+      if (payload?.type === 'openSpot' && payload?.spotId) {
+        onOpenSpot(payload.spotId);
       }
     } catch (_err) {
       // ignore
     }
-  }, [onOpenCreate, onOpenPost]);
+  }, [onOpenCreate, onOpenPost, onOpenSpot]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
