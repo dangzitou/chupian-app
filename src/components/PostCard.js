@@ -27,6 +27,7 @@ function PostCard({
   onManage,
   onFollow,
   showFollow = true,
+  hideCompactAuthor = false,
   likeBusy = false,
   favoriteBusy = false,
   followBusy = false,
@@ -113,12 +114,14 @@ function PostCard({
             ) : null}
           </View>
           <View style={styles.compactFooter}>
-            <Pressable style={styles.compactAuthor} onPress={onAuthorPress || onPress}>
-              <View style={styles.avatarCompact}>
-                <AuthorAvatar name={post.author} />
-              </View>
-              <Text style={styles.compactAuthorText} numberOfLines={1}>{post.author}</Text>
-            </Pressable>
+            {hideCompactAuthor ? <View style={styles.compactAuthorSpacer} /> : (
+              <Pressable style={styles.compactAuthor} onPress={onAuthorPress || onPress}>
+                <View style={styles.avatarCompact}>
+                  <AuthorAvatar name={post.author} />
+                </View>
+                <Text style={styles.compactAuthorText} numberOfLines={1}>{post.author}</Text>
+              </Pressable>
+            )}
             <ActionBar
               compact
               likes={post.likes || 0}
@@ -456,6 +459,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
+  compactAuthorSpacer: { flex: 1 },
   compactAuthorText: {
     flex: 1,
     color: COLORS.muted,
