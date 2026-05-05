@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -10,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
+import { APP_ROUTES } from '../constants/routes';
 import { formatRelativeTime } from '../utils/time';
 
 const TYPE_META = {
@@ -18,6 +20,13 @@ const TYPE_META = {
   comment: { mark: '评', label: '评论了你的出片', color: '#315d79' },
   follow: { mark: '关', label: '关注了你', color: '#2f6b45' },
 };
+
+const FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'like', label: '赞与收藏', types: ['like', 'favorite'] },
+  { key: 'comment', label: '评论', types: ['comment'] },
+  { key: 'follow', label: '关注', types: ['follow'] },
+];
 
 export default function NotificationsScreen({ navigation }) {
   const [items, setItems] = useState([]);
@@ -28,6 +37,7 @@ export default function NotificationsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all');
 
   const load = useCallback(async ({ append = false, nextCursor = null } = {}) => {
     if (append ? loadingMore : (loading && !refreshing)) return;
@@ -83,8 +93,24 @@ export default function NotificationsScreen({ navigation }) {
     }
     if (item.postId) {
       navigation.navigate('PostDetail', { postId: item.postId, title: item.postTitle });
+      return;
+    }
+    if (item.actorId) {
+      const parent = navigation?.getParent?.();
+      const params = { authorId: item.actorId, authorName: item.actorName };
+      if (parent) {
+        parent.navigate(APP_ROUTES.DISCOVERY, { screen: 'AuthorProfile', params });
+        return;
+      }
+      navigation.navigate('AuthorProfile', params);
     }
   }, [navigation]);
+
+  const visibleItems = useMemo(() => {
+    const active = FILTERS.find((item) => item.key === filter);
+    if (!active?.types) return items;
+    return items.filter((item) => active.types.includes(item.type));
+  }, [filter, items]);
 
   const renderItem = useCallback(({ item }) => {
     const meta = TYPE_META[item.type] || TYPE_META.comment;
@@ -123,8 +149,27 @@ export default function NotificationsScreen({ navigation }) {
           <Text style={[styles.readAllText, !unread && styles.readAllDisabled]}>全部已读</Text>
         </Pressable>
       </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterBar}
+      >
+        {FILTERS.map((item) => (
+          <Pressable
+            key={item.key}
+            style={[styles.filterChip, filter === item.key && styles.filterChipActive]}
+            onPress={() => setFilter(item.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: filter === item.key }}
+          >
+            <Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
       <FlatList
-        data={items}
+        data={visibleItems}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
@@ -138,7 +183,11 @@ export default function NotificationsScreen({ navigation }) {
           <View style={styles.center}><ActivityIndicator color={COLORS.accent} /></View>
         ) : (
           <View style={styles.empty}>
-            {error ? <Text style={styles.error}>{error}</Text> : <Text style={styles.emptyText}>暂时没有新的互动</Text>}
+            {error ? <Text style={styles.error}>{error}</Text> : (
+              <Text style={styles.emptyText}>
+                {filter === 'all' ? '暂时没有新的互动' : '当前分类暂无互动'}
+              </Text>
+            )}
             <Pressable style={styles.retry} onPress={() => load()}><Text style={styles.retryText}>重新加载</Text></Pressable>
           </View>
         )}
@@ -167,6 +216,23 @@ const styles = StyleSheet.create({
   readAll: { minWidth: 58, alignItems: 'flex-end', paddingVertical: 8 },
   readAllText: { color: COLORS.accent, fontSize: 11.5, fontWeight: '700' },
   readAllDisabled: { color: COLORS.mutedText },
+  filterBar: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.line,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9,
+    backgroundColor: '#f2f0ef',
+  },
+  filterChipActive: { backgroundColor: COLORS.accentBg },
+  filterText: { color: COLORS.muted, fontSize: 12, fontWeight: '600' },
+  filterTextActive: { color: COLORS.accent, fontWeight: '800' },
   list: { paddingHorizontal: 12, paddingVertical: 10, paddingBottom: 32, flexGrow: 1 },
   item: {
     flexDirection: 'row',
