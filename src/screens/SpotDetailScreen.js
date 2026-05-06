@@ -6,22 +6,40 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
+import PostCard from '../components/PostCard';
 
 export default function SpotDetailScreen({ navigation, route }) {
   const { spotId, name } = route.params;
   const [spot, setSpot] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState('');
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      try {
-        const d = await api.spots();
-        const s = (d.spots || []).find((x) => x.id === spotId);
+      const [spotsResult, postsResult] = await Promise.allSettled([
+        api.spots(),
+        api.feed({ spotId: String(spotId), limit: 12, sort: 'latest' }),
+      ]);
+      if (!alive) return;
+      if (spotsResult.status === 'fulfilled') {
+        const s = (spotsResult.value.spots || []).find((x) => String(x.id) === String(spotId));
         setSpot(s || null);
-      } catch (e) {
-        setError(e.message);
+      } else {
+        setError(spotsResult.reason?.message || '点位加载失败');
       }
+      if (postsResult.status === 'fulfilled') {
+        setPosts(postsResult.value.posts || []);
+        setPostsError('');
+      } else {
+        setPosts([]);
+        setPostsError(postsResult.reason?.message || '作品加载失败');
+      }
+      setPostsLoading(false);
     })();
+    return () => { alive = false; };
   }, [spotId]);
 
   if (error) return <SafeAreaView style={styles.center}><Text style={styles.err}>{error}</Text></SafeAreaView>;
@@ -66,6 +84,28 @@ export default function SpotDetailScreen({ navigation, route }) {
               <View style={styles.vpRow}><Text style={styles.vpLabel}>提示</Text><Text style={styles.vpVal}>{v.tips || '—'}</Text></View>
             </View>
           ))}
+
+          <Text style={styles.sectionTitle}>这个点位的出片</Text>
+          {postsLoading ? <ActivityIndicator color={COLORS.accent} /> : null}
+          {!postsLoading && postsError ? <Text style={styles.postsError}>{postsError}</Text> : null}
+          {!postsLoading && !postsError && posts.length ? (
+            <View style={styles.postsGrid}>
+              {posts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  compact
+                  hideCompactAuthor
+                  showFollow={false}
+                  style={styles.postCard}
+                  onPress={() => navigation.navigate('PostDetail', { postId: post.id, title: post.title })}
+                />
+              ))}
+            </View>
+          ) : null}
+          {!postsLoading && !postsError && !posts.length ? (
+            <Text style={styles.emptyInline}>还没有人在这里发布出片</Text>
+          ) : null}
 
           <Pressable
             style={styles.navBtn}
@@ -132,6 +172,9 @@ const styles = StyleSheet.create({
   vpRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   vpLabel: { fontSize: 12.5, color: COLORS.muted, width: 40 },
   vpVal: { fontSize: 12.5, color: COLORS.ink, flex: 1, lineHeight: 18 },
+  postsError: { color: '#a34a2a', fontSize: 12.5, lineHeight: 18 },
+  postsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  postCard: { width: '48%' },
   navBtn: {
     marginTop: 16, backgroundColor: COLORS.accent, borderRadius: 999,
     paddingVertical: 13, alignItems: 'center',
