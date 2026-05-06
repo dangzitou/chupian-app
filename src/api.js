@@ -368,6 +368,19 @@ export const api = {
     return request(`${API_PREFIX}/auth/me`, { noCache: true });
   },
 
+  async updateProfile(displayName, bio = '') {
+    const nextName = String(displayName || '').trim();
+    if (!nextName) throw new Error('displayName required');
+    const result = await request(`${API_PREFIX}/auth/me`, {
+      method: 'PATCH',
+      body: JSON.stringify({ displayName: nextName, bio: String(bio || '').trim() }),
+      noCache: true,
+    });
+    await setAuthenticatedSession({ user: result.user, token: getActorToken() });
+    clearNetworkCaches();
+    return result;
+  },
+
   async logout() {
     try {
       await request(`${API_PREFIX}/auth/logout`, { method: 'POST', noCache: true });
