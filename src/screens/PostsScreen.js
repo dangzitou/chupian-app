@@ -334,32 +334,37 @@ export default function PostsScreen({ navigation }) {
           <Text style={styles.titleEyebrow}>广州 · 出片记录</Text>
           <Text style={styles.title}>发现</Text>
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.layoutBtn}
-            onPress={() => setFeedLayout((prev) => (prev === 'masonry' ? 'list' : 'masonry'))}
-          >
-            <Text style={styles.layoutBtnText}>
-              {feedLayout === 'masonry' ? '列表' : '网格'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.layoutBtn, filtersOpen && styles.layoutBtnActive]}
-            onPress={() => setFiltersOpen((value) => !value)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: filtersOpen }}
-          >
-            <Text style={[styles.layoutBtnText, filtersOpen && styles.layoutBtnTextActive]}>
-              {filtersOpen ? '收起筛选' : '筛选'}
-            </Text>
-          </Pressable>
-        </View>
+        <Pressable
+          style={[styles.layoutBtn, filtersOpen && styles.layoutBtnActive]}
+          onPress={() => setFiltersOpen((value) => !value)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: filtersOpen }}
+        >
+          <Text style={[styles.layoutBtnText, filtersOpen && styles.layoutBtnTextActive]}>
+            {filtersOpen ? '收起' : '筛选'}
+          </Text>
+        </Pressable>
       </View>
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       {filtersOpen ? (
-        <>
-          <SortTabs value={sort} onChange={applySort} />
+        <View style={styles.filterPanel}>
+          <View style={styles.filterTools}>
+            <View style={styles.sortSlot}>
+              <Text style={styles.filterHint}>排序</Text>
+              <SortTabs value={sort} onChange={applySort} />
+            </View>
+            <Pressable
+              style={styles.layoutBtn}
+              onPress={() => setFeedLayout((prev) => (prev === 'masonry' ? 'list' : 'masonry'))}
+              accessibilityRole="button"
+              accessibilityLabel="切换作品布局"
+            >
+              <Text style={styles.layoutBtnText}>
+                {feedLayout === 'masonry' ? '列表' : '网格'}
+              </Text>
+            </Pressable>
+          </View>
           <SignalStrip
             items={signals}
             activeTag={activeTag}
@@ -367,7 +372,7 @@ export default function PostsScreen({ navigation }) {
             loading={signalsLoading}
           />
           {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
-        </>
+        </View>
       ) : null}
     </View>
   ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
@@ -417,6 +422,29 @@ export default function PostsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  filterPanel: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+  },
+  filterTools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  sortSlot: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterHint: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
   list: { paddingBottom: 34 },
   listList: { paddingHorizontal: 8 },
   listMasonry: { paddingHorizontal: 4 },
