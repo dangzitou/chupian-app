@@ -1,4 +1,4 @@
-import React, { createElement, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -21,8 +21,8 @@ const DEFAULT_CENTER = {
 
 const FALLBACK_MARKER = `
   <div style=\"font-size:12px;line-height:1.4; padding:4px 8px;\">
-    <div><strong>出发点</strong></div>
-    <div>广州 · 定位未知</div>
+    <div><strong>我的位置</strong></div>
+    <div>当前位置，可从这里发布</div>
   </div>
 `;
 
@@ -40,6 +40,8 @@ export default function MapScreen({ navigation, route }) {
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(DEFAULT_CENTER);
+  const [resolvedLocation, setResolvedLocation] = useState(null);
+  const mapDataLocationRef = useRef('');
   const focusLocation = useMemo(() => {
     const raw = route?.params?.focusLocation;
     const lat = Number(raw?.lat);
@@ -90,8 +92,11 @@ export default function MapScreen({ navigation, route }) {
       lng: Number(item.longitude ?? item.lng),
     })) : [];
 
-    const spotsPayload = JSON.stringify([...safeSpots, ...safePosts]);
-    const initialLocation = focusLocation || webLocation || DEFAULT_CENTER;
+    const spotsPayload = JSON.stringify([
+      ...safeSpots.slice(0, 80),
+      ...safePosts.slice(0, 80),
+    ]);
+    const initialLocation = focusLocation || webLocation || resolvedLocation || DEFAULT_CENTER;
 
     return `<!doctype html>
     <html>
@@ -181,6 +186,51 @@ export default function MapScreen({ navigation, route }) {
             background: #d93657;
             box-shadow: 0 1px 5px rgba(20, 28, 38, 0.32);
           }
+          .locate-control {
+            margin: 12px 12px 0 0;
+          }
+          .locate-button {
+            width: 40px;
+            height: 40px;
+            border: 1px solid rgba(38,59,80,0.12);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.96);
+            box-shadow: 0 2px 8px rgba(20,28,38,0.18);
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+          }
+          .locate-button.is-loading .locate-icon {
+            animation: locate-spin 0.9s linear infinite;
+          }
+          .locate-icon {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #263b50;
+            border-radius: 50%;
+            position: relative;
+          }
+          .locate-icon::before,
+          .locate-icon::after {
+            content: '';
+            position: absolute;
+            background: #263b50;
+          }
+          .locate-icon::before {
+            width: 2px;
+            height: 22px;
+            left: 4px;
+            top: -6px;
+          }
+          .locate-icon::after {
+            width: 22px;
+            height: 2px;
+            left: -6px;
+            top: 4px;
+          }
+          @keyframes locate-spin {
+            to { transform: rotate(360deg); }
+          }
         </style>
       </head>
       <body>
@@ -192,7 +242,7 @@ export default function MapScreen({ navigation, route }) {
             const fallbackLat = ${initialLocation.lat};
             const fallbackLng = ${initialLocation.lng};
             const fallbackName = '${sanitize(initialLocation.label)}';
-            const hasFocusLocation = ${focusLocation || webLocation ? 'true' : 'false'};
+            const hasFocusLocation = ${focusLocation || webLocation || resolvedLocation ? 'true' : 'false'};
             const markers = ${spotsPayload};
             let mapBootTimer = null;
             const emit = (payload) => {
@@ -259,14 +309,14 @@ export default function MapScreen({ navigation, route }) {
                 attribution: '&copy; OpenStreetMap',
                 maxZoom: 19,
               }).addTo(map);
-              L.circleMarker([lat, lng], {
+              const currentDot = L.circleMarker([lat, lng], {
                 radius: 8,
                 color: '#e53935',
                 fillColor: '#e53935',
                 fillOpacity: 1,
                 weight: 2,
               }).addTo(map);
-              L.circleMarker([lat, lng], {
+              const currentHalo = L.circleMarker([lat, lng], {
                 radius: 16,
                 color: 'rgba(229,57,53,0.55)',
                 fillColor: 'rgba(229,57,53,0.15)',
@@ -279,9 +329,43 @@ export default function MapScreen({ navigation, route }) {
                 iconSize: [20, 20],
                 iconAnchor: [10, 10],
               });
-              L.marker([lat, lng], { icon: currentIcon, title: '我在这里' })
+              const currentMarker = L.marker([lat, lng], { icon: currentIcon, title: '我在这里' })
                 .addTo(map)
                 .bindPopup('${FALLBACK_MARKER}');
+
+              let locateButton = null;
+              const locateControl = L.control({ position: 'topright' });
+              locateControl.onAdd = () => {
+                const container = L.DomUtil.create('div', 'locate-control');
+                locateButton = L.DomUtil.create('button', 'locate-button', container);
+                locateButton.type = 'button';
+                locateButton.setAttribute('aria-label', '定位到我的位置');
+                locateButton.innerHTML = '<span class=\"locate-icon\"></span>';
+                L.DomEvent.disableClickPropagation(container);
+                L.DomEvent.on(locateButton, 'click', () => {
+                  if (!locateButton) return;
+                  locateButton.classList.add('is-loading');
+                  map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
+                });
+                return container;
+              };
+              locateControl.addTo(map);
+              map.on('locationfound', (event) => {
+                const nextLat = Number(event?.latlng?.lat);
+                const nextLng = Number(event?.latlng?.lng);
+                if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+                currentDot.setLatLng([nextLat, nextLng]);
+                currentHalo.setLatLng([nextLat, nextLng]);
+                currentMarker.setLatLng([nextLat, nextLng]);
+                if (locateButton) locateButton.classList.remove('is-loading');
+                emit({
+                  type: 'locationReady',
+                  location: { lat: nextLat, lng: nextLng, label: '我的位置' },
+                });
+              });
+              map.on('locationerror', () => {
+                if (locateButton) locateButton.classList.remove('is-loading');
+              });
 
               window.__pickSpot = (id) => {
                 const target = markers.find((item) => item.type === 'spot' && String(item.id) === String(id));
@@ -363,7 +447,7 @@ export default function MapScreen({ navigation, route }) {
         </script>
       </body>
     </html>`;
-  }, [focusLocation, posts, spots, webLocation]);
+  }, [focusLocation, posts, resolvedLocation, spots, webLocation]);
 
   const onOpenCreate = useCallback((spot) => {
     if (!navigation || !APP_ROUTES || !APP_ROUTES.CREATE) return;
@@ -402,6 +486,34 @@ export default function MapScreen({ navigation, route }) {
     navigation.navigate('SpotDetail', params);
   }, [navigation]);
 
+  const loadMapData = useCallback((location) => {
+    let alive = true;
+    const target = location || focusLocation || webLocation || DEFAULT_CENTER;
+    const latitude = Number(target?.lat);
+    const longitude = Number(target?.lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return () => { alive = false; };
+
+    const locationKey = `${latitude.toFixed(3)}:${longitude.toFixed(3)}`;
+    if (mapDataLocationRef.current === locationKey) return () => { alive = false; };
+    mapDataLocationRef.current = locationKey;
+
+    api.mapData({ latitude, longitude, radiusKm: 35, limit: 60 })
+      .then((payload) => {
+        if (!alive) return;
+        setSpots(Array.isArray(payload?.spots) ? payload.spots : []);
+        setPosts(Array.isArray(payload?.posts) ? payload.posts : []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSpots([]);
+        setPosts([]);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [focusLocation, webLocation]);
+
   const onWebMessage = useCallback(async (event) => {
     const raw = event?.nativeEvent?.data;
     if (!raw) return;
@@ -411,11 +523,14 @@ export default function MapScreen({ navigation, route }) {
         const lat = Number(payload?.location?.lat);
         const lng = Number(payload?.location?.lng);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          setCurrentLocation({
+          const nextLocation = {
             lat,
             lng,
             label: String(payload?.location?.label || '我的位置'),
-          });
+          };
+          setResolvedLocation(nextLocation);
+          setCurrentLocation(nextLocation);
+          loadMapData(nextLocation);
         }
         return;
       }
@@ -437,7 +552,7 @@ export default function MapScreen({ navigation, route }) {
     } catch (_err) {
       // ignore
     }
-  }, [onOpenCreate, onOpenPost, onOpenSpot]);
+  }, [loadMapData, onOpenCreate, onOpenPost, onOpenSpot]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -449,27 +564,10 @@ export default function MapScreen({ navigation, route }) {
     return () => window.removeEventListener('message', handleWindowMessage);
   }, [onWebMessage]);
 
-  const loadMapData = useCallback(() => {
-    let alive = true;
-    Promise.allSettled([
-      api.spots(),
-      api.feed({ limit: 40, sort: 'latest' }),
-    ]).then(([spotsResult, postsResult]) => {
-      if (!alive) return;
-      setSpots(spotsResult.status === 'fulfilled' && Array.isArray(spotsResult.value?.spots)
-        ? spotsResult.value.spots
-        : []);
-      setPosts(postsResult.status === 'fulfilled' && Array.isArray(postsResult.value?.posts)
-        ? postsResult.value.posts
-        : []);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useFocusEffect(useCallback(() => loadMapData(), [loadMapData]));
+  useFocusEffect(useCallback(() => {
+    mapDataLocationRef.current = '';
+    return loadMapData(focusLocation || webLocation || DEFAULT_CENTER);
+  }, [focusLocation, loadMapData, webLocation]));
 
   const openCreateWithCurrent = useCallback(() => onOpenCreate({
     id: '',

@@ -78,6 +78,13 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
     assert(Array.isArray(res.json?.spots || []), "spots payload missing array");
   }, dbReady || REQUIRE_DB);
 
+  await run("endpoint:GET /api/v1/map", async () => {
+    const res = await expect("/api/v1/map?lat=23.129163&lng=113.264435&radius=35&limit=10");
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(Array.isArray(res.json?.spots || []), "map payload missing spots");
+    assert(Array.isArray(res.json?.posts || []), "map payload missing posts");
+  }, dbReady || REQUIRE_DB);
+
   await run("endpoint:GET /api/v1/community/feed", async () => {
     const res = await expect("/api/v1/community/feed?limit=5&sort=latest");
     assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -120,6 +127,8 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
         cover: "https://picsum.photos/seed/qa/800/600",
         spotName: "测试点位",
         district: "广州",
+        latitude: 23.129163,
+        longitude: 113.264435,
         angle: "仰拍",
         direction: "逆光",
         timeWindow: "下午",
@@ -182,6 +191,11 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
       assert(feed.status === 200, `feed status=${feed.status}`);
       const fromFeed = (feed.json?.posts || []).some((it) => Number(it.id) === Number(postId));
       assert(fromFeed, "created post should appear in feed");
+
+      const map = await expect("/api/v1/map?lat=23.129163&lng=113.264435&radius=35&limit=60");
+      assert(map.status === 200, `map status=${map.status}`);
+      const fromMap = (map.json?.posts || []).some((it) => Number(it.id) === Number(postId));
+      assert(fromMap, "created post with coordinates should appear on nearby map");
     }, true);
 
     await run("crud:legacy compatibility", async () => {
