@@ -49,7 +49,9 @@ function ProfileStats({ spotCount, posts, liked, saved, onSelectSection, onOpenM
           accessibilityRole="button"
           accessibilityLabel={`${item.label}${item.value}个`}
         >
-          <Text style={styles.statNum}>{item.value}</Text>
+          <Text style={styles.statNum}>
+            {typeof item.value === 'number' ? item.value : '—'}
+          </Text>
           <Text style={styles.statLabel}>{item.label}</Text>
         </Pressable>
       ))}
@@ -108,19 +110,16 @@ export default function ProfileScreen({ navigation }) {
   const [totalPosts, setTotalPosts] = useState(0);
   const [meSectionStats, setMeSectionStats] = useState({
     mePosts: 0,
-    meLikes: 0,
-    meFavorites: 0,
-    meFollowing: 0,
+    meLikes: null,
+    meFavorites: null,
+    meFollowing: null,
   });
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, userFollowingFeed, s, notificationPayload] = await Promise.all([
+      const [w, userPostsFeed, s, notificationPayload] = await Promise.all([
         api.weather(),
         api.mePosts({ limit: 1, sort: 'latest' }),
-        api.meLikes({ limit: 1, sort: 'latest' }),
-        api.meFavorites({ limit: 1, sort: 'latest' }),
-        api.meFollowing({ limit: 1, sort: 'latest' }),
         api.spots(),
         api.notifications({ limit: 1 }),
       ]);
@@ -132,9 +131,6 @@ export default function ProfileScreen({ navigation }) {
       setMeSectionStats((prev) => ({
         ...prev,
         mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
-        meLikes: Number(userLikesFeed?.total || userLikesFeed.posts?.length || 0),
-        meFavorites: Number(userFavoritesFeed?.total || userFavoritesFeed.posts?.length || 0),
-        meFollowing: Number(userFollowingFeed?.total || userFollowingFeed.posts?.length || 0),
       }));
       setStatsError(null);
     } catch (err) {
@@ -145,7 +141,7 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   const ensureSectionMetric = useCallback(async (targetSection) => {
-    if (meSectionStats[targetSection] > 0) return;
+    if (typeof meSectionStats[targetSection] === 'number') return;
     try {
       const payload = await (targetSection === 'meLikes'
         ? api.meLikes({ limit: 1, sort: 'latest' })
@@ -169,8 +165,11 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     load({ append: false });
+  }, [load, section]);
+
+  useEffect(() => {
     ensureSectionMetric(section);
-  }, [load, section, ensureSectionMetric]);
+  }, [ensureSectionMetric, section]);
 
   const onSwitchSection = useCallback((key) => {
     if (key === section) return;
@@ -184,6 +183,15 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
     navigation?.navigate?.(APP_ROUTES.MAP);
+  }, [navigation]);
+
+  const onOpenCreate = useCallback(() => {
+    const parent = navigation?.getParent?.();
+    if (parent) {
+      parent.navigate(APP_ROUTES.CREATE);
+      return;
+    }
+    navigation?.navigate?.(APP_ROUTES.CREATE);
   }, [navigation]);
 
   const onOpenNotifications = useCallback(() => {
@@ -313,7 +321,7 @@ export default function ProfileScreen({ navigation }) {
       manageBusy={deletingPostId === String(item.id)}
       style={styles.profileCard}
     />
-  ), [isActionBusy, onFavorite, onFollow, onLike, onShare]);
+  ), [deletingPostId, isActionBusy, navigation, onDeletePost, onFavorite, onFollow, onLike, onShare, section]);
 
   const ListHeader = useMemo(() => (
     <View>
@@ -323,7 +331,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
         <View style={styles.heroMeta}>
           <Text style={styles.name}>{actorName}</Text>
-          <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
+          <Text style={styles.bio}>记录机位、光线和器材</Text>
         </View>
         <View style={styles.heroActions}>
           <Pressable style={styles.notifyAction} onPress={onOpenNotifications} accessibilityRole="button">
@@ -358,7 +366,9 @@ export default function ProfileScreen({ navigation }) {
         <Pressable style={styles.weatherCard} onPress={() => setWeatherOpen((value) => !value)}>
           <View style={styles.weatherSummary}>
             <View>
-              <Text style={styles.weatherTitle}>今日拍摄条件 · 广州</Text>
+              <Text style={styles.weatherTitle}>
+                今日拍摄条件 · {weather.location || weather.city || '当前位置'}
+              </Text>
               <Text style={styles.weatherMain}>
                 {weather.label} {Math.round(weather.temp)}°C
               </Text>
@@ -388,7 +398,7 @@ export default function ProfileScreen({ navigation }) {
             <Text style={[styles.tabLabel, section === tab.key && styles.tabLabelActive]}>
               {tab.label}
               <Text style={styles.tabCount}>
-                {`  (${meSectionStats[tab.key] || 0})`}
+                {`  (${typeof meSectionStats[tab.key] === 'number' ? meSectionStats[tab.key] : '—'})`}
               </Text>
             </Text>
             {section === tab.key ? <View style={styles.tabUnderline} /> : null}
@@ -411,10 +421,13 @@ export default function ProfileScreen({ navigation }) {
     <View style={styles.emptyWrap}>
       {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
       <Text style={styles.emptyText}>
-        该区域还没有内容
+        {section === 'mePosts' ? '还没有可展示的出片' : '这里还没有内容'}
       </Text>
-      <Pressable style={styles.retryBtn} onPress={() => load({ append: false, cursor: null })}>
-        <Text style={styles.retryText}>去刷新</Text>
+      <Pressable
+        style={styles.retryBtn}
+        onPress={section === 'mePosts' ? onOpenCreate : () => load({ append: false, cursor: null })}
+      >
+        <Text style={styles.retryText}>{section === 'mePosts' ? '去发布第一张' : '重新加载'}</Text>
       </Pressable>
     </View>
   ) : null;
@@ -450,13 +463,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   blockedManage: {
     marginHorizontal: 6,
-    marginTop: 8,
+    marginTop: 4,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: COLORS.panel,
-    borderWidth: 1,
-    borderColor: COLORS.line,
+    paddingVertical: 9,
+    borderRadius: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -467,11 +477,11 @@ const styles = StyleSheet.create({
   heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.panel,
+    backgroundColor: 'transparent',
     borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.line,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderWidth: 0,
     gap: 12,
     marginBottom: 8,
     marginTop: 6,
@@ -486,7 +496,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   heroMeta: { flex: 1 },
-  heroActions: { alignItems: 'flex-end', gap: 6 },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   notifyAction: { position: 'relative', paddingHorizontal: 8, paddingVertical: 5 },
   notifyText: { color: COLORS.ink, fontSize: 11.5, fontWeight: '700' },
   notifyBadge: {
@@ -503,32 +513,34 @@ const styles = StyleSheet.create({
   },
   notifyBadgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
   profileAction: {
-    borderWidth: 1,
-    borderColor: COLORS.line,
+    borderWidth: 0,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   profileActionText: { color: COLORS.muted, fontSize: 11.5, fontWeight: '700' },
   name: { fontSize: 20, color: COLORS.ink, fontWeight: '700' },
   bio: { color: COLORS.muted, marginTop: 3, fontSize: 12.8 },
-  statsRow: { flexDirection: 'row', gap: 8 },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 2,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.line,
+  },
   statCard: {
     flex: 1,
-    backgroundColor: COLORS.panel,
-    borderRadius: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.line,
     alignItems: 'center',
   },
-  statNum: { color: COLORS.accent, fontSize: 20, fontWeight: '700' },
+  statNum: { color: COLORS.ink, fontSize: 18, fontWeight: '700' },
   statLabel: { color: COLORS.muted, marginTop: 3, fontSize: 11.8 },
   weatherCard: {
     backgroundColor: COLORS.accentSoft,
-    borderRadius: 14,
+    borderRadius: 10,
     marginTop: 10,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   weatherSummary: {
     flexDirection: 'row',
@@ -540,8 +552,8 @@ const styles = StyleSheet.create({
   weatherHint: { color: '#a16b44', marginTop: 4, fontSize: 11.5 },
   weatherChevron: { color: '#6d3112', fontSize: 24, fontWeight: '300', paddingHorizontal: 4 },
 
-  menuCard: { marginTop: 12 },
-  menuRow: { gap: 8, paddingBottom: 4 },
+  menuCard: { marginTop: 8, maxHeight: 46 },
+  menuRow: { gap: 6, paddingBottom: 3 },
   tabItem: {
     paddingHorizontal: 10,
     paddingTop: 8,
