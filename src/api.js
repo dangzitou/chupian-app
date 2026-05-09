@@ -440,6 +440,20 @@ export const api = {
     );
   },
 
+  async rewards() {
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/rewards`,
+      '/api/community/me/rewards',
+      { cacheTtl: 30_000 },
+    );
+    return {
+      points: Number(raw?.points || 0),
+      publishedCount: Number(raw?.publishedCount || raw?.published_count || 0),
+      guideCount: Number(raw?.guideCount || raw?.guide_count || 0),
+      nextGuidePoints: Number(raw?.nextGuidePoints || 15),
+    };
+  },
+
   async feed(params = {}) {
     const queryString = buildFeedQuery({
       q: params.q,
@@ -691,11 +705,13 @@ export const api = {
     const payload = buildPostPayload(body);
     const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;
     try {
-      return await request(`${API_PREFIX}/posts`, {
+      const result = await request(`${API_PREFIX}/posts`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
       });
+      clearNetworkCaches();
+      return result;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
       // legacy interface compatibility
@@ -704,7 +720,7 @@ export const api = {
         camera, lens, focal, aperture, shutter, iso,
       } = payload;
       const mediaFirst = (payload.media || [])[0]?.url || '';
-      return request('/api/posts', {
+      const result = await request('/api/posts', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -736,6 +752,8 @@ export const api = {
           tags: payload.tags,
         }),
       });
+      clearNetworkCaches();
+      return result;
     }
   },
 
@@ -885,6 +903,7 @@ export const api = {
       method: 'POST',
       headers,
       body: form,
+      timeout: 180_000,
     });
   },
 };

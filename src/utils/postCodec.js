@@ -55,7 +55,7 @@ export function normalizePostShape(item = {}) {
 
   return {
     id: item.id,
-    title: item.title || '无标题',
+    title: item.title || '出片记录',
     content: item.content || '',
     authorId: item.authorId || item.actorId || '',
     author: item.author || item.nickname || '匿名拍友',

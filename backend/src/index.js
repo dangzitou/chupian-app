@@ -1097,6 +1097,24 @@ async function ensureBlockSchemaCompatibility() {
   }
 }
 
+async function ensureCreatorRewardSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS creator_rewards (
+        actor_id VARCHAR(64) PRIMARY KEY,
+        points INT UNSIGNED NOT NULL DEFAULT 0,
+        published_count INT UNSIGNED NOT NULL DEFAULT 0,
+        guide_count INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_creator_rewards_points (points, updated_at)
+      ) ENGINE=InnoDB
+    `);
+  } catch (err) {
+    console.warn(`[schema] ensureCreatorRewardSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
 async function insertNotification(conn, {
   recipientId,
   actorId,
@@ -1414,15 +1432,40 @@ async function getPostCommentsPayload(req) {
   };
 }
 
+function calculateCreatorReward(body = {}) {
+  const content = safeText(body.content, 3000);
+  const media = Array.isArray(body.media) ? body.media : [];
+  const metadataFields = [
+    body.angle,
+    body.direction,
+    body.timeWindow,
+    body.shotAt,
+    body.camera,
+    body.lens,
+    body.focalLength,
+    body.aperture,
+    body.shutter,
+    body.iso,
+    body.whiteBalance,
+  ];
+  const metadataCount = metadataFields.filter((value) => safeText(value, 120)).length;
+  const hasLocation = Number.isFinite(Number(body.latitude)) && Number.isFinite(Number(body.longitude));
+  const guide = content.length >= 120 && metadataCount >= 3;
+  const earnedPoints = 5
+    + (content.length >= 120 ? 10 : 0)
+    + (metadataCount >= 3 ? 5 : 0)
+    + (hasLocation ? 2 : 0)
+    + (media.length > 1 ? 2 : 0);
+  return { earnedPoints, guide, metadataCount };
+}
+
 async function createPostHandler(req) {
   const body = req.body || {};
-  const title = safeText(body.title, 200);
-  if (!title) throw Object.assign(new Error("title required"), { status: 400 });
+  const title = safeText(body.title, 200) || "出片记录";
   const media = Array.isArray(body.media) ? body.media : [];
   if (!media.length) throw Object.assign(new Error("media required"), { status: 400 });
 
   const content = safeText(body.content, 3000);
-  if (!content) throw Object.assign(new Error("content required"), { status: 400 });
   const spotId = pickInt(body.spotId, 0);
   const spotName = safeText(body.spotName || "", 80);
   const district = safeText(body.district || "", 64);
@@ -1511,13 +1554,42 @@ async function createPostHandler(req) {
         await conn.execute("INSERT IGNORE INTO post_styles (post_id, style) VALUES (?, ?)", [postId, s]);
       }
 
-    return postId;
+      let reward = null;
+      try {
+        const rewardInput = calculateCreatorReward(body);
+        const [rewardRows] = await conn.execute(
+          `INSERT INTO creator_rewards (actor_id, points, published_count, guide_count)
+           VALUES (?, ?, 1, ?)
+           ON DUPLICATE KEY UPDATE
+             points = points + VALUES(points),
+             published_count = published_count + 1,
+             guide_count = guide_count + VALUES(guide_count)`,
+          [safeText(actorId, 64), rewardInput.earnedPoints, rewardInput.guide ? 1 : 0]
+        );
+        const [totalRows] = await conn.execute(
+          "SELECT points, published_count, guide_count FROM creator_rewards WHERE actor_id = ? LIMIT 1",
+          [safeText(actorId, 64)]
+        );
+        const total = totalRows[0] || {};
+        reward = {
+          earnedPoints: rewardInput.earnedPoints,
+          points: Number(total.points || 0),
+          publishedCount: Number(total.published_count || 0),
+          guideCount: Number(total.guide_count || 0),
+          guide: rewardInput.guide,
+        };
+      } catch (rewardError) {
+        console.warn(`[reward] record skipped: ${rewardError?.message || "unknown error"}`);
+      }
+
+      return { postId, reward };
   });
 
   await invalidateAllPostsCaches();
-  const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [result]);
+  const postId = typeof result === "object" ? result.postId : result;
+  const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [postId]);
   const normalized = (await loadPostMeta(detail))[0];
-  return { ok: true, post: normalized };
+  return { ok: true, post: normalized, reward: result?.reward || null };
 }
 
 async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
@@ -2176,6 +2248,21 @@ app.get("/api/v1/community/me/posts", asyncHandler(async (req, res) => {
   res.json(payload);
 }));
 
+app.get("/api/v1/community/me/rewards", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const rows = await query(
+    "SELECT points, published_count, guide_count FROM creator_rewards WHERE actor_id = ? LIMIT 1",
+    [actor]
+  );
+  const reward = rows[0] || {};
+  return res.json({
+    points: Number(reward.points || 0),
+    publishedCount: Number(reward.published_count || 0),
+    guideCount: Number(reward.guide_count || 0),
+    nextGuidePoints: 15,
+  });
+}));
+
 app.get("/api/v1/authors/:authorId/posts", asyncHandler(async (req, res) => {
   const viewerActorId = readActorId(req, req.query);
   const authorId = String(req.params.authorId || "").trim();
@@ -2698,6 +2785,7 @@ await ensureAuthSchemaCompatibility();
 await ensureNotificationSchemaCompatibility();
 await ensureReportSchemaCompatibility();
 await ensureBlockSchemaCompatibility();
+await ensureCreatorRewardSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;
