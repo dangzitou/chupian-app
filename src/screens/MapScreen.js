@@ -13,18 +13,26 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
 
-const DEFAULT_CENTER = {
-  lat: 23.129163,
-  lng: 113.264435,
-  label: '广州',
+const NEUTRAL_CENTER = {
+  lat: 0,
+  lng: 0,
+  label: '',
 };
 
-const FALLBACK_MARKER = `
-  <div style=\"font-size:12px;line-height:1.4; padding:4px 8px;\">
-    <div><strong>我的位置</strong></div>
-    <div>当前位置，可从这里发布</div>
-  </div>
-`;
+const normalizeLocation = (raw) => {
+  const lat = Number(raw?.lat);
+  const lng = Number(raw?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    lat,
+    lng,
+    label: String(raw?.label || '当前位置'),
+  };
+};
+
+const sameLocation = (left, right) => Boolean(left && right)
+  && Math.abs(Number(left.lat) - Number(right.lat)) < 0.00001
+  && Math.abs(Number(left.lng) - Number(right.lng)) < 0.00001;
 
 const sanitize = (value) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -39,8 +47,10 @@ export default function MapScreen({ navigation, route }) {
   const [webLocation, setWebLocation] = useState(null);
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
-  const [currentLocation, setCurrentLocation] = useState(DEFAULT_CENTER);
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [resolvedLocation, setResolvedLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('locating');
+  const [locationAttempt, setLocationAttempt] = useState(0);
   const mapDataLocationRef = useRef('');
   const focusLocation = useMemo(() => {
     const raw = route?.params?.focusLocation;
@@ -52,17 +62,49 @@ export default function MapScreen({ navigation, route }) {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || focusLocation || typeof navigator === 'undefined') return undefined;
-    if (!navigator.geolocation) return undefined;
+    let alive = true;
+    const resolveNetworkLocation = () => {
+      api.resolveLocation()
+        .then((payload) => {
+          if (!alive) return;
+          const nextLocation = normalizeLocation(payload?.location);
+          if (!nextLocation) throw new Error('invalid network location');
+          setWebLocation(nextLocation);
+          setLocationStatus('ready');
+        })
+        .catch(() => {
+          if (alive) setLocationStatus('error');
+        });
+    };
+    setLocationStatus('locating');
+    if (!navigator.geolocation) {
+      resolveNetworkLocation();
+      return () => { alive = false; };
+    }
     navigator.geolocation.getCurrentPosition((position) => {
-      const lat = Number(position.coords.latitude);
-      const lng = Number(position.coords.longitude);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        setWebLocation({ lat, lng, label: '我的位置' });
+      if (!alive) return;
+      const nextLocation = normalizeLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        label: '我的位置',
+      });
+      if (nextLocation) {
+        setWebLocation(nextLocation);
+        setLocationStatus('ready');
+      } else {
+        setLocationStatus('error');
       }
     }, () => {
-      // The map HTML keeps its city fallback when location permission is denied.
+      if (alive) resolveNetworkLocation();
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
-    return undefined;
+    return () => { alive = false; };
+  }, [focusLocation, locationAttempt]);
+
+  useEffect(() => {
+    if (!focusLocation) return;
+    setCurrentLocation(focusLocation);
+    setResolvedLocation(focusLocation);
+    setLocationStatus('ready');
   }, [focusLocation]);
 
   const mapHtml = useMemo(() => {
@@ -96,7 +138,9 @@ export default function MapScreen({ navigation, route }) {
       ...safeSpots.slice(0, 80),
       ...safePosts.slice(0, 80),
     ]);
-    const initialLocation = focusLocation || webLocation || resolvedLocation || DEFAULT_CENTER;
+    const initialLocation = focusLocation || webLocation || resolvedLocation || NEUTRAL_CENTER;
+    const hasInitialLocation = Boolean(focusLocation || webLocation || resolvedLocation);
+    const initialZoom = hasInitialLocation ? 15 : 2;
 
     return `<!doctype html>
     <html>
@@ -178,13 +222,9 @@ export default function MapScreen({ navigation, route }) {
           }
           .map-pin-post { background: #d93657; }
           .map-pin-spot { background: #263b50; }
-          .map-pin-me {
-            width: 14px;
-            height: 14px;
-            border: 3px solid #fff;
-            border-radius: 50%;
-            background: #d93657;
-            box-shadow: 0 1px 5px rgba(20, 28, 38, 0.32);
+          .leaflet-control-attribution {
+            font-size: 9px;
+            opacity: 0.72;
           }
           .locate-control {
             margin: 12px 12px 0 0;
@@ -242,7 +282,7 @@ export default function MapScreen({ navigation, route }) {
             const fallbackLat = ${initialLocation.lat};
             const fallbackLng = ${initialLocation.lng};
             const fallbackName = '${sanitize(initialLocation.label)}';
-            const hasFocusLocation = ${focusLocation || webLocation || resolvedLocation ? 'true' : 'false'};
+            const hasInitialLocation = ${hasInitialLocation ? 'true' : 'false'};
             const markers = ${spotsPayload};
             let mapBootTimer = null;
             const emit = (payload) => {
@@ -290,23 +330,25 @@ export default function MapScreen({ navigation, route }) {
               );
             };
 
-            function render(lat, lng, label) {
+            function render(lat, lng, label, announceLocation = true) {
               if (!window.L) {
                 emit({ type: 'mapError' });
                 return;
               }
               if (mapBootTimer) window.clearTimeout(mapBootTimer);
-              emit({
-                type: 'locationReady',
-                location: { lat: Number(lat), lng: Number(lng), label: label || fallbackName },
-              });
+              if (announceLocation) {
+                emit({
+                  type: 'locationReady',
+                  location: { lat: Number(lat), lng: Number(lng), label: label || fallbackName },
+                });
+              }
               const map = L.map('map', {
-                zoomControl: true,
-                attributionControl: false,
+                zoomControl: false,
+                attributionControl: true,
                 preferCanvas: true,
-              }).setView([lat, lng], 15);
+              }).setView([lat, lng], ${initialZoom});
               L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap',
+                attribution: '&copy; OpenStreetMap contributors',
                 maxZoom: 19,
               }).addTo(map);
               const currentDot = L.circleMarker([lat, lng], {
@@ -323,16 +365,6 @@ export default function MapScreen({ navigation, route }) {
                 fillOpacity: 0.75,
                 weight: 0,
               }).addTo(map);
-              const currentIcon = L.divIcon({
-                className: '',
-                html: '<div class=\"map-pin-me\"></div>',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10],
-              });
-              const currentMarker = L.marker([lat, lng], { icon: currentIcon, title: '我在这里' })
-                .addTo(map)
-                .bindPopup('${FALLBACK_MARKER}');
-
               let locateButton = null;
               const locateControl = L.control({ position: 'topright' });
               locateControl.onAdd = () => {
@@ -356,7 +388,6 @@ export default function MapScreen({ navigation, route }) {
                 if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
                 currentDot.setLatLng([nextLat, nextLng]);
                 currentHalo.setLatLng([nextLat, nextLng]);
-                currentMarker.setLatLng([nextLat, nextLng]);
                 if (locateButton) locateButton.classList.remove('is-loading');
                 emit({
                   type: 'locationReady',
@@ -372,7 +403,7 @@ export default function MapScreen({ navigation, route }) {
                 if (!target) {
                   emit({
                     type: 'openCreate',
-                    spot: { id: '', name: '广州', district: '' },
+                    spot: { id: '', name: '附近点位', district: '' },
                   });
                   return;
                 }
@@ -424,8 +455,18 @@ export default function MapScreen({ navigation, route }) {
               }
             }, 12000);
 
-            if (hasFocusLocation || !('geolocation' in navigator)) {
-              return render(fallbackLat, fallbackLng, fallbackName);
+            if (hasInitialLocation) {
+              return render(fallbackLat, fallbackLng, fallbackName, true);
+            }
+
+            if (window.parent && window.parent !== window) {
+              emit({ type: 'locationWaiting' });
+              return render(fallbackLat, fallbackLng, fallbackName, false);
+            }
+
+            if (!('geolocation' in navigator)) {
+              emit({ type: 'locationError', reason: 'unsupported' });
+              return render(fallbackLat, fallbackLng, fallbackName, false);
             }
 
             navigator.geolocation.getCurrentPosition(
@@ -433,13 +474,15 @@ export default function MapScreen({ navigation, route }) {
                 const lat = Number(position.coords.latitude);
                 const lng = Number(position.coords.longitude);
                 if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                  render(lat, lng, '我的位置');
+                  render(lat, lng, '我的位置', true);
                 } else {
-                  render(fallbackLat, fallbackLng, fallbackName);
+                  emit({ type: 'locationError', reason: 'invalid' });
+                  render(fallbackLat, fallbackLng, fallbackName, false);
                 }
               },
               () => {
-                render(fallbackLat, fallbackLng, fallbackName);
+                emit({ type: 'locationError', reason: 'denied' });
+                render(fallbackLat, fallbackLng, fallbackName, false);
               },
               { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
             );
@@ -488,7 +531,7 @@ export default function MapScreen({ navigation, route }) {
 
   const loadMapData = useCallback((location) => {
     let alive = true;
-    const target = location || focusLocation || webLocation || DEFAULT_CENTER;
+    const target = location || focusLocation || webLocation || resolvedLocation;
     const latitude = Number(target?.lat);
     const longitude = Number(target?.lng);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return () => { alive = false; };
@@ -512,7 +555,7 @@ export default function MapScreen({ navigation, route }) {
     return () => {
       alive = false;
     };
-  }, [focusLocation, webLocation]);
+  }, [focusLocation, resolvedLocation, webLocation]);
 
   const onWebMessage = useCallback(async (event) => {
     const raw = event?.nativeEvent?.data;
@@ -520,17 +563,31 @@ export default function MapScreen({ navigation, route }) {
     try {
       const payload = JSON.parse(raw);
       if (payload?.type === 'locationReady') {
-        const lat = Number(payload?.location?.lat);
-        const lng = Number(payload?.location?.lng);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          const nextLocation = {
-            lat,
-            lng,
-            label: String(payload?.location?.label || '我的位置'),
-          };
+        const nextLocation = normalizeLocation({
+          lat: payload?.location?.lat,
+          lng: payload?.location?.lng,
+          label: payload?.location?.label || '我的位置',
+        });
+        if (nextLocation) {
+          setResolvedLocation((previous) => sameLocation(previous, nextLocation) ? previous : nextLocation);
+          setCurrentLocation((previous) => sameLocation(previous, nextLocation) ? previous : nextLocation);
+          setLocationStatus('ready');
+          loadMapData(nextLocation);
+        }
+        return;
+      }
+      if (payload?.type === 'locationError') {
+        setLocationStatus('locating');
+        try {
+          const networkPayload = await api.resolveLocation();
+          const nextLocation = normalizeLocation(networkPayload?.location);
+          if (!nextLocation) throw new Error('invalid network location');
           setResolvedLocation(nextLocation);
           setCurrentLocation(nextLocation);
+          setLocationStatus('ready');
           loadMapData(nextLocation);
+        } catch (_err) {
+          setLocationStatus('error');
         }
         return;
       }
@@ -566,21 +623,42 @@ export default function MapScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => {
     mapDataLocationRef.current = '';
-    return loadMapData(focusLocation || webLocation || DEFAULT_CENTER);
-  }, [focusLocation, loadMapData, webLocation]));
+    return loadMapData(focusLocation || webLocation || resolvedLocation);
+  }, [focusLocation, loadMapData, resolvedLocation, webLocation]));
 
-  const openCreateWithCurrent = useCallback(() => onOpenCreate({
-    id: '',
-    name: currentLocation.label || DEFAULT_CENTER.label,
-    district: '',
-    lat: currentLocation.lat,
-    lng: currentLocation.lng,
-  }), [currentLocation, onOpenCreate]);
+  const retryLocation = useCallback(() => {
+    setError(false);
+    setLocationStatus('locating');
+    if (focusLocation) return;
+    setWebLocation(null);
+    setResolvedLocation(null);
+    setCurrentLocation(null);
+    mapDataLocationRef.current = '';
+    setLocationAttempt((value) => value + 1);
+    setMapRevision((value) => value + 1);
+  }, [focusLocation]);
+
+  const openCreateWithCurrent = useCallback(() => {
+    if (!currentLocation) {
+      retryLocation();
+      return;
+    }
+    onOpenCreate({
+      id: '',
+      name: currentLocation.label || '当前位置',
+      district: '',
+      lat: currentLocation.lat,
+      lng: currentLocation.lng,
+    });
+  }, [currentLocation, onOpenCreate, retryLocation]);
 
   const retryMap = useCallback(() => {
     setError(false);
     setMapRevision((value) => value + 1);
   }, []);
+
+  const locationPending = !focusLocation && !currentLocation && locationStatus === 'locating';
+  const locationUnavailable = !focusLocation && !currentLocation && locationStatus === 'error';
 
   return (
     <View style={styles.container}>
@@ -626,6 +704,22 @@ export default function MapScreen({ navigation, route }) {
           >
             <View style={styles.plusHorizontal} />
             <View style={styles.plusVertical} />
+          </Pressable>
+        </View>
+      ) : null}
+      {locationPending ? (
+        <View style={styles.locationOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color={COLORS.accent} />
+          <Text style={styles.locationTitle}>正在获取当前位置</Text>
+          <Text style={styles.locationHint}>允许定位后显示附近的出片点</Text>
+        </View>
+      ) : null}
+      {locationUnavailable ? (
+        <View style={styles.locationOverlay}>
+          <Text style={styles.locationTitle}>无法确定当前位置</Text>
+          <Text style={styles.locationHint}>请允许定位，或检查网络后重试。</Text>
+          <Pressable style={styles.retryBtn} onPress={retryLocation} accessibilityRole="button">
+            <Text style={styles.retryText}>重新定位</Text>
           </Pressable>
         </View>
       ) : null}
@@ -689,6 +783,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.94)',
   },
+  locationOverlay: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    top: '38%',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    shadowColor: '#1e1e1e',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
+  },
+  locationTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700', marginTop: 8 },
+  locationHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
   errorTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700' },
   errorHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
   retryBtn: {

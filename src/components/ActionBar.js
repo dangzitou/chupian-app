@@ -1,11 +1,17 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { formatCount } from '../utils/format';
 
 function ActionGlyph({ type, active = false, busy = false, compact = false }) {
   if (busy) {
-    return <Text style={[styles.icon, compact && styles.iconCompact, active && styles.active]}>...</Text>;
+    return (
+      <ActivityIndicator
+        size="small"
+        color={active ? COLORS.accent : COLORS.muted}
+        style={[styles.busy, compact && styles.busyCompact]}
+      />
+    );
   }
 
   if (type === 'comment') {
@@ -78,13 +84,22 @@ export default function ActionBar({
       {actionItems.map((item) => (
         <Pressable
           key={item.key}
-          style={[styles.item, compact && styles.itemCompact, item.disabled && styles.itemDisabled]}
+          style={({ pressed }) => [
+            styles.item,
+            compact && styles.itemCompact,
+            item.disabled && styles.itemDisabled,
+            pressed && !item.disabled && styles.itemPressed,
+          ]}
           onPress={item.onPress}
           disabled={item.disabled}
           accessibilityRole="button"
           accessibilityLabel={item.accessibilityLabel}
+          accessibilityState={{ disabled: item.disabled, selected: item.active }}
           accessibilityHint={item.disabled ? '当前不可用' : undefined}
-          android_ripple={{ color: '#ddd' }}
+          accessibilityLiveRegion={item.showBusy ? 'polite' : 'none'}
+          hitSlop={8}
+          pressRetentionOffset={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          android_ripple={{ color: COLORS.accentSoft, borderless: true }}
         >
           <ActionGlyph
             type={item.key}
@@ -102,7 +117,9 @@ export default function ActionBar({
           onPress={onShare}
           accessibilityRole="button"
           accessibilityLabel="分享这条出片记录"
-          android_ripple={{ color: '#ddd' }}
+          hitSlop={8}
+          pressRetentionOffset={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          android_ripple={{ color: COLORS.accentSoft, borderless: true }}
         >
           <ActionGlyph type="share" compact={compact} />
           <Text style={[styles.text, compact && styles.textCompact]}>分享</Text>
@@ -135,7 +152,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingVertical: 3,
+    minHeight: 34,
+    paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 20,
     minWidth: 52,
@@ -143,15 +161,22 @@ const styles = StyleSheet.create({
   },
   itemCompact: {
     minWidth: 0,
+    minHeight: 30,
     paddingHorizontal: 3,
     paddingVertical: 2,
     gap: 2,
+  },
+  itemPressed: {
+    opacity: 0.62,
+    transform: [{ scale: 0.96 }],
   },
   itemDisabled: {
     opacity: 0.5,
   },
   icon: { fontSize: 16, color: COLORS.ink },
   iconCompact: { fontSize: 14 },
+  busy: { width: 16, height: 16 },
+  busyCompact: { width: 14, height: 14 },
   commentGlyph: {
     width: 15,
     height: 12,
