@@ -147,6 +147,8 @@ function SignalStrip({ items, activeTag, onSelect, loading }) {
 export default function PostsScreen({ navigation }) {
   const [feedLayout, setFeedLayout] = useState('masonry');
   const [feedMode, setFeedMode] = useState('recommend');
+  const [locationLabel, setLocationLabel] = useState('');
+  const [locationLoading, setLocationLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const [activeTag, setActiveTag] = useState('');
   const [signals, setSignals] = useState([]);
@@ -218,6 +220,27 @@ export default function PostsScreen({ navigation }) {
     } finally {
       setSignalsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    setLocationLoading(true);
+    api.resolveLocation()
+      .then((payload) => {
+        if (!alive) return;
+        const label = String(payload?.location?.label || '').trim();
+        setLocationLabel(label);
+      })
+      .catch(() => {
+        if (alive) setLocationLabel('');
+      })
+      .finally(() => {
+        if (alive) setLocationLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -305,6 +328,19 @@ export default function PostsScreen({ navigation }) {
     }
   }, []);
 
+  const openTab = useCallback((routeName) => {
+    const parent = navigation?.getParent?.();
+    if (parent?.navigate) {
+      parent.navigate(routeName);
+      return;
+    }
+    navigation?.navigate?.(routeName);
+  }, [navigation]);
+
+  const locationContext = locationLoading
+    ? '正在定位'
+    : `${locationLabel || '附近'} · 出片记录`;
+
   const isMasonry = feedLayout === 'masonry';
   const renderCard = useCallback(({ item }) => (
     <PostCard
@@ -331,7 +367,15 @@ export default function PostsScreen({ navigation }) {
     <View style={styles.headerSection}>
       <View style={styles.headerTop}>
         <View style={styles.titleStack}>
-          <Text style={styles.titleEyebrow}>广州 · 出片记录</Text>
+          <Pressable
+            style={styles.locationContext}
+            onPress={() => openTab(APP_ROUTES.MAP)}
+            accessibilityRole="button"
+            accessibilityLabel="查看当前位置地图"
+          >
+            <View style={styles.locationDot} />
+            <Text style={styles.titleEyebrow}>{locationContext}</Text>
+          </Pressable>
           <Text style={styles.title}>发现</Text>
         </View>
         <Pressable
@@ -375,7 +419,7 @@ export default function PostsScreen({ navigation }) {
         </View>
       ) : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -406,9 +450,17 @@ export default function PostsScreen({ navigation }) {
               {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
               {showEmpty ? <Text style={styles.empty}>还没有匹配作品，调整关键词或标签试试</Text> : null}
               {showEmpty && !error ? (
-                <Pressable style={styles.retryBtn} onPress={() => load({ append: false })}>
-                  <Text style={styles.retryText}>刷新</Text>
-                </Pressable>
+                <Text style={styles.emptyHint}>先发一张照片，位置和参数之后再补也可以</Text>
+              ) : null}
+              {showEmpty && !error ? (
+                <View style={styles.emptyActions}>
+                  <Pressable style={styles.publishBtn} onPress={() => openTab(APP_ROUTES.CREATE)}>
+                    <Text style={styles.publishBtnText}>发布一张</Text>
+                  </Pressable>
+                  <Pressable style={styles.retryBtn} onPress={() => load({ append: false })}>
+                    <Text style={styles.retryText}>刷新</Text>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           )
@@ -464,6 +516,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   titleStack: { gap: 1 },
+  locationContext: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 18,
+    paddingVertical: 2,
+    paddingRight: 6,
+    borderRadius: 999,
+  },
+  locationDot: {
+    width: 6,
+    height: 6,
+    marginRight: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.accent,
+  },
   titleEyebrow: {
     color: COLORS.muted,
     fontSize: 10.5,
@@ -669,8 +737,30 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 14,
   },
+  emptyHint: {
+    marginTop: 8,
+    textAlign: 'center',
+    color: COLORS.mutedText,
+    fontSize: 12,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  publishBtn: {
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.accent,
+  },
+  publishBtnText: {
+    color: COLORS.white,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
   retryBtn: {
-    marginTop: 12,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     borderRadius: 999,
