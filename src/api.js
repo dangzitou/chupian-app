@@ -672,6 +672,28 @@ export const api = {
     return toPostShape(item);
   },
 
+  async updatePost(id, body = {}) {
+    const target = String(id || '').trim();
+    if (!target) throw new Error('post id required');
+    const payload = buildPostPayload(body);
+    const send = (path) => request(path, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      noCache: true,
+    });
+
+    let result;
+    try {
+      result = await send(`${API_PREFIX}/posts/${encodeURIComponent(target)}`);
+    } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
+      result = await send(`/api/posts/${encodeURIComponent(target)}`);
+    }
+
+    clearNetworkCaches({ postId: target });
+    return result?.post ? { ...result, post: toPostShape(result.post) } : result;
+  },
+
   async archivePost(id) {
     const target = String(id || '').trim();
     if (!target) throw new Error('post id required');
@@ -747,7 +769,7 @@ export const api = {
           angle: payload.angle || '',
           direction: payload.direction || '',
           timeWindow: payload.timeWindow || '',
-          bestTime: payload.bestTime || 'day',
+          bestTime: payload.bestTime || '',
           styles: payload.styles,
           tags: payload.tags,
         }),
