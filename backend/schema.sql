@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS posts (
   stats_favorites INT UNSIGNED DEFAULT 0,
   stats_views INT UNSIGNED DEFAULT 0,
   status ENUM('published', 'pending', 'archived') DEFAULT 'published',
+  guide_rewarded TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_posts_created (created_at, id),
