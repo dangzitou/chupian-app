@@ -696,8 +696,8 @@ async function loadPostMeta(rows, options = {}) {
       angle: row.angle || "",
       direction: row.direction || "",
       timeWindow: row.time_window || "",
-      bestTime: row.best_time || "day",
-      shotAt: row.shot_at || row.created_at,
+      bestTime: row.best_time || "",
+      shotAt: row.shot_at || "",
       gear: {
         camera: row.camera || "",
         lens: row.lens || "",
@@ -1497,7 +1497,9 @@ async function createPostHandler(req) {
         safeText(body.direction || "", 80),
         safeText(body.angle || "", 80),
         safeText(body.timeWindow || "", 80),
-        body.bestTime === "night" || body.bestTime === "golden" ? body.bestTime : "day",
+        body.bestTime === "night" || body.bestTime === "golden" || body.bestTime === "day"
+          ? body.bestTime
+          : null,
         shotAt,
         safeText(body.camera || "", 80),
         safeText(body.lens || "", 80),
@@ -1590,6 +1592,98 @@ async function createPostHandler(req) {
   const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [postId]);
   const normalized = (await loadPostMeta(detail))[0];
   return { ok: true, post: normalized, reward: result?.reward || null };
+}
+
+async function updatePostHandler(req) {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    throw Object.assign(new Error("invalid post id"), { status: 400 });
+  }
+
+  const body = req.body || {};
+  const actor = readActorId(req, body);
+  const existingRows = await query("SELECT * FROM posts WHERE id = ? LIMIT 1", [postId]);
+  const existing = existingRows[0];
+  if (!existing) throw Object.assign(new Error("post not found"), { status: 404 });
+  if (String(existing.author_id || "") !== String(actor || "")) {
+    throw Object.assign(new Error("only the author can edit this post"), { status: 403 });
+  }
+  if (existing.status !== "published") {
+    throw Object.assign(new Error("post is not publicly published"), { status: 409 });
+  }
+
+  const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+  const title = has("title") ? (safeText(body.title, 200) || "出片记录") : (existing.title || "出片记录");
+  const content = has("content") ? safeText(body.content, 3000) : (existing.content || "");
+  const spotId = has("spotId") ? (pickInt(body.spotId, 0) || null) : existing.spot_id;
+  const spotName = has("spotName") ? safeText(body.spotName || "", 80) : (existing.spot_name || "");
+  const district = has("district") ? safeText(body.district || "", 64) : (existing.district || "");
+  const latitude = has("latitude")
+    ? (String(body.latitude ?? "").trim() ? pickFloat(body.latitude, null, { min: -90, max: 90 }) : null)
+    : existing.latitude;
+  const longitude = has("longitude")
+    ? (String(body.longitude ?? "").trim() ? pickFloat(body.longitude, null, { min: -180, max: 180 }) : null)
+    : existing.longitude;
+  const direction = has("direction") ? safeText(body.direction || "", 80) : (existing.direction || "");
+  const angle = has("angle") ? safeText(body.angle || "", 80) : (existing.angle || "");
+  const timeWindow = has("timeWindow") ? safeText(body.timeWindow || "", 80) : (existing.time_window || "");
+  const bestTime = has("bestTime")
+    ? (["day", "golden", "night"].includes(String(body.bestTime || "")) ? body.bestTime : null)
+    : (existing.best_time || null);
+  let shotAt = existing.shot_at;
+  if (has("shotAt")) {
+    shotAt = null;
+    if (body.shotAt) {
+      const parsed = new Date(body.shotAt);
+      if (!Number.isNaN(parsed.getTime())) shotAt = parsed.toISOString().slice(0, 19).replace("T", " ");
+    }
+  }
+  const camera = has("camera") ? safeText(body.camera || "", 80) : (existing.camera || "");
+  const lens = has("lens") ? safeText(body.lens || "", 80) : (existing.lens || "");
+  const focalLength = has("focalLength") ? safeText(body.focalLength || "", 40) : (existing.focal_length || "");
+  const aperture = has("aperture") ? safeText(body.aperture || "", 24) : (existing.aperture || "");
+  const shutter = has("shutter") ? safeText(body.shutter || "", 24) : (existing.shutter || "");
+  const iso = has("iso") ? safeText(body.iso || "", 24) : (existing.iso || "");
+  const whiteBalance = has("whiteBalance")
+    ? safeText(body.whiteBalance || "", 40)
+    : (existing.white_balance || "");
+
+  await query(
+    `UPDATE posts SET
+       title = ?, content = ?, spot_id = ?, spot_name = ?, district = ?, latitude = ?, longitude = ?,
+       direction = ?, angle = ?, time_window = ?, best_time = ?, shot_at = ?, camera = ?, lens = ?,
+       focal_length = ?, aperture = ?, shutter = ?, iso = ?, white_balance = ?
+     WHERE id = ? AND author_id = ? AND status = 'published'`,
+    [
+      title,
+      content,
+      spotId,
+      spotName,
+      district,
+      latitude,
+      longitude,
+      direction,
+      angle,
+      timeWindow,
+      bestTime,
+      shotAt,
+      camera,
+      lens,
+      focalLength,
+      aperture,
+      shutter,
+      iso,
+      whiteBalance,
+      postId,
+      actor,
+    ],
+  );
+
+  await invalidateAllPostsCaches();
+  await invalidatePostCaches(postId);
+  const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [postId]);
+  const normalized = (await loadPostMeta(detail, { actor }))[0];
+  return { ok: true, post: normalized };
 }
 
 async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
@@ -2522,6 +2616,9 @@ app.post("/api/v1/posts/:id/report", asyncHandler(async (req, res) => {
   if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
   return res.json({ ok: true, ...idempotent.payload });
 }));
+app.patch("/api/v1/posts/:id", asyncHandler(async (req, res) => {
+  return res.json(await updatePostHandler(req));
+}));
 app.delete("/api/v1/posts/:id", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
   if (!Number.isInteger(postId) || postId <= 0) {
@@ -2698,6 +2795,9 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
   });
 }));
 app.get("/api/posts/:id", asyncHandler(getPostHandler));
+app.patch("/api/posts/:id", asyncHandler(async (req, res) => {
+  return res.json(await updatePostHandler(req));
+}));
 app.get("/api/posts/:id/comments", asyncHandler(async (req, res) => {
   const payload = await getPostCommentsPayload(req);
   return res.json(payload);
