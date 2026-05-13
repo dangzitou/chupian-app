@@ -51,6 +51,8 @@ export default function MapScreen({ navigation, route }) {
   const [resolvedLocation, setResolvedLocation] = useState(null);
   const [locationStatus, setLocationStatus] = useState('locating');
   const [locationAttempt, setLocationAttempt] = useState(0);
+  const [locationChooserOpen, setLocationChooserOpen] = useState(false);
+  const [mapPickMode, setMapPickMode] = useState(false);
   const mapDataLocationRef = useRef('');
   const focusLocation = useMemo(() => {
     const raw = route?.params?.focusLocation;
@@ -397,6 +399,15 @@ export default function MapScreen({ navigation, route }) {
               map.on('locationerror', () => {
                 if (locateButton) locateButton.classList.remove('is-loading');
               });
+              map.on('click', (event) => {
+                const nextLat = Number(event?.latlng?.lat);
+                const nextLng = Number(event?.latlng?.lng);
+                if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+                emit({
+                  type: 'mapPick',
+                  location: { lat: nextLat, lng: nextLng, label: '地图选点' },
+                });
+              });
 
               window.__pickSpot = (id) => {
                 const target = markers.find((item) => item.type === 'spot' && String(item.id) === String(id));
@@ -595,6 +606,21 @@ export default function MapScreen({ navigation, route }) {
         setError(true);
         return;
       }
+      if (payload?.type === 'mapPick' && mapPickMode) {
+        const picked = normalizeLocation(payload?.location);
+        if (picked) {
+          setMapPickMode(false);
+          setLocationChooserOpen(false);
+          onOpenCreate({
+            id: '',
+            name: picked.label || '地图选点',
+            district: '',
+            lat: picked.lat,
+            lng: picked.lng,
+          });
+        }
+        return;
+      }
       if (payload?.type === 'openCreate') {
         onOpenCreate(payload?.spot);
         return;
@@ -609,7 +635,7 @@ export default function MapScreen({ navigation, route }) {
     } catch (_err) {
       // ignore
     }
-  }, [loadMapData, onOpenCreate, onOpenPost, onOpenSpot]);
+  }, [loadMapData, mapPickMode, onOpenCreate, onOpenPost, onOpenSpot]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -639,10 +665,17 @@ export default function MapScreen({ navigation, route }) {
   }, [focusLocation]);
 
   const openCreateWithCurrent = useCallback(() => {
+    setLocationChooserOpen(true);
+    setMapPickMode(false);
+  }, []);
+
+  const createAtCurrentLocation = useCallback(() => {
     if (!currentLocation) {
+      setLocationChooserOpen(false);
       retryLocation();
       return;
     }
+    setLocationChooserOpen(false);
     onOpenCreate({
       id: '',
       name: currentLocation.label || '当前位置',
@@ -651,6 +684,15 @@ export default function MapScreen({ navigation, route }) {
       lng: currentLocation.lng,
     });
   }, [currentLocation, onOpenCreate, retryLocation]);
+
+  const startMapPick = useCallback(() => {
+    setLocationChooserOpen(false);
+    setMapPickMode(true);
+  }, []);
+
+  const cancelMapPick = useCallback(() => {
+    setMapPickMode(false);
+  }, []);
 
   const retryMap = useCallback(() => {
     setError(false);
@@ -707,6 +749,40 @@ export default function MapScreen({ navigation, route }) {
           </Pressable>
         </View>
       ) : null}
+      {locationChooserOpen ? (
+        <View style={styles.chooserBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setLocationChooserOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="关闭位置选择"
+          />
+          <View style={styles.chooserCard}>
+            <Text style={styles.chooserTitle}>标记出片位置</Text>
+            <Text style={styles.chooserHint}>先选位置，拍摄参数和攻略之后再补</Text>
+            <View style={styles.chooserActions}>
+              <Pressable style={styles.chooserPrimary} onPress={createAtCurrentLocation}>
+                <Text style={styles.chooserPrimaryText}>使用当前位置</Text>
+                <Text style={styles.chooserPrimaryHint}>{currentLocation?.label || '需要先允许定位'}</Text>
+              </Pressable>
+              <Pressable style={styles.chooserSecondary} onPress={startMapPick}>
+                <Text style={styles.chooserSecondaryText}>在地图上点选</Text>
+                <Text style={styles.chooserSecondaryHint}>适合拍摄点不在身边</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+      {mapPickMode ? (
+        <View style={styles.pickHintWrap} pointerEvents="box-none">
+          <View style={styles.pickHintCard}>
+            <Text style={styles.pickHintTitle}>点击地图选择出片位置</Text>
+            <Pressable onPress={cancelMapPick} accessibilityRole="button">
+              <Text style={styles.pickHintCancel}>取消</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {locationPending ? (
         <View style={styles.locationOverlay} pointerEvents="none">
           <ActivityIndicator size="small" color={COLORS.accent} />
@@ -758,6 +834,64 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  chooserBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(22,28,34,0.26)',
+    padding: 14,
+  },
+  chooserCard: {
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: COLORS.white,
+    shadowColor: '#1e1e1e',
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
+  },
+  chooserTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '800' },
+  chooserHint: { color: COLORS.muted, fontSize: 11.5, marginTop: 5 },
+  chooserActions: { gap: 9, marginTop: 14 },
+  chooserPrimary: {
+    borderRadius: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    backgroundColor: COLORS.accent,
+  },
+  chooserPrimaryText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
+  chooserPrimaryHint: { color: 'rgba(255,255,255,0.78)', fontSize: 10.5, marginTop: 3 },
+  chooserSecondary: {
+    borderRadius: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    backgroundColor: COLORS.accentBg,
+  },
+  chooserSecondaryText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
+  chooserSecondaryHint: { color: COLORS.muted, fontSize: 10.5, marginTop: 3 },
+  pickHintWrap: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+  },
+  pickHintCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    shadowColor: '#1e1e1e',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  pickHintTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '700' },
+  pickHintCancel: { color: COLORS.accent, fontSize: 12, fontWeight: '800' },
   plusHorizontal: {
     position: 'absolute',
     width: 20,
