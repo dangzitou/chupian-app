@@ -1,6 +1,7 @@
 import React, { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   Platform,
   StyleSheet,
@@ -53,6 +54,7 @@ export default function MapScreen({ navigation, route }) {
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [locationChooserOpen, setLocationChooserOpen] = useState(false);
   const [mapPickMode, setMapPickMode] = useState(false);
+  const [selectedMapItem, setSelectedMapItem] = useState(null);
   const mapDataLocationRef = useRef('');
   const focusLocation = useMemo(() => {
     const raw = route?.params?.focusLocation;
@@ -119,6 +121,7 @@ export default function MapScreen({ navigation, route }) {
       type: 'spot',
       name: sanitize(item.name),
       district: sanitize(item.district || ''),
+      cover: '',
       lat: Number(item.lat),
       lng: Number(item.lng),
     })) : [];
@@ -131,7 +134,9 @@ export default function MapScreen({ navigation, route }) {
       id: String(item.id || ''),
       type: 'post',
       name: sanitize(item.title || '出片帖子'),
+      spotName: sanitize(item.spotName || item.spot_name || ''),
       district: sanitize(item.district || ''),
+      cover: sanitize(item.cover || item.cover_url || ''),
       lat: Number(item.latitude ?? item.lat),
       lng: Number(item.longitude ?? item.lng),
     })) : [];
@@ -454,6 +459,12 @@ export default function MapScreen({ navigation, route }) {
                 const marker = L.marker([item.lat, item.lng], { icon: markerIcon, title: item.name || '拍摄点' })
                   .addTo(map)
                   .bindPopup(renderMarkerPopup(item));
+                marker.on('click', () => {
+                  emit({
+                    type: 'previewItem',
+                    item: { type: item.type, id: String(item.id || ''), lat: item.lat, lng: item.lng },
+                  });
+                });
                 marker.on('popupopen', () => {
                   window.__activeSpot = item;
                 });
@@ -550,6 +561,7 @@ export default function MapScreen({ navigation, route }) {
     const locationKey = `${latitude.toFixed(3)}:${longitude.toFixed(3)}`;
     if (mapDataLocationRef.current === locationKey) return () => { alive = false; };
     mapDataLocationRef.current = locationKey;
+    setSelectedMapItem(null);
 
     api.mapData({ latitude, longitude, radiusKm: 35, limit: 60 })
       .then((payload) => {
@@ -606,6 +618,42 @@ export default function MapScreen({ navigation, route }) {
         setError(true);
         return;
       }
+      if (payload?.type === 'previewItem' && !mapPickMode) {
+        const type = payload?.item?.type === 'spot' ? 'spot' : 'post';
+        const collection = type === 'spot' ? spots : posts;
+        const target = collection.find((item) => String(item?.id || '') === String(payload?.item?.id || ''));
+        if (!target) return;
+        const lat = Number(target.latitude ?? target.lat);
+        const lng = Number(target.longitude ?? target.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        setSelectedMapItem({
+          type,
+          id: String(target.id),
+          title: String(type === 'spot' ? (target.name || '出片点位') : (target.title || target.name || '出片帖子')),
+          spotName: String(target.spotName || target.spot_name || ''),
+          district: String(target.district || ''),
+          cover: String(target.cover || target.cover_url || ''),
+          lat,
+          lng,
+        });
+        return;
+      }
+      if (payload?.type === 'previewItem' && mapPickMode) {
+        const lat = Number(payload?.item?.lat);
+        const lng = Number(payload?.item?.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          setMapPickMode(false);
+          setLocationChooserOpen(false);
+          onOpenCreate({
+            id: '',
+            name: '地图选点',
+            district: '',
+            lat,
+            lng,
+          });
+        }
+        return;
+      }
       if (payload?.type === 'mapPick' && mapPickMode) {
         const picked = normalizeLocation(payload?.location);
         if (picked) {
@@ -635,7 +683,7 @@ export default function MapScreen({ navigation, route }) {
     } catch (_err) {
       // ignore
     }
-  }, [loadMapData, mapPickMode, onOpenCreate, onOpenPost, onOpenSpot]);
+  }, [loadMapData, mapPickMode, onOpenCreate, onOpenPost, onOpenSpot, posts, spots]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -694,6 +742,34 @@ export default function MapScreen({ navigation, route }) {
     setMapPickMode(false);
   }, []);
 
+  const closeMapPreview = useCallback(() => {
+    setSelectedMapItem(null);
+  }, []);
+
+  const openMapPreviewDetail = useCallback(() => {
+    if (!selectedMapItem) return;
+    const item = selectedMapItem;
+    setSelectedMapItem(null);
+    if (item.type === 'spot') {
+      onOpenSpot(item.id);
+    } else {
+      onOpenPost(item.id);
+    }
+  }, [onOpenPost, onOpenSpot, selectedMapItem]);
+
+  const publishFromMapPreview = useCallback(() => {
+    if (!selectedMapItem) return;
+    const item = selectedMapItem;
+    setSelectedMapItem(null);
+    onOpenCreate({
+      id: item.type === 'spot' ? item.id : '',
+      name: item.spotName || (item.type === 'spot' ? item.title : '地图选点'),
+      district: item.district,
+      lat: item.lat,
+      lng: item.lng,
+    });
+  }, [onOpenCreate, selectedMapItem]);
+
   const retryMap = useCallback(() => {
     setError(false);
     setMapRevision((value) => value + 1);
@@ -747,6 +823,42 @@ export default function MapScreen({ navigation, route }) {
             <View style={styles.plusHorizontal} />
             <View style={styles.plusVertical} />
           </Pressable>
+        </View>
+      ) : null}
+      {selectedMapItem ? (
+        <View style={styles.previewWrap} pointerEvents="box-none">
+          <View style={styles.previewCard}>
+            <Pressable
+              style={styles.previewClose}
+              onPress={closeMapPreview}
+              accessibilityRole="button"
+              accessibilityLabel="关闭地图预览"
+            >
+              <Text style={styles.previewCloseText}>×</Text>
+            </Pressable>
+            {selectedMapItem.cover ? (
+              <Image source={{ uri: selectedMapItem.cover }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.previewImageFallback}>
+                <Text style={styles.previewImageFallbackText}>{selectedMapItem.type === 'post' ? '出片' : '点位'}</Text>
+              </View>
+            )}
+            <View style={styles.previewCopy}>
+              <Text style={styles.previewEyebrow}>{selectedMapItem.type === 'post' ? '附近出片' : '拍摄点位'}</Text>
+              <Text style={styles.previewTitle} numberOfLines={2}>{selectedMapItem.title}</Text>
+              <Text style={styles.previewMeta} numberOfLines={1}>
+                {[selectedMapItem.spotName, selectedMapItem.district].filter(Boolean).join(' · ') || '已记录坐标'}
+              </Text>
+              <View style={styles.previewActions}>
+                <Pressable style={styles.previewPrimary} onPress={openMapPreviewDetail}>
+                  <Text style={styles.previewPrimaryText}>{selectedMapItem.type === 'post' ? '看详情' : '看点位'}</Text>
+                </Pressable>
+                <Pressable style={styles.previewSecondary} onPress={publishFromMapPreview}>
+                  <Text style={styles.previewSecondaryText}>在此发布</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
         </View>
       ) : null}
       {locationChooserOpen ? (
@@ -834,6 +946,72 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  previewWrap: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 88,
+  },
+  previewCard: {
+    position: 'relative',
+    flexDirection: 'row',
+    gap: 10,
+    padding: 10,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    shadowColor: '#1e1e1e',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
+  },
+  previewImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 12,
+    backgroundColor: '#e8edf2',
+  },
+  previewImageFallback: {
+    width: 88,
+    height: 88,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accentBg,
+  },
+  previewImageFallbackText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
+  previewCopy: { flex: 1, minWidth: 0, paddingRight: 16 },
+  previewEyebrow: { color: COLORS.accent, fontSize: 10.5, fontWeight: '800' },
+  previewTitle: { color: COLORS.ink, fontSize: 13.5, lineHeight: 18, fontWeight: '800', marginTop: 3 },
+  previewMeta: { color: COLORS.muted, fontSize: 10.5, marginTop: 3 },
+  previewActions: { flexDirection: 'row', gap: 7, marginTop: 8 },
+  previewPrimary: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    backgroundColor: COLORS.accent,
+  },
+  previewPrimaryText: { color: COLORS.white, fontSize: 11, fontWeight: '800' },
+  previewSecondary: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    backgroundColor: COLORS.accentBg,
+  },
+  previewSecondaryText: { color: COLORS.accent, fontSize: 11, fontWeight: '800' },
+  previewClose: {
+    position: 'absolute',
+    zIndex: 2,
+    top: 5,
+    right: 7,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  previewCloseText: { color: COLORS.muted, fontSize: 20, lineHeight: 21, fontWeight: '500' },
   chooserBackdrop: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
