@@ -78,23 +78,24 @@ function MediaCover({ item, playing }) {
   );
 }
 
-export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true, containerWidth }) {
+export default function MediaGallery({ media = [], onPressMedia, onPressImage, columns = 1, showAll = true, containerWidth }) {
   const { width: windowWidth } = useWindowDimensions();
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
   const toggleLive = useCallback((index, item) => {
+    const playable = item?.kind === 'video'
+      || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
+    if (!playable) {
+      if (onPressMedia) onPressMedia(item, index);
+      else onPressImage?.(item, index);
+      return;
+    }
     if (onPressMedia) {
       onPressMedia(item, index);
       return;
     }
-    const playable = item?.kind === 'video'
-      || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
-    if (!playable) {
-      onPressMedia?.(item, index);
-      return;
-    }
     setPlayingIndex((current) => (current === index ? -1 : index));
-  }, [onPressMedia]);
+  }, [onPressImage, onPressMedia]);
 
   if (!normalized.length) return null;
 
@@ -124,6 +125,8 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
             key={`${item.url}-${idx}`}
             style={renderStyle(idx, isLast)}
             onPress={() => toggleLive(idx, item)}
+            accessibilityRole="button"
+            accessibilityLabel={item.kind === 'video' ? '播放视频' : (item.kind === 'live' ? '播放实况' : '查看照片')}
           >
             <MediaCover item={item} playing={playingIndex === idx} />
           </Pressable>
