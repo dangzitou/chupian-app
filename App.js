@@ -22,6 +22,7 @@ import NotificationsScreen from './src/screens/NotificationsScreen';
 import BlockedAuthorsScreen from './src/screens/BlockedAuthorsScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import AppTabBar from './src/components/AppTabBar';
+import AppErrorBoundary from './src/components/AppErrorBoundary';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -131,48 +132,50 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={styles.viewport}>
-        <View style={styles.mobileShell}>
-          <NavigationContainer linking={linking}>
-            <Tab.Navigator
-              initialRouteName={APP_ROUTES.MAP}
-              screenOptions={{
-                headerShown: false,
-                tabBar: (props) => <AppTabBar {...props} />,
-              }}
-            >
-              <Tab.Screen
-                name={APP_ROUTES.MAP}
-                component={MapStack}
-                options={{
-                  tabBarLabel: '首页',
+      <AppErrorBoundary>
+        <View style={styles.viewport}>
+          <View style={styles.mobileShell}>
+            <NavigationContainer linking={linking}>
+              <Tab.Navigator
+                initialRouteName={APP_ROUTES.MAP}
+                screenOptions={{
+                  headerShown: false,
+                  tabBar: (props) => <AppTabBar {...props} />,
                 }}
-              />
-              <Tab.Screen
-                name={APP_ROUTES.DISCOVERY}
-                component={DiscoveryStack}
-                options={{
-                  tabBarLabel: '发现',
-                }}
-              />
-              <Tab.Screen
-                name={APP_ROUTES.CREATE}
-                component={CreateStack}
-                options={{
-                  tabBarLabel: '发布',
-                }}
-              />
-              <Tab.Screen
-                name={APP_ROUTES.PROFILE}
-                component={ProfileStack}
-                options={{
-                  tabBarLabel: '我的',
-                }}
-              />
-            </Tab.Navigator>
-          </NavigationContainer>
+              >
+                <Tab.Screen
+                  name={APP_ROUTES.MAP}
+                  component={MapStack}
+                  options={{
+                    tabBarLabel: '首页',
+                  }}
+                />
+                <Tab.Screen
+                  name={APP_ROUTES.DISCOVERY}
+                  component={DiscoveryStack}
+                  options={{
+                    tabBarLabel: '发现',
+                  }}
+                />
+                <Tab.Screen
+                  name={APP_ROUTES.CREATE}
+                  component={CreateStack}
+                  options={{
+                    tabBarLabel: '发布',
+                  }}
+                />
+                <Tab.Screen
+                  name={APP_ROUTES.PROFILE}
+                  component={ProfileStack}
+                  options={{
+                    tabBarLabel: '我的',
+                  }}
+                />
+              </Tab.Navigator>
+            </NavigationContainer>
+          </View>
         </View>
-      </View>
+      </AppErrorBoundary>
       <StatusBar style="dark" />
     </SafeAreaProvider>
   );
