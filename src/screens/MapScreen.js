@@ -229,6 +229,19 @@ export default function MapScreen({ navigation, route }) {
           }
           .map-pin-post { background: #d93657; }
           .map-pin-spot { background: #263b50; }
+          .map-cluster {
+            width: 36px;
+            height: 36px;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            color: #fff;
+            background: #d93657;
+            box-shadow: 0 2px 9px rgba(20, 28, 38, 0.28);
+            font-size: 12px;
+            font-weight: 800;
+          }
           .leaflet-control-attribution {
             font-size: 9px;
             opacity: 0.72;
@@ -447,7 +460,7 @@ export default function MapScreen({ navigation, route }) {
                 emit({ type: 'openSpot', spotId: String(target.id) });
               };
 
-              markers.forEach((item) => {
+              const addSingleMarker = (item) => {
                 if (!item) return;
                 const markerIcon = L.divIcon({
                   className: '',
@@ -467,6 +480,39 @@ export default function MapScreen({ navigation, route }) {
                 });
                 marker.on('popupopen', () => {
                   window.__activeSpot = item;
+                });
+              };
+
+              const clusterSize = 0.0025;
+              const groupedMarkers = new Map();
+              markers.forEach((item) => {
+                if (!item) return;
+                const key = String(Math.floor(Number(item.lat) / clusterSize))
+                  + ':'
+                  + String(Math.floor(Number(item.lng) / clusterSize));
+                const group = groupedMarkers.get(key) || [];
+                group.push(item);
+                groupedMarkers.set(key, group);
+              });
+              groupedMarkers.forEach((group) => {
+                if (group.length === 1) {
+                  addSingleMarker(group[0]);
+                  return;
+                }
+                const center = group.reduce((sum, item) => ({
+                  lat: sum.lat + Number(item.lat) / group.length,
+                  lng: sum.lng + Number(item.lng) / group.length,
+                }), { lat: 0, lng: 0 });
+                const clusterIcon = L.divIcon({
+                  className: '',
+                  html: '<div class="map-cluster">' + group.length + '</div>',
+                  iconSize: [42, 42],
+                  iconAnchor: [21, 21],
+                });
+                const clusterMarker = L.marker([center.lat, center.lng], { icon: clusterIcon, title: group.length + ' 个出片点' })
+                  .addTo(map);
+                clusterMarker.on('click', () => {
+                  map.setView([center.lat, center.lng], Math.min(map.getZoom() + 2, 18), { animate: true });
                 });
               });
             }
