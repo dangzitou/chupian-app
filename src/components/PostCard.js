@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
 import MediaGallery from './MediaGallery';
+import ShotMetaPanel from './ShotMetaPanel';
 import { formatRelativeTime } from '../utils/time';
 
 function AuthorAvatar({ name }) {
@@ -103,6 +104,8 @@ function PostCard({
             ))}
           </View>
         ) : null}
+
+        <ShotMetaPanel post={post} compact />
 
         {subtitle ? <Text style={styles.subStat}>{subtitle}</Text> : null}
 
