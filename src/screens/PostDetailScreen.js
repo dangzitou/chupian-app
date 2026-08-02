@@ -14,7 +14,7 @@ import { COLORS } from '../config';
 import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
 import VideoSurface from '../components/VideoSurface';
-import { toShotParamPairs } from '../utils/postCodec';
+import ShotMetaPanel from '../components/ShotMetaPanel';
 import { formatCompactDate } from '../utils/time';
 
 export default function PostDetailScreen({ route }) {
@@ -145,8 +145,6 @@ export default function PostDetailScreen({ route }) {
     return <SafeAreaView style={styles.center}><Text style={styles.err}>{error || '内容不存在'}</Text></SafeAreaView>;
   }
 
-  const shootRows = toShotParamPairs(post).map(([k, v]) => [k, v || '未填写']);
-
   const renderVideo = (item, idx) => {
     if (!item.url) return null;
     if (item.kind !== 'video') return null;
@@ -162,10 +160,22 @@ export default function PostDetailScreen({ route }) {
       <ScrollView contentContainerStyle={styles.body}>
         <MediaGallery media={post.media || []} showAll columns={1} />
         <View style={styles.contentCard}>
+          <View style={styles.authorRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{(post.author || '匿名拍友').slice(0, 2)}</Text>
+            </View>
+            <View style={styles.authorMeta}>
+              <Text style={styles.authorLine}>
+                {post.author || '匿名拍友'}
+              </Text>
+              <Text style={styles.postMeta}>
+                {(post.authorBio ? `${post.authorBio} · ` : '') + formatCompactDate(post.createdAt)}
+              </Text>
+            </View>
+            <Pressable style={styles.followBtn}><Text style={styles.followText}>关注</Text></Pressable>
+          </View>
+
           <Text style={styles.title}>{post.title}</Text>
-          <Text style={styles.authorLine}>
-            {post.author || '匿名拍友'} · {post.authorBio ? `${post.authorBio} · ` : ''}{formatCompactDate(post.createdAt)}
-          </Text>
 
           <View style={styles.tags}>
             {(post.styles || []).map((item) => <Text key={item} style={styles.tag}>#{item}</Text>)}
@@ -176,16 +186,7 @@ export default function PostDetailScreen({ route }) {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>参数卡片</Text>
-            {(shootRows.length === 0) ? (
-              <Text style={styles.note}>博主未填写拍摄参数。</Text>
-            ) : (
-              shootRows.map(([k, v]) => (
-                <View key={k} style={styles.rowItem}>
-                  <Text style={styles.rowKey}>{k}</Text>
-                  <Text style={styles.rowVal}>{v}</Text>
-                </View>
-              ))
-            )}
+            <ShotMetaPanel post={post} fallback="博主未填写拍摄参数。" />
           </View>
 
           {post.media?.some((m) => m.kind === 'video') ? (
@@ -255,8 +256,36 @@ const styles = StyleSheet.create({
   err: { color: '#a34a2a' },
   body: { paddingBottom: 40 },
   contentCard: { padding: 14 },
-  title: { fontSize: 22, color: COLORS.ink, fontWeight: '700', lineHeight: 30 },
-  authorLine: { fontSize: 12.5, color: COLORS.muted, marginTop: 6 },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accentBg,
+  },
+  avatarText: {
+    color: COLORS.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  authorMeta: { flex: 1 },
+  title: { fontSize: 24, color: COLORS.ink, fontWeight: '700', lineHeight: 32 },
+  authorLine: { fontSize: 13.5, color: COLORS.ink, fontWeight: '700' },
+  postMeta: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
+  followBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.accentBg,
+  },
+  followText: { color: COLORS.accent, fontSize: 11.5, fontWeight: '700' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   tag: {
     fontSize: 11.5,
@@ -269,9 +298,6 @@ const styles = StyleSheet.create({
   contentText: { fontSize: 14.5, color: COLORS.ink, marginTop: 12, lineHeight: 22 },
   section: { marginTop: 14 },
   sectionTitle: { fontSize: 16, color: COLORS.ink, fontWeight: '700' },
-  rowItem: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  rowKey: { color: COLORS.muted, fontSize: 13 },
-  rowVal: { color: COLORS.ink, fontSize: 13, maxWidth: '65%', textAlign: 'right' },
   note: { marginTop: 8, color: COLORS.muted, fontSize: 13 },
   videoCard: { marginTop: 8, borderRadius: 10, overflow: 'hidden' },
   video: { width: '100%', height: 240, backgroundColor: '#000' },
