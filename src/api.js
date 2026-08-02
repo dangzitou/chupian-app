@@ -1,4 +1,5 @@
-import { API_BASE, API_PREFIX, POST_FIELD_LIMIT } from './config';
+import { API_BASE, API_PREFIX } from './config';
+import { buildPostPayload, normalizePostShape } from './utils/postCodec';
 
 const getDefaultAuthor = () => {
   try {
@@ -30,75 +31,8 @@ async function request(path, options = {}) {
   return data;
 }
 
-function splitTags(raw) {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  return String(raw)
-    .split(/[,，/|#\s]+/)
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .slice(0, POST_FIELD_LIMIT.tags);
-}
-
 function toPostShape(item) {
-  const media = Array.isArray(item.media)
-    ? item.media
-    : (item.images || []).map((url) => ({ kind: 'image', url }));
-
-  const tags = splitTags(item.tags || item.topics);
-  const styles = splitTags(item.styles);
-  const angle = item.angle || item.direction || '';
-
-  return {
-    id: item.id,
-    title: item.title || '无标题',
-    content: item.content || '',
-    author: item.author || item.nickname || '匿名拍友',
-    authorBio: item.authorBio || '',
-    avatar: item.avatar || '',
-    spotId: item.spotId || item.locationId || '',
-    spotName: item.spotName || item.locationName || '',
-    district: item.district || '',
-    cover: item.cover || media?.[0]?.url || '',
-    media: media.map((m) => ({
-      kind: m.kind || (m.type === 'video' ? 'video' : 'image'),
-      url: m.url,
-      width: m.width || 0,
-      height: m.height || 0,
-      duration: m.duration || 0,
-      cover: m.cover || '',
-    })),
-    angle: angle || '',
-    direction: item.direction || '',
-    timeWindow: item.timeWindow || item.shotTime || '',
-    bestTime: item.bestTime || '',
-    shotAt: item.shotAt || item.shootTime || '',
-    gear: {
-      camera: item.gear?.camera || item.camera || '',
-      lens: item.gear?.lens || item.lens || '',
-      focal: item.gear?.focal || item.focalLength || '',
-      aperture: item.gear?.aperture || '',
-      shutter: item.gear?.shutter || '',
-      iso: item.gear?.iso || '',
-      whiteBalance: item.gear?.whiteBalance || '',
-    },
-    tags,
-    styles,
-    comments: Array.isArray(item.comments)
-      ? item.comments.map((c) => ({
-          id: c.id,
-          author: c.author || '匿名拍友',
-          text: c.text || c.content || '',
-          createdAt: c.createdAt || c.created_at || new Date().toISOString(),
-        }))
-      : [],
-    likes: Number(item.likes || item.likeCount || 0),
-    favorites: Number(item.favorites || item.favoriteCount || 0),
-    views: Number(item.views || item.viewCount || 0),
-    liked: Boolean(item.liked),
-    favorited: Boolean(item.favorited),
-    createdAt: item.createdAt || item.created_at || item.createdAtUTC || new Date().toISOString(),
-  };
+  return normalizePostShape(item);
 }
 
 async function safeRequestWithFallback(primaryPath, fallbackPath, options = {}) {
@@ -164,13 +98,7 @@ export const api = {
   },
 
   async createPost(body) {
-    const payload = {
-      ...body,
-      title: (body.title || '').slice(0, POST_FIELD_LIMIT.title),
-      content: (body.content || '').slice(0, POST_FIELD_LIMIT.content),
-      tags: splitTags(body.tags),
-      styles: splitTags(body.styles),
-    };
+    const payload = buildPostPayload(body);
     try {
       return await request(`${API_PREFIX}/posts`, {
         method: 'POST',
@@ -185,6 +113,7 @@ export const api = {
         body: JSON.stringify({
           title: payload.title,
           cover: mediaFirst,
+          media: payload.media,
           images: (payload.media || []).map((m) => m.url),
           content: payload.content,
           spotId,
