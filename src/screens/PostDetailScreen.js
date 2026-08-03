@@ -9,16 +9,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Video } from 'expo-av';
 import { api } from '../api';
 import { COLORS } from '../config';
 import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
-
-function formatTime(value) {
-  const text = String(value || '').replace('T', ' ');
-  return text.length > 16 ? text.slice(0, 16) : text;
-}
+import VideoSurface from '../components/VideoSurface';
+import { toShotParamPairs } from '../utils/postCodec';
+import { formatCompactDate } from '../utils/time';
 
 export default function PostDetailScreen({ route }) {
   const { postId } = route.params;
@@ -116,33 +113,14 @@ export default function PostDetailScreen({ route }) {
     return <SafeAreaView style={styles.center}><Text style={styles.err}>{error || '内容不存在'}</Text></SafeAreaView>;
   }
 
-  const gear = post.gear || {};
-  const shootRows = [
-    ['机位', post.angle || post.direction || '未填写'],
-    ['地点', post.spotName || post.spotId || '未填写'],
-    ['时间窗口', post.timeWindow || '未填写'],
-    ['时段', post.bestTime || '未填写'],
-    ['相机', gear.camera || '未填写'],
-    ['镜头', gear.lens || '未填写'],
-    ['焦距', gear.focal || '未填写'],
-    ['光圈', gear.aperture || '未填写'],
-    ['快门', gear.shutter || '未填写'],
-    ['ISO', gear.iso || '未填写'],
-    ['白平衡', gear.whiteBalance || '未填写'],
-  ].filter(([, value]) => value);
+  const shootRows = toShotParamPairs(post).map(([k, v]) => [k, v || '未填写']);
 
   const renderVideo = (item, idx) => {
     if (!item.url) return null;
     if (item.kind !== 'video') return null;
     return (
       <View key={`${item.url}-${idx}`} style={styles.videoCard}>
-        <Video
-          style={styles.video}
-          source={{ uri: item.url }}
-          useNativeControls
-          shouldPlay={false}
-          resizeMode="contain"
-        />
+        <VideoSurface uri={item.url} style={styles.video} />
       </View>
     );
   };
@@ -154,7 +132,7 @@ export default function PostDetailScreen({ route }) {
         <View style={styles.contentCard}>
           <Text style={styles.title}>{post.title}</Text>
           <Text style={styles.authorLine}>
-            {post.author || '匿名拍友'} · {post.authorBio ? `${post.authorBio} · ` : ''}{formatTime(post.createdAt)}
+            {post.author || '匿名拍友'} · {post.authorBio ? `${post.authorBio} · ` : ''}{formatCompactDate(post.createdAt)}
           </Text>
 
           <View style={styles.tags}>
@@ -202,7 +180,7 @@ export default function PostDetailScreen({ route }) {
             <View key={item.id} style={styles.commentCard}>
               <Text style={styles.commentAuthor}>{item.author}</Text>
               <Text style={styles.commentText}>{item.text}</Text>
-              <Text style={styles.commentTime}>{formatTime(item.createdAt)}</Text>
+            <Text style={styles.commentTime}>{formatCompactDate(item.createdAt)}</Text>
             </View>
           ))}
 

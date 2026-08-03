@@ -1,7 +1,7 @@
 import React from 'react';
 import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Video } from 'expo-av';
 import { COLORS } from '../config';
+import VideoSurface from './VideoSurface';
 
 const COL_GAP = 6;
 const CARD_WIDTH = Dimensions.get('window').width;
@@ -17,13 +17,7 @@ function MediaCover({ item }) {
   if (item.kind === 'video') {
     return (
       <View style={[styles.mediaWrap, styles.videoWrap]}>
-        <Video
-          source={{ uri: item.url }}
-          style={videoStyle}
-          useNativeControls
-          resizeMode="cover"
-          shouldPlay={false}
-        />
+        <VideoSurface uri={item.url} style={videoStyle} />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
