@@ -51,6 +51,9 @@ export default function SpotsScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.title}>出片点位</Text>
         <Text style={styles.subtitle}>{filtered.length} 个地点 · 广州</Text>
+        <Pressable style={styles.mapBtn} onPress={() => navigation.navigate('Map')}>
+          <Text style={styles.mapBtnText}>🗺️ 打开地图</Text>
+        </Pressable>
       </View>
 
       <View style={styles.filterRow}>
@@ -91,8 +94,8 @@ export default function SpotsScreen({ navigation }) {
         renderItem={({ item }) => (
           <Pressable
             style={styles.card}
-            onPress={() => navigation.navigate('SpotDetail', { spotId: item.id, name: item.name })}
-          >
+              onPress={() => navigation.navigate('SpotDetail', { spotId: item.id, name: item.name })}
+            >
             <Image source={{ uri: item.cover }} style={styles.cover} />
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>{item.name}</Text>
@@ -120,6 +123,17 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   title: { fontSize: 24, fontWeight: '700', color: COLORS.ink, letterSpacing: -0.5 },
   subtitle: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
+  mapBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.accentBg,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  mapBtnText: { fontSize: 12.5, color: COLORS.accent, fontWeight: '600' },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingVertical: 5 },
   pill: {
     borderRadius: 999, borderWidth: 1, borderColor: COLORS.line,
