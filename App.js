@@ -10,6 +10,8 @@ import { COLORS } from './src/config';
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
 import PostDetailScreen from './src/screens/PostDetailScreen';
+import SpotDetailScreen from './src/screens/SpotDetailScreen';
+import SpotsScreen from './src/screens/SpotsScreen';
 import NewPostScreen from './src/screens/NewPostScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
@@ -29,6 +31,16 @@ function HomeStack() {
       <Stack.Screen name="PostsList" component={PostsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={({ route }) => ({ title: route.params?.title || '作品详情' })} />
       <Stack.Screen name="NewPost" component={NewPostScreen} options={{ title: '发布出片' }} />
+    </Stack.Navigator>
+  );
+}
+
+function MapStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: COLORS.panel }, headerTintColor: COLORS.ink, headerTitleStyle: { fontWeight: '700' } }}>
+      <Stack.Screen name="SpotsList" component={SpotsScreen} options={{ title: '出片点位', headerShown: false }} />
+      <Stack.Screen name="SpotDetail" component={SpotDetailScreen} options={({ route }) => ({ title: route.params?.name || '点位详情' })} />
+      <Stack.Screen name="Map" component={MapScreen} options={{ title: '地图探索' }} />
     </Stack.Navigator>
   );
 }
@@ -77,7 +89,7 @@ export default function App() {
           initialRouteName="首页"
         >
           <Tab.Screen name="首页" component={HomeStack} />
-          <Tab.Screen name="地图" component={MapScreen} />
+          <Tab.Screen name="地图" component={MapStack} />
           <Tab.Screen name="发布" component={NewPostScreen} />
           <Tab.Screen name="我的" component={ProfileScreen} />
         </Tab.Navigator>
