@@ -355,12 +355,14 @@ async function createPostHandler(req, res) {
   const body = req.body || {};
   const title = safeText(body.title, 200);
   if (!title) return res.status(400).json({ error: "title required" });
-  
+  const media = Array.isArray(body.media) ? body.media : [];
+  if (!media.length) return res.status(400).json({ error: "media required" });
+
   const content = safeText(body.content, 3000);
+  if (!content) return res.status(400).json({ error: "content required" });
   const spotId = pickInt(body.spotId, 0);
   const spotName = safeText(body.spotName || "", 80);
   const district = safeText(body.district || "", 64);
-  const media = Array.isArray(body.media) ? body.media : [];
   const tags = normalizeList(body.tags || body.tag || "");
   const styles = normalizeList(body.styles || "");
   let shotAt = null;
@@ -371,10 +373,10 @@ async function createPostHandler(req, res) {
     }
   }
 
-  const result = await tx(async (conn) => {
-    const [postResult] = await conn.execute(
-      `INSERT INTO posts
-       (title, content, author_name, author_bio, spot_id, spot_name, district, direction, angle,
+    const result = await tx(async (conn) => {
+      const [postResult] = await conn.execute(
+        `INSERT INTO posts
+         (title, content, author_name, author_bio, spot_id, spot_name, district, direction, angle,
         time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
         media_type, cover_url, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
@@ -403,24 +405,31 @@ async function createPostHandler(req, res) {
       ]
     );
 
-    const postId = postResult.insertId;
-    for (let i = 0; i < media.length; i += 1) {
-      const item = media[i] || {};
-      await conn.execute(
-        `INSERT INTO post_media (post_id, kind, url, cover_url, width, height, duration, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      const postId = postResult.insertId;
+      let acceptedMedia = 0;
+      for (let i = 0; i < media.length; i += 1) {
+        const item = media[i] || {};
+        const url = safeText(item.url || "", 500);
+        if (!url) continue;
+        acceptedMedia += 1;
+        await conn.execute(
+          `INSERT INTO post_media (post_id, kind, url, cover_url, width, height, duration, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           postId,
           String(item.kind || "image").slice(0, 12),
-          safeText(item.url || "", 500),
+          url,
           safeText(item.cover || "", 500),
           Number(item.width || 0),
           Number(item.height || 0),
           Number(item.duration || 0),
           i,
         ]
-      );
-    }
+        );
+      }
+      if (acceptedMedia === 0) {
+        throw Object.assign(new Error("media required"), { status: 400 });
+      }
 
     for (const t of tags) {
       if (!t) continue;
@@ -500,6 +509,9 @@ async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
 }
 
 function createErrorHandler(err, _req, res, _next) {
+  if (Number.isInteger(err?.status)) {
+    return res.status(err.status).json({ error: err.message || "bad request" });
+  }
   if (err?.message === "Unsupported file type") {
     return res.status(415).json({ error: "Unsupported file type" });
   }
