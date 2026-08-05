@@ -15,8 +15,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Device from 'expo-device';
 import { api } from '../api';
 import { COLORS, MEDIA_KINDS, TIME_LABELS } from '../config';
+import { splitTags } from '../utils/postCodec';
 
 function field(label, placeholder, value, onChange, opts = {}) {
+  const lengthTip = opts.maxLength ? `${value.length}/${opts.maxLength}` : '';
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -30,6 +32,7 @@ function field(label, placeholder, value, onChange, opts = {}) {
         numberOfLines={opts.numberOfLines || 1}
         maxLength={opts.maxLength}
       />
+      {opts.maxLength ? <Text style={styles.lengthHint}>{lengthTip}</Text> : null}
     </View>
   );
 }
@@ -165,14 +168,33 @@ export default function NewPostScreen({ navigation }) {
     ].slice(0, 6));
   }, [mediaList.length]);
 
+  const toggleLiveMode = useCallback(() => {
+    setIsLiveMode((current) => {
+      const next = !current;
+      if (!next) {
+        setMediaList((prev) => prev.filter((m) => m.kind !== MEDIA_KINDS.LIVE));
+      } else {
+        addLivePhoto();
+      }
+      return next;
+    });
+  }, [addLivePhoto]);
+
   const removeMedia = useCallback((idx) => {
     setMediaList((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
   const publish = useCallback(async () => {
-    if (!title.trim()) return Alert.alert('提示', '标题不能为空');
-    if (!content.trim()) return Alert.alert('提示', '正文不能为空');
+    const trimTitle = title.trim();
+    const trimContent = content.trim();
+    if (!trimTitle) return Alert.alert('提示', '标题不能为空');
+    if (!trimContent) return Alert.alert('提示', '正文不能为空');
     if (!mediaList.length) return Alert.alert('提示', '至少上传一张图片/视频');
+    if (trimTitle.length > 90) return Alert.alert('提示', '标题请控制在 90 字以内');
+    if (trimContent.length > 3000) return Alert.alert('提示', '正文请控制在 3000 字以内');
+    if ((splitTags(tags).length > 12) || (splitTags(stylesText).length > 12)) {
+      return Alert.alert('提示', '标签/风格各不超过 12 个');
+    }
 
     setSubmitting(true);
     try {
@@ -202,8 +224,8 @@ export default function NewPostScreen({ navigation }) {
       }
 
       const payload = {
-        title: title.trim(),
-        content: content.trim(),
+        title: trimTitle,
+        content: trimContent,
         spotId: selectedSpot?.id || spotId || '',
         spotName: selectedSpot?.name || spotName || '',
         district: selectedSpot?.district || district || '',
@@ -221,8 +243,8 @@ export default function NewPostScreen({ navigation }) {
         shutter: shutter.trim(),
         iso: iso.trim(),
         whiteBalance: whiteBalance.trim(),
-        styles: stylesText.split(/[,，/|]/).map((t) => t.trim()).filter(Boolean),
-        tags: tags.split(/[,，/|#]/).map((t) => t.trim()).filter(Boolean),
+        styles: splitTags(stylesText),
+        tags: splitTags(tags),
         author: author.trim() || '匿名拍友',
         authorBio: authorBio.trim(),
       };
@@ -267,7 +289,7 @@ export default function NewPostScreen({ navigation }) {
         <Text style={styles.title}>发布出片</Text>
         <Text style={styles.subtitle}>拍照参数、实况内容和短视频都可以上传，形成完整出片帖</Text>
 
-        {field('标题 *', '例如：海珠夜景｜广州塔', title, setTitle, { maxLength: 80 })}
+        {field('标题 *', '例如：海珠夜景｜广州塔', title, setTitle, { maxLength: 90 })}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>出片位置</Text>
@@ -350,7 +372,7 @@ export default function NewPostScreen({ navigation }) {
           {field('白平衡', '日光/阴天/人工/钨丝灯', whiteBalance, setWhiteBalance, { maxLength: 20 })}
         </View>
 
-        {field('正文 *', '描述构图、位置、拍摄流程、注意事项', content, setContent, { multiline: true, maxLength: 5000 })}
+        {field('正文 *', '描述构图、位置、拍摄流程、注意事项', content, setContent, { multiline: true, maxLength: 3000 })}
         {field('标签', '夜景, 城市, 人像', tags, setTags)}
         {field('风格', '蓝调, 霓虹, 人文', stylesText, setStylesText)}
 
@@ -362,7 +384,7 @@ export default function NewPostScreen({ navigation }) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>素材</Text>
-          <Text style={styles.muted}>支持图片、视频和实况类型，最多 6 张/段，建议单条素材 <= 40s 视频</Text>
+          <Text style={styles.muted}>支持图片、视频和实况类型，最多 6 张/段，建议单条素材不超过 40s 视频</Text>
           <View style={styles.mediaActions}>
             <Pressable style={styles.mediaBtn} onPress={pickFromLibrary}>
               <Text style={styles.mediaBtnText}>从相册</Text>
@@ -372,10 +394,7 @@ export default function NewPostScreen({ navigation }) {
             </Pressable>
             <Pressable
               style={[styles.mediaBtn, isLiveMode && styles.mediaBtnActive]}
-              onPress={() => {
-                setIsLiveMode((v) => !v);
-                addLivePhoto();
-              }}
+              onPress={toggleLiveMode}
             >
               <Text style={styles.mediaBtnText}>实况</Text>
             </Pressable>
@@ -415,6 +434,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.ink,
     padding: 11,
+  },
+  lengthHint: {
+    color: COLORS.muted,
+    fontSize: 11,
+    marginTop: 5,
+    alignSelf: 'flex-end',
   },
   multiline: { minHeight: 110, textAlignVertical: 'top' },
   section: { marginTop: 10 },
