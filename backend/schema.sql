@@ -122,3 +122,11 @@ CREATE TABLE IF NOT EXISTS post_styles (
   PRIMARY KEY (post_id, style),
   INDEX idx_post_styles_style (style)
 ) ENGINE=InnoDB;
+
+ALTER TABLE posts
+  ADD INDEX IF NOT EXISTS idx_posts_status_created_id (status, created_at, id),
+  ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id),
+  ADD INDEX IF NOT EXISTS idx_posts_status_favorites (status, stats_favorites, created_at, id);
+
+ALTER TABLE post_comments
+  ADD INDEX IF NOT EXISTS idx_comment_post_created_id (post_id, created_at, id);
