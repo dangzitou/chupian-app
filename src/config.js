@@ -24,7 +24,7 @@ export const MEDIA_KINDS = {
 
 export const POST_FIELD_LIMIT = {
   title: 90,
-  content: 4000,
+  content: 3000,
   tag: 24,
   tags: 12,
 };
