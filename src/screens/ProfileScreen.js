@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
-import { COLORS } from '../config';
+import { API_BASE, COLORS } from '../config';
 
 export default function ProfileScreen() {
   const [weather, setWeather] = useState(null);
@@ -55,7 +55,13 @@ export default function ProfileScreen() {
         )}
 
         <View style={styles.menuCard}>
-          <Pressable style={styles.menuItem} onPress={() => Linking.openURL('http://42.194.251.188/')}>
+          <Pressable
+            style={styles.menuItem}
+            onPress={() => {
+              const target = `${API_BASE.replace(/\/?$/, '')}/`;
+              Linking.openURL(target);
+            }}
+          >
             <Text style={styles.menuText}>🌐 网页版（完整功能）</Text>
           </Pressable>
           <Pressable style={styles.menuItem} onPress={() => Linking.openURL('https://www.openstreetmap.org/copyright')}>

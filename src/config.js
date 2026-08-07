@@ -1,6 +1,16 @@
-// API 配置：手机通过公网 IP 访问后端
-// 局域网调试可改为 http://10.1.0.12:80
-export const API_BASE = 'http://42.194.251.188:80';
+// API 配置：支持环境变量自定义后端地址（优先级高）
+// 1) EXPO_PUBLIC_API_BASE（推荐，发布时可直接注入）
+// 2) API_BASE（兼容历史变量）
+// 3) 线上默认地址
+const resolveApiBase = () => {
+  const raw =
+    (typeof process !== "undefined" && process.env.EXPO_PUBLIC_API_BASE) ||
+    (typeof process !== "undefined" && process.env.API_BASE) ||
+    "http://42.194.251.188";
+  return String(raw).replace(/\/+$/, "");
+};
+
+export const API_BASE = resolveApiBase();
 
 export const COLORS = {
   bg: '#f4efe7',
