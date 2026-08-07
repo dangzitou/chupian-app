@@ -6,7 +6,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from './src/config';
-import { Ionicons } from '@expo/vector-icons';
 
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
@@ -18,10 +17,10 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const icons = {
-  首页: { icon: 'albums-outline', active: 'albums' },
-  地图: { icon: 'location-outline', active: 'location' },
-  发布: { icon: 'add-circle-outline', active: 'add-circle' },
-  我的: { icon: 'person-outline', active: 'person' },
+  首页: { icon: '🏠', active: '🏠' },
+  地图: { icon: '🗺️', active: '🗺️' },
+  发布: { icon: '+', active: '＋' },
+  我的: { icon: '👤', active: '👤' },
 };
 
 function HomeStack() {
@@ -56,11 +55,9 @@ function RedBookTabBar({ state, descriptors, navigation }) {
             android_ripple={{ color: '#ddd', borderless: false }}
           >
             <View style={[styles.tabInner, activeStyle && styles.tabInnerActive, label === '发布' && styles.plusCircle]}>
-              <Ionicons
-                name={iconName}
-                size={label === '发布' ? 30 : 20}
-                color={activeStyle ? COLORS.accent : COLORS.muted}
-              />
+              <Text style={[styles.tabIcon, activeStyle && styles.tabIconActive]}>
+                {iconName}
+              </Text>
             </View>
             <Text style={[styles.tabText, activeStyle && styles.tabTextActive]}>{label}</Text>
           </Pressable>
