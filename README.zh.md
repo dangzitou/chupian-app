@@ -8,8 +8,6 @@
 - 内嵌网页版地图（WebView）
 - 天气卡片 + 统计面板
 
-🌐 语言： [中文 README](README.zh.md) · [English README](README.en.md)
-
 ## 本地运行
 
 ```bash
@@ -39,6 +37,17 @@ npm run start
 2. `API_BASE`
 3. 内置默认地址（用于开发回退）
 
+## 与后端联调
+
+推荐后端保持与 `chupian-map/server.py` 同源接口，不变更以下路径：
+
+- `GET /api/spots`
+- `GET /api/posts`
+- `POST /api/posts`
+- `POST /api/posts/{id}/like`
+- `POST /api/posts/{id}/comment`
+- `GET /api/weather`
+
 ## 项目结构
 
 ```text
@@ -53,18 +62,12 @@ chupian-app/
 └── app.json                # Expo 配置
 ```
 
-## 与后端协同
-
-推荐后端保持与 `chupian-map/server.py` 同源接口，不变更以下路径：
-
-- `GET /api/spots`
-- `GET /api/posts`
-- `POST /api/posts`
-- `POST /api/posts/{id}/like`
-- `POST /api/posts/{id}/comment`
-- `GET /api/weather`
-
 ## 说明
 
 - 本项目当前状态为 `App v0.1`
 - 目标是“可上线的 MVP”，后续建议补充登录态、图片上传、离线缓存与推送。
+
+## 语言
+
+- 中文：`README.zh.md`
+- English：`README.en.md`（本仓库对应英文）
