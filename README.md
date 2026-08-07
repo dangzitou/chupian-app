@@ -8,7 +8,7 @@
 - 内嵌网页版地图（WebView）
 - 天气卡片 + 统计面板
 
-🌐 语言： [中文 README](README.zh.md) · [English README](README.en.md)
+🌐 语言： [中文 README](README.md) · [English README](README.en.md)
 
 ## 本地运行
 

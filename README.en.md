@@ -10,7 +10,7 @@ Features:
 - Embedded web map (WebView)
 - Weather cards + statistics panel
 
-🌐 Languages: [中文 README](README.zh.md) · [English README](README.en.md)
+🌐 Languages: [中文 README](README.md) · [English README](README.en.md)
 
 ## Run locally
 
