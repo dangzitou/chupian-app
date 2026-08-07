@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: chupian-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: chupian
+      MYSQL_USER: chupian
+      MYSQL_PASSWORD: chupian_pwd
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 8s
+      timeout: 4s
+      retries: 8
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: chupian-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 8s
+      timeout: 4s
+      retries: 8
+      start_period: 10s
+
+  backend:
+    build:
+      context: ../backend
+    container_name: chupian-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: chupian
+      MYSQL_PASSWORD: chupian_pwd
+      MYSQL_DATABASE: chupian
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: "http://localhost"
+      SPOT_CACHE_TTL: 90
+      MAX_FEED_LIMIT: 40
+    volumes:
+      - backend_uploads:/app/uploads
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    container_name: chupian-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "3001"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: chupian-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - web
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  mysql_data:
+  backend_uploads:
