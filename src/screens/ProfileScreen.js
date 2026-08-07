@@ -15,9 +15,13 @@ export default function ProfileScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [w, p, s] = await Promise.all([api.weather(), api.posts(), api.spots()]);
+        const [w, p, s] = await Promise.all([api.weather(), api.feed({ limit: 1 }), api.spots()]);
         setWeather(w);
-        setStats({ posts: p.total || 0, authors: p.stats?.authors || 0, totalLikes: p.stats?.totalLikes || 0 });
+        setStats({
+          posts: p.total || 0,
+          authors: (p.stats && p.stats.authors) || 0,
+          totalLikes: (p.stats && p.stats.totalLikes) || 0,
+        });
         setSpotCount((s.spots || []).length);
       } catch (e) { /* ignore */ } finally {
         setLoading(false);
@@ -40,7 +44,7 @@ export default function ProfileScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statBox}><Text style={styles.statNum}>{spotCount}</Text><Text style={styles.statLabel}>点位</Text></View>
           <View style={styles.statBox}><Text style={styles.statNum}>{stats.posts}</Text><Text style={styles.statLabel}>攻略</Text></View>
-          <View style={styles.statBox}><Text style={styles.statNum}>{stats.authors}</Text><Text style={styles.statLabel}>博主</Text></View>
+          <View style={styles.statBox}><Text style={styles.statNum}>{stats.authors}</Text><Text style={styles.statLabel}>参与</Text></View>
           <View style={styles.statBox}><Text style={styles.statNum}>{stats.totalLikes}</Text><Text style={styles.statLabel}>点赞</Text></View>
         </View>
 
