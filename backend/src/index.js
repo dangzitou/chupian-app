@@ -1636,6 +1636,29 @@ app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res
 }));
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
+app.delete("/api/v1/posts/:id", asyncHandler(async (req, res) => {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return res.status(400).json({ error: "invalid post id" });
+  }
+
+  const actor = readActorId(req, req.body || {});
+  const [result] = await query(
+    "UPDATE posts SET status = 'archived' WHERE id = ? AND author_id = ? AND status = 'published'",
+    [postId, actor],
+  );
+  if (result.affectedRows !== 1) {
+    const rows = await query("SELECT author_id, status FROM posts WHERE id = ? LIMIT 1", [postId]);
+    if (!rows.length) return res.status(404).json({ error: "post not found" });
+    if (String(rows[0].author_id || '') !== String(actor)) {
+      return res.status(403).json({ error: "only the author can archive this post" });
+    }
+    return res.status(409).json({ error: "post is not publicly published" });
+  }
+
+  await invalidatePostCaches(postId);
+  return res.json({ ok: true, postId, status: "archived" });
+}));
 app.get("/api/v1/posts/:id/comments", asyncHandler(async (req, res) => {
   const payload = await getPostCommentsPayload(req);
   return res.json(payload);
