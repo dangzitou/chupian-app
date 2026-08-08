@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS spots (
   styles JSON DEFAULT ('[]'),
   description TEXT,
   cover VARCHAR(500) DEFAULT '',
+  INDEX idx_spots_lat_lng (latitude, longitude),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS posts (
   INDEX idx_posts_created (created_at, id),
   INDEX idx_posts_spot (spot_id),
   INDEX idx_posts_shot_at (shot_at),
+  INDEX idx_posts_status_lat_lng (status, latitude, longitude, created_at, id),
   CONSTRAINT fk_posts_spot FOREIGN KEY (spot_id) REFERENCES spots (id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

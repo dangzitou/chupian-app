@@ -413,6 +413,25 @@ export const api = {
     );
   },
 
+  async mapData({ latitude, longitude, radiusKm = 35, limit = 60 } = {}) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return { spots: [], posts: [] };
+    }
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+      radius: String(Math.min(Math.max(Number(radiusKm) || 35, 1), 50)),
+      limit: String(Math.min(Math.max(Number(limit) || 60, 1), 80)),
+    }).toString();
+    return safeRequestWithFallback(
+      `${API_PREFIX}/map?${params}`,
+      `/api/map?${params}`,
+      { cacheTtl: 15_000 },
+    );
+  },
+
   async feed(params = {}) {
     const queryString = buildFeedQuery({
       q: params.q,

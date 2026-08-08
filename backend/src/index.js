@@ -853,6 +853,7 @@ async function fetchDiscoverySignals(limit = 20) {
 async function invalidateAllPostsCaches() {
   await cacheDel("post:detail:*");
   await cacheDel("feed:*");
+  await cacheDel("map:v1:*");
 }
 
 async function invalidatePostCaches(postId) {
@@ -900,6 +901,7 @@ async function ensurePostsSchemaCompatibility() {
       ["idx_posts_district", "INDEX idx_posts_district (district)"],
       ["idx_posts_best_time", "INDEX idx_posts_best_time (best_time)"],
       ["idx_posts_shot_at", "INDEX idx_posts_shot_at (shot_at)"],
+      ["idx_posts_status_lat_lng", "INDEX idx_posts_status_lat_lng (status, latitude, longitude, created_at, id)"],
       ["idx_posts_status_hot", "INDEX idx_posts_status_hot (status, stats_likes, created_at, id)"],
       ["idx_posts_status_favorites", "INDEX idx_posts_status_favorites (status, stats_favorites, created_at, id)"],
       ["ft_posts_search", "FULLTEXT INDEX ft_posts_search (title, content, spot_name, district)"],
@@ -912,6 +914,17 @@ async function ensurePostsSchemaCompatibility() {
     }
   } catch (err) {
     console.warn(`[schema] ensurePostsSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
+async function ensureMapSchemaCompatibility() {
+  try {
+    const existing = await query("SHOW INDEX FROM spots WHERE Key_name = ?", ["idx_spots_lat_lng"]);
+    if (!Array.isArray(existing) || existing.length === 0) {
+      await query("ALTER TABLE spots ADD INDEX idx_spots_lat_lng (latitude, longitude)");
+    }
+  } catch (err) {
+    console.warn(`[schema] ensureMapSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
   }
 }
 
@@ -1883,8 +1896,102 @@ async function spotsHandler(_req, res) {
   return res.json(payload);
 }
 
+function mapDistanceKm(lat1, lng1, lat2, lng2) {
+  const toRadians = (value) => (Number(value) * Math.PI) / 180;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const originLat = toRadians(lat1);
+  const targetLat = toRadians(lat2);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(originLat) * Math.cos(targetLat) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(1 - a, 0)));
+}
+
+async function mapHandler(req, res) {
+  const latitude = pickFloat(req.query.lat, null, { min: -90, max: 90 });
+  const longitude = pickFloat(req.query.lng, null, { min: -180, max: 180 });
+  if (latitude === null || longitude === null) {
+    return res.status(400).json({ error: "valid lat and lng are required" });
+  }
+
+  const radiusKm = pickFloat(req.query.radius, 35, { min: 1, max: 50 });
+  const limit = pickInt(req.query.limit, 60, { min: 1, max: 80 });
+  const cacheKey = `map:v1:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm}:${limit}`;
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+
+  const latitudeDelta = radiusKm / 110.574;
+  const longitudeDelta = radiusKm / (111.320 * Math.max(Math.abs(Math.cos((latitude * Math.PI) / 180)), 0.15));
+  const minLatitude = Math.max(-90, latitude - latitudeDelta);
+  const maxLatitude = Math.min(90, latitude + latitudeDelta);
+  const minLongitude = Math.max(-180, longitude - longitudeDelta);
+  const maxLongitude = Math.min(180, longitude + longitudeDelta);
+  const candidateLimit = Math.min(limit * 3, 240);
+
+  const [spotRows, postRows] = await Promise.all([
+    query(
+      `SELECT id, name, district, latitude, longitude
+       FROM spots
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+         AND latitude BETWEEN ? AND ?
+         AND longitude BETWEEN ? AND ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT ?`,
+      [minLatitude, maxLatitude, minLongitude, maxLongitude, candidateLimit]
+    ),
+    query(
+      `SELECT id, title, spot_name, district, latitude, longitude, cover_url, created_at
+       FROM posts
+       WHERE status = 'published'
+         AND latitude IS NOT NULL AND longitude IS NOT NULL
+         AND latitude BETWEEN ? AND ?
+         AND longitude BETWEEN ? AND ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`,
+      [minLatitude, maxLatitude, minLongitude, maxLongitude, candidateLimit]
+    ),
+  ]);
+
+  const toMarker = (row, type) => {
+    const lat = Number(row.latitude);
+    const lng = Number(row.longitude);
+    return {
+      id: String(row.id),
+      type,
+      name: type === "spot" ? String(row.name || "出片点位") : String(row.title || "出片帖子"),
+      spotName: String(row.spot_name || ""),
+      district: String(row.district || ""),
+      lat,
+      lng,
+      cover: String(row.cover_url || ""),
+      distanceKm: mapDistanceKm(latitude, longitude, lat, lng),
+    };
+  };
+  const withinRadius = (item) => Number.isFinite(item.distanceKm) && item.distanceKm <= radiusKm;
+  const spots = spotRows.map((row) => toMarker(row, "spot"))
+    .filter(withinRadius)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, limit)
+    .map(({ distanceKm: _distanceKm, ...marker }) => marker);
+  const posts = postRows.map((row) => toMarker(row, "post"))
+    .filter(withinRadius)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, limit)
+    .map(({ distanceKm: _distanceKm, ...marker }) => marker);
+  const payload = {
+    center: { lat: latitude, lng: longitude },
+    radiusKm,
+    spots,
+    posts,
+  };
+  await cacheSetJson(cacheKey, payload, 20);
+  return res.json(payload);
+}
+
 app.get("/api/v1/spots", asyncHandler(spotsHandler));
 app.get("/api/spots", asyncHandler(spotsHandler));
+app.get("/api/v1/map", asyncHandler(mapHandler));
+app.get("/api/map", asyncHandler(mapHandler));
 
 app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
@@ -2278,6 +2385,7 @@ app.delete("/api/v1/posts/:id", asyncHandler(async (req, res) => {
     return res.status(409).json({ error: "post is not publicly published" });
   }
 
+  await invalidateAllPostsCaches();
   await invalidatePostCaches(postId);
   return res.json({ ok: true, postId, status: "archived" });
 }));
@@ -2514,6 +2622,7 @@ app.post("/api/posts/:id/comments", asyncHandler(async (req, res) => {
 app.use(createErrorHandler);
 
 await ensurePostsSchemaCompatibility();
+await ensureMapSchemaCompatibility();
 await ensureFollowSchemaCompatibility();
 await ensureAuthSchemaCompatibility();
 await ensureNotificationSchemaCompatibility();
