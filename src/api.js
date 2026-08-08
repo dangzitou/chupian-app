@@ -633,15 +633,10 @@ export const api = {
       });
     }
 
-    try {
-      return await request(`${API_PREFIX}/media/upload`, {
-        method: 'POST',
-        headers: {},
-        body: form,
-      });
-    } catch (err) {
-      // backend 未接入上传时，直接透传 URI，前端仍可预览
-      return { ok: true, media: [{ kind, url: fileUri }] };
-    }
+    return request(`${API_PREFIX}/media/upload`, {
+      method: 'POST',
+      headers: {},
+      body: form,
+    });
   },
 };
