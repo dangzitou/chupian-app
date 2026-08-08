@@ -63,6 +63,10 @@ function shouldFallback(error) {
   return false;
 }
 
+function shouldFallbackWrite(error) {
+  return [404, 405, 410].includes(Number(error?.status));
+}
+
 async function doRequest(path, options = {}) {
   const {
     method: customMethod = 'GET',
@@ -411,7 +415,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       });
-    } catch (_err) {
+    } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
       return request(`/api/authors/${encoded}/follow`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -464,6 +469,7 @@ export const api = {
         body: JSON.stringify(payload),
       });
     } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
       // legacy interface compatibility
       const {
         spotId, spotName, district, latitude, longitude,
@@ -533,6 +539,7 @@ export const api = {
       }
       return fresh;
     } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
       const fresh = await request(`/api/posts/${id}/like`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -556,6 +563,7 @@ export const api = {
       }
       return fresh;
     } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
       // optional fallback: legacy endpoint
       const res = await request(`/api/posts/${id}/favorite`, {
         method: 'POST',
@@ -584,6 +592,7 @@ export const api = {
       clearNetworkCaches();
       return fresh;
     } catch (err) {
+      if (!shouldFallbackWrite(err)) throw err;
       const fresh = await request(`/api/posts/${id}/comment`, {
         method: 'POST',
         headers,
