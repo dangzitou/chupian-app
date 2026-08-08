@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
 import MediaGallery from './MediaGallery';
 import { formatRelativeTime } from '../utils/time';
 
-export default function PostCard({ post, onPress, onLike, onFavorite, onComment }) {
+function PostCard({ post, onPress, onLike, onFavorite, onComment }) {
   const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, 3);
   const gearText = [
     post.angle || null,
@@ -53,7 +53,7 @@ export default function PostCard({ post, onPress, onLike, onFavorite, onComment 
         ) : null}
 
         {tags.length > 0 ? (
-          <View style={styles.tags}>
+          <View style={styles.tagsWrap}>
             {tags.map((tag) => (
               <Text style={styles.tag} key={tag}>#{tag}</Text>
             ))}
@@ -74,6 +74,8 @@ export default function PostCard({ post, onPress, onLike, onFavorite, onComment 
     </Pressable>
   );
 }
+
+export default memo(PostCard);
 
 const styles = StyleSheet.create({
   card: {
@@ -125,6 +127,12 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 11.5,
   },
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
   multiMark: {
     position: 'absolute',
     right: 14,
@@ -138,7 +146,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     overflow: 'hidden',
   },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   tag: {
     backgroundColor: COLORS.accentBg,
     color: COLORS.accent,

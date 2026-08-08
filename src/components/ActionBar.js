@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
+import { formatCount } from '../utils/format';
 
 export default function ActionBar({
   likes = 0,
@@ -11,22 +12,43 @@ export default function ActionBar({
   onLike,
   onFavorite,
   onComment,
+  likeBusy = false,
+  favoriteBusy = false,
 }) {
   return (
     <View style={styles.row}>
-      <Pressable style={styles.item} onPress={onLike} android_ripple={{ color: '#ddd' }}>
+      <Pressable
+        style={[styles.item, (likeBusy || onLike === null) && styles.itemDisabled]}
+        onPress={onLike}
+        disabled={likeBusy || !onLike}
+        android_ripple={{ color: '#ddd' }}
+      >
         <Text style={[styles.icon, liked && styles.active]}>{liked ? '❤️' : '🤍'}</Text>
-        <Text style={[styles.text, liked && styles.activeText]}>{likes}</Text>
+        <Text style={[styles.text, liked && styles.activeText]}>
+          {likeBusy ? '…' : formatCount(likes)}
+        </Text>
       </Pressable>
 
-      <Pressable style={styles.item} onPress={onComment} android_ripple={{ color: '#ddd' }}>
+      <Pressable
+        style={[styles.item, !onComment && styles.itemDisabled]}
+        onPress={onComment}
+        disabled={!onComment}
+        android_ripple={{ color: '#ddd' }}
+      >
         <Text style={styles.icon}>💬</Text>
-        <Text style={styles.text}>{comments}</Text>
+        <Text style={styles.text}>{formatCount(comments)}</Text>
       </Pressable>
 
-      <Pressable style={styles.item} onPress={onFavorite} android_ripple={{ color: '#ddd' }}>
+      <Pressable
+        style={[styles.item, (favoriteBusy || !onFavorite) && styles.itemDisabled]}
+        onPress={onFavorite}
+        disabled={favoriteBusy || !onFavorite}
+        android_ripple={{ color: '#ddd' }}
+      >
         <Text style={[styles.icon, favorited && styles.active]}>{favorited ? '🔖' : '📌'}</Text>
-        <Text style={[styles.text, favorited && styles.activeText]}>{favorites}</Text>
+        <Text style={[styles.text, favorited && styles.activeText]}>
+          {favoriteBusy ? '…' : formatCount(favorites)}
+        </Text>
       </Pressable>
 
       <View style={[styles.item, styles.shareItem]}>
@@ -51,6 +73,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 20,
+  },
+  itemDisabled: {
+    opacity: 0.5,
   },
   shareItem: {
     opacity: 0.9,

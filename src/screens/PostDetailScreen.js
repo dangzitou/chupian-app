@@ -201,6 +201,8 @@ export default function PostDetailScreen({ route }) {
             comments={post.comments?.length || 0}
             liked={post.liked}
             favorited={post.favorited}
+            likeBusy={actionBusy.like}
+            favoriteBusy={actionBusy.favorite}
             onLike={onLike}
             onFavorite={onFavorite}
             onComment={() => {}}

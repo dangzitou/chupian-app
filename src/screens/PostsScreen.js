@@ -223,6 +223,8 @@ export default function PostsScreen({ navigation }) {
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
+      likeBusy={busyActionIdsRef.current.has(String(item.id))}
+      favoriteBusy={busyActionIdsRef.current.has(String(item.id))}
       onComment={() => navigation.navigate('PostDetail', { postId: item.id })}
     />
   ), [navigation, onFavorite, onLike]);
