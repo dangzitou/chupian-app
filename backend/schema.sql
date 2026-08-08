@@ -164,6 +164,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notifications_recipient_read (recipient_id, is_read, created_at, id)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS post_reports (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  post_id BIGINT UNSIGNED NOT NULL,
+  reporter_id VARCHAR(64) NOT NULL,
+  reason ENUM('misleading', 'copyright', 'unsafe', 'spam', 'other') NOT NULL,
+  details VARCHAR(500) NOT NULL DEFAULT '',
+  status ENUM('open', 'reviewed', 'dismissed') NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_post_reports_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
+  UNIQUE KEY uniq_post_reporter (post_id, reporter_id),
+  INDEX idx_reports_status_created (status, created_at, id),
+  INDEX idx_reports_post (post_id, created_at, id)
+) ENGINE=InnoDB;
+
 ALTER TABLE posts
   ADD INDEX IF NOT EXISTS idx_posts_status_created_id (status, created_at, id),
   ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id),

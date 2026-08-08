@@ -602,6 +602,21 @@ export const api = {
     return result;
   },
 
+  async reportPost(id, reason, details = '') {
+    const target = String(id || '').trim();
+    if (!target) throw new Error('post id required');
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (!normalizedReason) throw new Error('report reason required');
+    return request(`${API_PREFIX}/posts/${encodeURIComponent(target)}/report`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': buildSessionIdempotencyKey('post-report', `${target}-${normalizedReason}`),
+      },
+      body: JSON.stringify({ reason: normalizedReason, details }),
+      noCache: true,
+    });
+  },
+
   async createPost(body, idempotencyKey) {
     const payload = buildPostPayload(body);
     const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;
