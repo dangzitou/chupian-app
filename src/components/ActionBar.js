@@ -3,6 +3,34 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { formatCount } from '../utils/format';
 
+function ActionGlyph({ type, active = false, busy = false, compact = false }) {
+  if (busy) {
+    return <Text style={[styles.icon, compact && styles.iconCompact, active && styles.active]}>...</Text>;
+  }
+
+  if (type === 'comment') {
+    return (
+      <View
+        style={[
+          styles.commentGlyph,
+          compact && styles.commentGlyphCompact,
+          active && styles.commentGlyphActive,
+        ]}
+      >
+        <View style={[styles.commentTail, active && styles.commentTailActive]} />
+      </View>
+    );
+  }
+
+  const glyph = type === 'like'
+    ? (active ? '♥' : '♡')
+    : type === 'favorite'
+      ? (active ? '★' : '☆')
+      : '↗';
+
+  return <Text style={[styles.icon, compact && styles.iconCompact, active && styles.active]}>{glyph}</Text>;
+}
+
 export default function ActionBar({
   likes = 0,
   favorites = 0,
@@ -22,7 +50,6 @@ export default function ActionBar({
       key: 'like',
       active: liked,
       disabled: likeBusy || !onLike,
-      icon: liked ? '❤️' : '♡',
       label: formatCount(likes),
       accessibilityLabel: liked ? `取消点赞，${formatCount(likes)}个赞` : `点赞，${formatCount(likes)}个赞`,
       onPress: onLike,
@@ -31,7 +58,6 @@ export default function ActionBar({
     {
       key: 'comment',
       disabled: !onComment,
-      icon: '💬',
       label: formatCount(comments),
       accessibilityLabel: `评论，${formatCount(comments)}条评论`,
       onPress: onComment,
@@ -40,7 +66,6 @@ export default function ActionBar({
       key: 'favorite',
       active: favorited,
       disabled: favoriteBusy || !onFavorite,
-      icon: favorited ? '⭐' : '☆',
       label: formatCount(favorites),
       accessibilityLabel: favorited ? `取消收藏，${formatCount(favorites)}个收藏` : `收藏，${formatCount(favorites)}个收藏`,
       onPress: onFavorite,
@@ -61,9 +86,12 @@ export default function ActionBar({
           accessibilityHint={item.disabled ? '当前不可用' : undefined}
           android_ripple={{ color: '#ddd' }}
         >
-          <Text style={[styles.icon, compact && styles.iconCompact, item.active && styles.active]}>
-            {item.showBusy ? '…' : item.icon}
-          </Text>
+          <ActionGlyph
+            type={item.key}
+            active={item.active}
+            busy={item.showBusy}
+            compact={compact}
+          />
           <Text style={[styles.text, compact && styles.textCompact, item.active && styles.activeText]}>{item.label}</Text>
         </Pressable>
       ))}
@@ -76,7 +104,7 @@ export default function ActionBar({
           accessibilityLabel="分享这条出片记录"
           android_ripple={{ color: '#ddd' }}
         >
-          <Text style={[styles.icon, compact && styles.iconCompact]}>↗️</Text>
+          <ActionGlyph type="share" compact={compact} />
           <Text style={[styles.text, compact && styles.textCompact]}>分享</Text>
         </Pressable>
       ) : null}
@@ -124,6 +152,34 @@ const styles = StyleSheet.create({
   },
   icon: { fontSize: 16, color: COLORS.ink },
   iconCompact: { fontSize: 14 },
+  commentGlyph: {
+    width: 15,
+    height: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.ink,
+    borderRadius: 4,
+    marginHorizontal: 1,
+  },
+  commentGlyphCompact: {
+    width: 13,
+    height: 10,
+    borderRadius: 3,
+    borderWidth: 1.25,
+  },
+  commentGlyphActive: { borderColor: COLORS.accent },
+  commentTail: {
+    position: 'absolute',
+    left: 2,
+    bottom: -3,
+    width: 5,
+    height: 5,
+    backgroundColor: COLORS.card,
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: COLORS.ink,
+    transform: [{ skewX: '-18deg' }, { rotate: '-28deg' }],
+  },
+  commentTailActive: { borderColor: COLORS.accent },
   text: { fontSize: 11.8, color: COLORS.mutedText || COLORS.muted },
   textCompact: { fontSize: 10.5 },
   active: { color: COLORS.accent },
