@@ -772,6 +772,10 @@ async function invalidateAllPostsCaches() {
   await cacheDel("feed:*");
 }
 
+async function invalidatePostCaches(postId) {
+  await cacheDel(`post:detail:${postId}:*`);
+}
+
 function asyncHandler(handler) {
   return async (req, res, next) => {
     try {
@@ -1250,8 +1254,7 @@ async function createCommentHandler(req) {
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
     [postId, actor, author, text]
   );
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
+  await invalidatePostCaches(postId);
   const insertedId = Number(result?.insertId || 0);
   const [insertedComment] = insertedId
     ? await query("SELECT created_at FROM post_comments WHERE id = ?", [insertedId])
@@ -1634,8 +1637,7 @@ app.post("/api/v1/posts/:id/like", asyncHandler(async (req, res) => {
     actorName,
     kind: "like",
   });
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
+  await invalidatePostCaches(postId);
   return res.json({ ok: true, likes: result.count, liked: result.active });
 }));
 
@@ -1652,8 +1654,7 @@ app.post("/api/v1/posts/:id/favorite", asyncHandler(async (req, res) => {
     actorName,
     kind: "favorite",
   });
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
+  await invalidatePostCaches(postId);
   return res.json({ ok: true, favorites: result.count, favorited: result.active });
 }));
 
@@ -1772,8 +1773,7 @@ app.post("/api/posts/:id/like", asyncHandler(async (req, res) => {
     actorName,
     kind: "like",
   });
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
+  await invalidatePostCaches(postId);
   return res.json({ ok: true, likes: result.count, liked: result.active });
 }));
 app.post("/api/posts/:id/comment", asyncHandler(async (req, res) => {
@@ -1803,8 +1803,7 @@ app.post("/api/posts/:id/favorite", asyncHandler(async (req, res) => {
     actorName,
     kind: "favorite",
   });
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
+  await invalidatePostCaches(postId);
   return res.json({ ok: true, favorites: result.count, favorited: result.active });
 }));
 app.post("/api/posts/:id/comments", asyncHandler(async (req, res) => {
