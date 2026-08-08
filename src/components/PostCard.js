@@ -74,6 +74,69 @@ function PostCard({
   const followLabel = isFollowing ? '已关注' : '关注';
   const followable = Boolean(post.authorId);
 
+  if (compact) {
+    return (
+      <View
+        style={[styles.card, styles.cardCompact, style]}
+        onLayout={(event) => {
+          const nextWidth = Math.floor(event.nativeEvent.layout.width);
+          if (nextWidth && nextWidth > 0 && nextWidth !== cardWidth) {
+            setCardWidth(nextWidth);
+          }
+        }}
+      >
+        <View style={styles.compactMediaWrap}>
+          <Pressable onPress={onPress} accessibilityRole="button">
+            <MediaGallery
+              media={cardMedia}
+              showAll={false}
+              columns={1}
+              containerWidth={Math.max(0, cardWidth - 4)}
+            />
+          </Pressable>
+          {cardMedia.length > 1 ? (
+            <Text style={styles.multiMark}>▢ {cardMedia.length}</Text>
+          ) : null}
+        </View>
+        <View style={styles.compactBody}>
+          <Pressable onPress={onPress}>
+            <Text style={styles.titleCompact} numberOfLines={2}>{post.title || '无标题'}</Text>
+          </Pressable>
+          <Text style={styles.compactLocation} numberOfLines={1}>{locationText}</Text>
+          {tags.length > 0 ? (
+            <View style={styles.compactTags}>
+              {tags.slice(0, 2).map((tag) => (
+                <Text style={styles.compactTag} key={tag}>#{tag}</Text>
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.compactFooter}>
+            <Pressable style={styles.compactAuthor} onPress={onPress}>
+              <View style={styles.avatarCompact}>
+                <AuthorAvatar name={post.author} />
+              </View>
+              <Text style={styles.compactAuthorText} numberOfLines={1}>{post.author}</Text>
+            </Pressable>
+            <ActionBar
+              compact
+              likes={post.likes || 0}
+              favorites={post.favorites || 0}
+              comments={post.commentsCount || post.comments?.length || 0}
+              liked={post.liked}
+              favorited={post.favorited}
+              likeBusy={likeBusy}
+              favoriteBusy={favoriteBusy}
+              onLike={onLike}
+              onFavorite={onFavorite}
+              onComment={onComment}
+              onShare={null}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.card, compact && styles.cardCompact, style]}
@@ -177,6 +240,7 @@ function PostCard({
           onFavorite={onFavorite}
           onComment={onComment}
           onShare={onShare}
+          compact={compact}
         />
       </View>
     </View>
@@ -337,5 +401,47 @@ const styles = StyleSheet.create({
   },
   mediaTapWrap: {
     position: 'relative',
+  },
+  compactMediaWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  compactBody: {
+    paddingHorizontal: 9,
+    paddingBottom: 5,
+  },
+  compactLocation: {
+    color: COLORS.muted,
+    fontSize: 10.5,
+    marginTop: 4,
+  },
+  compactTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    marginTop: 5,
+  },
+  compactTag: {
+    color: COLORS.accent,
+    fontSize: 10.5,
+  },
+  compactFooter: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  compactAuthor: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  compactAuthorText: {
+    flex: 1,
+    color: COLORS.muted,
+    fontSize: 10.5,
   },
 });
