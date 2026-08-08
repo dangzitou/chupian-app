@@ -213,9 +213,18 @@ async function safeRequestWithFallback(primaryPath, fallbackPath, options = {}) 
   }
 }
 
-function clearNetworkCaches() {
-  inFlightGetRequests.clear();
-  getResponseCache.clear();
+function clearNetworkCaches({ postId } = {}) {
+  const targetPostPath = postId == null ? '' : `/posts/${encodeURIComponent(String(postId))}`;
+  for (const key of getResponseCache.keys()) {
+    const path = String(key).split(' actor:')[0];
+    const isFeedCache = path.includes('/community/feed')
+      || path.includes('/community/me/')
+      || path.includes('/api/posts?');
+    const isTargetPostCache = targetPostPath && path.includes(targetPostPath);
+    if (isFeedCache || isTargetPostCache) {
+      getResponseCache.delete(key);
+    }
+  }
 }
 
 function toPostShape(item) {
@@ -549,7 +558,7 @@ export const api = {
         body: JSON.stringify(body),
       });
       if (action === 'like' || action === 'unlike') {
-        clearNetworkCaches();
+        clearNetworkCaches({ postId: id });
       }
       return fresh;
     } catch (err) {
@@ -559,7 +568,7 @@ export const api = {
         body: JSON.stringify(body),
       });
       if (action === 'like' || action === 'unlike') {
-        clearNetworkCaches();
+        clearNetworkCaches({ postId: id });
       }
       return fresh;
     }
@@ -573,7 +582,7 @@ export const api = {
         body: JSON.stringify(body),
       });
       if (action === 'favorite' || action === 'unfavorite') {
-        clearNetworkCaches();
+        clearNetworkCaches({ postId: id });
       }
       return fresh;
     } catch (err) {
@@ -584,7 +593,7 @@ export const api = {
         body: JSON.stringify(body),
       });
       if (action === 'favorite' || action === 'unfavorite') {
-        clearNetworkCaches();
+        clearNetworkCaches({ postId: id });
       }
       return { ...res, favorited: Boolean((res && res.favorited) || false) };
     }
@@ -603,7 +612,7 @@ export const api = {
         headers,
         body: JSON.stringify(body),
       });
-      clearNetworkCaches();
+      clearNetworkCaches({ postId: id });
       return fresh;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -612,7 +621,7 @@ export const api = {
         headers,
         body: JSON.stringify(body),
       });
-      clearNetworkCaches();
+      clearNetworkCaches({ postId: id });
       return fresh;
     }
   },
