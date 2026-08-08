@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
 import MediaGallery from './MediaGallery';
-import ShotMetaPanel from './ShotMetaPanel';
+import ShotMetaBoard from './ShotMetaBoard';
+import { toShotParamPairs } from '../utils/postCodec';
 import { formatRelativeTime } from '../utils/time';
 
 function AuthorAvatar({ name }) {
@@ -21,6 +22,8 @@ function PostCard({
   onLike,
   onFavorite,
   onComment,
+  onShare,
+  showFollow = true,
   likeBusy = false,
   favoriteBusy = false,
   compact = false,
@@ -30,16 +33,26 @@ function PostCard({
   const [cardWidth, setCardWidth] = useState(0);
   const cardMedia = post.media || [];
   const mediaColumns = cardMedia.length > 1 ? Math.min(cardMedia.length, 3) : 1;
-  const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, 3);
-  const shotBits = [
-    post.angle ? `📷 ${post.angle}` : null,
-    post.direction ? `方向 ${post.direction}` : null,
-    post.timeWindow ? `⏱ ${post.timeWindow}` : null,
-    post.bestTime ? `时段 ${post.bestTime}` : null,
-    post.gear?.camera || post.camera ? `机身 ${post.gear?.camera || post.camera}` : null,
-    post.gear?.lens || post.lens ? `镜头 ${post.gear?.lens || post.lens}` : null,
-    post.gear?.focal || post.focalLength ? `焦距 ${post.gear?.focal || post.focalLength}` : null,
-  ].filter(Boolean);
+  const mediaSummary = useMemo(() => {
+    const counts = cardMedia.reduce((acc, item) => {
+      const kind = String(item?.kind || 'image');
+      if (kind === 'live') acc.live += 1;
+      else if (kind === 'video') acc.video += 1;
+      else acc.image += 1;
+      return acc;
+    }, { image: 0, video: 0, live: 0 });
+    const chips = [];
+    if (counts.image) chips.push(`图片 ${counts.image}`);
+    if (counts.video) chips.push(`视频 ${counts.video}`);
+    if (counts.live) chips.push(`实况 ${counts.live}`);
+    return chips.join(' · ');
+  }, [cardMedia]);
+  const shotBits = useMemo(() => {
+    return toShotParamPairs(post)
+      .slice(0, compact ? 3 : 5)
+      .map(([name, value]) => `${name}: ${value}`);
+  }, [compact, post]);
+  const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, compact ? 2 : 3);
   const content = String(post.content || '').trim();
   const shouldCut = content.length > 96 && !expanded;
   const contentText = shouldCut ? `${content.slice(0, 96)}...` : content;
@@ -47,13 +60,14 @@ function PostCard({
 
   const locationText = [post.spotName || '未知地点', post.district].filter(Boolean).join(' · ') || '匿名作品';
   const subtitle = useMemo(() => {
+    const totalComments = Number(post.commentsCount || (post.comments?.length || 0));
     const statPieces = [
       post.views ? `${post.views} 浏览` : null,
       post.likes ? `${post.likes} 赞` : null,
-      post.comments?.length ? `${post.comments.length} 评论` : null,
+      totalComments ? `${totalComments} 评论` : null,
     ].filter(Boolean);
     return statPieces.join(' · ');
-  }, [post.comments?.length, post.likes, post.views]);
+  }, [post.comments?.length, post.commentsCount, post.likes, post.views]);
 
   return (
     <Pressable
@@ -77,11 +91,13 @@ function PostCard({
           <Text style={[styles.sub, compact && styles.subCompact]}>{locationText}</Text>
           <Text style={[styles.sub, compact && styles.subCompact]}>{created}</Text>
         </View>
-        <View style={compact && styles.followWrapCompact}>
-          <Pressable style={styles.followBtn}>
-            <Text style={styles.followText}>关注</Text>
-          </Pressable>
-        </View>
+        {showFollow ? (
+          <View style={compact && styles.followWrapCompact}>
+            <Pressable style={styles.followBtn}>
+              <Text style={styles.followText}>关注</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <MediaGallery
@@ -110,9 +126,10 @@ function PostCard({
         )}
 
         <View style={styles.tagRow}>
-          {shotBits.slice(0, 5).map((item) => (
+          {shotBits.slice(0, compact ? 3 : 5).map((item) => (
             <TagPill key={item}>{item}</TagPill>
           ))}
+          {mediaSummary ? <TagPill>素材 {mediaSummary}</TagPill> : null}
         </View>
 
         {tags.length > 0 ? (
@@ -123,14 +140,21 @@ function PostCard({
           </View>
         ) : null}
 
-        <ShotMetaPanel post={post} compact />
+        <ShotMetaBoard
+          source={post}
+          options={{ includeSpot: true, includeLocation: true, includeMedia: false, maxItems: 5 }}
+          compact
+          showPanel={false}
+          showStrip
+          fallback={null}
+        />
 
         {compact ? null : subtitle ? <Text style={styles.subStat}>{subtitle}</Text> : null}
 
         <ActionBar
           likes={post.likes || 0}
           favorites={post.favorites || 0}
-          comments={post.comments?.length || 0}
+          comments={post.commentsCount || post.comments?.length || 0}
           liked={post.liked}
           favorited={post.favorited}
           likeBusy={likeBusy}
@@ -138,6 +162,7 @@ function PostCard({
           onLike={onLike}
           onFavorite={onFavorite}
           onComment={onComment}
+          onShare={onShare}
         />
       </View>
     </Pressable>
@@ -150,21 +175,20 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderWidth: 0,
     overflow: 'hidden',
-    marginHorizontal: 12,
-    marginBottom: 14,
-    paddingBottom: 10,
+    marginHorizontal: 6,
+    marginBottom: 12,
     gap: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.06,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
   cardCompact: {
     borderRadius: 12,
     marginBottom: 10,
+    marginHorizontal: 0,
     shadowOpacity: 0.03,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -174,6 +198,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     gap: 8,
+    paddingBottom: 8,
   },
   headerCompact: {
     padding: 8,
@@ -225,7 +250,7 @@ const styles = StyleSheet.create({
   content: {
     marginTop: 6,
     color: COLORS.ink,
-    fontSize: 13,
+    fontSize: 13.5,
     lineHeight: 19,
   },
   contentCompact: {
@@ -237,7 +262,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accentBg,
     color: COLORS.accent,
     borderRadius: 999,
-    fontSize: 10.5,
+    fontSize: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
@@ -273,8 +298,8 @@ const styles = StyleSheet.create({
   },
   multiMark: {
     position: 'absolute',
-    right: 14,
-    bottom: 14,
+    right: 12,
+    bottom: 12,
     color: COLORS.onAccent,
     fontSize: 11,
     fontWeight: '700',
