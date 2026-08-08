@@ -111,7 +111,7 @@ REDIS_URL=redis://127.0.0.1:6379 QA_REQUIRE_DB=1 npm run qa:integration
 
 ## Web 部署到 80 端口（可发布）
 
-> 先确认后端在 3000（或自定义端口）可访问。
+> 默认通过生产入口 `http://127.0.0.1`（Nginx 80 端口）验收；直连本地后端时设置 `BACKEND_URL=http://127.0.0.1:3000`。
 
 ```bash
 # 1) 打包 web 前端
