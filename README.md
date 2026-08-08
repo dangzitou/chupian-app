@@ -64,6 +64,12 @@ chupian-app/
 - 健康检查
   - `GET /api/v1/health`
   - `GET /api/v1/system/health`（与 `/api/v1/health` 等价）
+- 身份
+  - `POST /api/v1/auth/anonymous`
+  - `POST /api/v1/auth/register`
+  - `POST /api/v1/auth/login`
+  - `GET /api/v1/auth/me`
+  - `POST /api/v1/auth/logout`
 - 点位
   - `GET /api/v1/spots`
   - `GET /api/spots`（兼容）
@@ -139,6 +145,7 @@ docker compose up -d --build
 ## 生产级可用说明（生产前建议）
 
 - 后端使用 **MySQL + Redis + Node**：已内置连接池、请求限流、缓存和缓存失效逻辑；
+- 身份支持用户名/密码账号；注册会将当前匿名设备的作品和互动迁移到账号，登录后可跨设备恢复；
 - 评论/点赞/收藏统一通过 `postId + actorId` 幂等化，支持高并发幂等写入；
 - feed 查询已补充高频索引（`schema.sql`）：热点列表按 `status + created_at` 与 `status + stats_likes` 多维索引；
 - 上线前执行：
@@ -149,4 +156,4 @@ docker compose up -d --build
 ## 说明
 
 - 本项目当前状态为 `App v0.1`
-- 目标是“可上线的 MVP”，后续建议补充登录态、图片上传、离线缓存与推送。
+- 当前仍是可上线 MVP；后续可继续补充离线缓存、通知推送、密码找回和对象存储/CDN。

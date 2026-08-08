@@ -1,6 +1,13 @@
 import { API_BASE, API_PREFIX } from './config';
 import { buildPostPayload, normalizePostShape } from './utils/postCodec';
-import { getActorId, getActorName, getActorToken, refreshActorSession } from './lib/actor';
+import {
+  clearAuthenticatedSession,
+  getActorId,
+  getActorName,
+  getActorToken,
+  refreshActorSession,
+  setAuthenticatedSession,
+} from './lib/actor';
 import { buildSessionIdempotencyKey } from './lib/idempotency';
 
 const NETWORK_TIMEOUT_MS = 12_000;
@@ -309,6 +316,42 @@ function buildCommentsQuery(params = {}) {
 
 
 export const api = {
+  async register(username, password, displayName) {
+    const result = await request(`${API_PREFIX}/auth/register`, {
+      method: 'POST',
+      body: JSON.stringify({ username, password, displayName }),
+      noCache: true,
+    });
+    await setAuthenticatedSession(result);
+    clearNetworkCaches();
+    return result;
+  },
+
+  async login(username, password) {
+    const result = await request(`${API_PREFIX}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+      noCache: true,
+    });
+    await setAuthenticatedSession(result);
+    clearNetworkCaches();
+    return result;
+  },
+
+  async me() {
+    return request(`${API_PREFIX}/auth/me`, { noCache: true });
+  },
+
+  async logout() {
+    try {
+      await request(`${API_PREFIX}/auth/logout`, { method: 'POST', noCache: true });
+    } finally {
+      await clearAuthenticatedSession();
+      clearNetworkCaches();
+    }
+    return { ok: true };
+  },
+
   async health() {
     return safeRequestWithFallback('/api/v1/health', '/health');
   },

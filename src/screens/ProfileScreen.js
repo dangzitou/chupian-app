@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
@@ -17,8 +18,8 @@ import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
-import { sharePost, shareText } from '../utils/share';
-import { getActorName } from '../lib/actor';
+import { sharePost } from '../utils/share';
+import { getActorName, isAuthenticated } from '../lib/actor';
 
 const PAGE_SIZE = 8;
 
@@ -57,7 +58,8 @@ function ProfileStats({ spotCount, posts, liked, saved, onSelectSection, onOpenM
 }
 
 export default function ProfileScreen({ navigation }) {
-  const actorName = useMemo(() => getActorName(), []);
+  const [actorName, setActorName] = useState(() => getActorName());
+  const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
   const [weather, setWeather] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -181,6 +183,36 @@ export default function ProfileScreen({ navigation }) {
     navigation?.navigate?.(APP_ROUTES.MAP);
   }, [navigation]);
 
+  useFocusEffect(useCallback(() => {
+    setActorName(getActorName());
+    setAuthenticated(isAuthenticated());
+  }, []));
+
+  const onAuthAction = useCallback(() => {
+    if (!authenticated) {
+      navigation.navigate('Auth');
+      return;
+    }
+    Alert.alert('退出登录？', '退出后仍可匿名浏览，账号作品不会被删除。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '退出',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.logout();
+            setActorName(getActorName());
+            setAuthenticated(false);
+            await load({ append: false, cursor: null });
+            await loadSectionMetrics();
+          } catch (err) {
+            Alert.alert('退出失败', err?.message || '网络异常，请稍后重试');
+          }
+        },
+      },
+    ]);
+  }, [authenticated, load, loadSectionMetrics, navigation]);
+
   const onDeletePost = useCallback((postId) => {
     const target = String(postId || '').trim();
     if (!target || deletingPostId) return;
@@ -273,17 +305,8 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
-        <Pressable
-          style={styles.profileAction}
-          onPress={async () => {
-            try {
-              await shareText(`来看看${actorName}的出片档案`, actorName);
-            } catch (_err) {
-              // Sharing is best-effort; unsupported browsers should not surface an unhandled rejection.
-            }
-          }}
-        >
-          <Text style={styles.profileActionText}>分享</Text>
+        <Pressable style={styles.profileAction} onPress={onAuthAction}>
+          <Text style={styles.profileActionText}>{authenticated ? '退出' : '登录 / 注册'}</Text>
         </Pressable>
       </View>
 
@@ -338,7 +361,7 @@ export default function ProfileScreen({ navigation }) {
         ))}
       </ScrollView>
     </View>
-  ), [actorName, meSectionStats, onOpenMap, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, authenticated, meSectionStats, onAuthAction, onOpenMap, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
