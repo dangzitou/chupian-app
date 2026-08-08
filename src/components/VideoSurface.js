@@ -9,14 +9,14 @@ try {
   NativeVideo = null;
 }
 
-export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, onError }) {
+export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, onError }) {
   if (!uri) return null;
 
   if (Platform.OS === 'web') {
     return createElement('video', {
       src: uri,
       style,
-      controls: true,
+      controls,
       autoPlay: shouldPlay,
       loop,
       muted: shouldPlay,
@@ -32,7 +32,7 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
       <NativeVideo
         source={{ uri }}
         style={style}
-        useNativeControls
+        useNativeControls={controls}
         resizeMode="cover"
         shouldPlay={shouldPlay}
         isLooping={loop}
