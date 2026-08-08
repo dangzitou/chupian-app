@@ -335,7 +335,11 @@ export default function NewPostScreen({ navigation, route }) {
   }, [state.district]);
 
   const setField = useCallback((key, value) => {
-    dispatch({ type: 'update', payload: { [key]: value } });
+    const payload = { [key]: value };
+    if (key === 'spotName' || key === 'district') {
+      payload.spotId = '';
+    }
+    dispatch({ type: 'update', payload });
   }, []);
 
   const setBestTime = useCallback((value) => {
