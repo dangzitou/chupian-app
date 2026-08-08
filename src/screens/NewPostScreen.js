@@ -40,6 +40,26 @@ const EMPTY_DRAFT_STATE = {
   mediaList: [],
 };
 
+function FormSection({ title, summary, expanded, onToggle, children }) {
+  return (
+    <View style={styles.formSection}>
+      <Pressable
+        style={styles.formSectionHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+      >
+        <View style={styles.formSectionCopy}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.formSectionSummary}>{summary}</Text>
+        </View>
+        <Text style={styles.formSectionChevron}>{expanded ? '−' : '+'}</Text>
+      </Pressable>
+      {expanded ? <View style={styles.formSectionBody}>{children}</View> : null}
+    </View>
+  );
+}
+
 function parseMediaDuration(raw, kind) {
   const normalized = Number(raw || 0);
   if (!normalized || !Number.isFinite(normalized)) return 0;
@@ -138,6 +158,8 @@ export default function NewPostScreen({ navigation, route }) {
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [authorOpen, setAuthorOpen] = useState(false);
   const [state, dispatch] = useReducer(reducer, EMPTY_SHOT);
   const idempotencyKeyRef = useRef('');
   const draftTimer = useRef(null);
@@ -727,62 +749,68 @@ export default function NewPostScreen({ navigation, route }) {
           compact
         />
 
-        <Text style={styles.subTitleSmall}>镜头参数</Text>
-        <PostInput
-          label="机身"
-          value={state.camera}
-          onChange={(value) => setField('camera', value)}
-          placeholder="Sony A7M4"
-          maxLength={60}
-        />
-        <PostInput
-          label="镜头"
-          value={state.lens}
-          onChange={(value) => setField('lens', value)}
-          placeholder="24-70mm F2.8"
-          maxLength={60}
-        />
-        <View style={styles.row2}>
+        <FormSection
+          title="镜头参数"
+          summary={[state.camera, state.lens, state.focal].filter(Boolean).join(' · ') || '机身、镜头、焦距、曝光与白平衡'}
+          expanded={advancedOpen}
+          onToggle={() => setAdvancedOpen((value) => !value)}
+        >
           <PostInput
-            label="焦距"
-            value={state.focal}
-            onChange={(value) => setField('focal', value)}
-            placeholder="35mm"
-            maxLength={24}
+            label="机身"
+            value={state.camera}
+            onChange={(value) => setField('camera', value)}
+            placeholder="Sony A7M4"
+            maxLength={60}
           />
           <PostInput
-            label="光圈"
-            value={state.aperture}
-            onChange={(value) => setField('aperture', value)}
-            placeholder="f/1.8"
-            maxLength={24}
+            label="镜头"
+            value={state.lens}
+            onChange={(value) => setField('lens', value)}
+            placeholder="24-70mm F2.8"
+            maxLength={60}
           />
-        </View>
-        <View style={styles.row2}>
+          <View style={styles.row2}>
+            <PostInput
+              label="焦距"
+              value={state.focal}
+              onChange={(value) => setField('focal', value)}
+              placeholder="35mm"
+              maxLength={24}
+            />
+            <PostInput
+              label="光圈"
+              value={state.aperture}
+              onChange={(value) => setField('aperture', value)}
+              placeholder="f/1.8"
+              maxLength={24}
+            />
+          </View>
+          <View style={styles.row2}>
+            <PostInput
+              label="快门"
+              value={state.shutter}
+              onChange={(value) => setField('shutter', value)}
+              placeholder="1/125"
+              maxLength={24}
+            />
+            <PostInput
+              label="ISO"
+              error={validation.errors.iso}
+              value={state.iso}
+              onChange={(value) => setField('iso', value)}
+              placeholder="200"
+              keyboardType="numeric"
+              maxLength={24}
+            />
+          </View>
           <PostInput
-            label="快门"
-            value={state.shutter}
-            onChange={(value) => setField('shutter', value)}
-            placeholder="1/125"
+            label="白平衡"
+            value={state.whiteBalance}
+            onChange={(value) => setField('whiteBalance', value)}
+            placeholder="日光 / 阴天 / 阴影"
             maxLength={24}
           />
-          <PostInput
-            label="ISO"
-            error={validation.errors.iso}
-            value={state.iso}
-            onChange={(value) => setField('iso', value)}
-            placeholder="200"
-            keyboardType="numeric"
-            maxLength={24}
-          />
-        </View>
-        <PostInput
-          label="白平衡"
-          value={state.whiteBalance}
-          onChange={(value) => setField('whiteBalance', value)}
-          placeholder="日光 / 阴天 / 阴影"
-          maxLength={24}
-        />
+        </FormSection>
 
         <Text style={styles.sectionTitle}>正文 / 经验</Text>
         <PostInput
@@ -810,23 +838,29 @@ export default function NewPostScreen({ navigation, route }) {
           placeholder="霓虹, 街头, 人文"
         />
 
-        <Text style={styles.sectionTitle}>作者信息</Text>
-        <PostInput
-          label="昵称"
-          error={validation.errors.author}
-          value={state.author}
-          onChange={(value) => setField('author', value)}
-          placeholder="匿名拍友"
-          maxLength={18}
-        />
-        <PostInput
-          label="简介"
-          error={validation.errors.authorBio}
-          value={state.authorBio}
-          onChange={(value) => setField('authorBio', value)}
-          placeholder="拍摄偏好/器材说明（可选）"
-          maxLength={80}
-        />
+        <FormSection
+          title="作者信息"
+          summary={state.author || '昵称与拍摄偏好（可选）'}
+          expanded={authorOpen}
+          onToggle={() => setAuthorOpen((value) => !value)}
+        >
+          <PostInput
+            label="昵称"
+            error={validation.errors.author}
+            value={state.author}
+            onChange={(value) => setField('author', value)}
+            placeholder="匿名拍友"
+            maxLength={18}
+          />
+          <PostInput
+            label="简介"
+            error={validation.errors.authorBio}
+            value={state.authorBio}
+            onChange={(value) => setField('authorBio', value)}
+            placeholder="拍摄偏好/器材说明（可选）"
+            maxLength={80}
+          />
+        </FormSection>
 
         <Text style={styles.sectionTitle}>素材</Text>
         <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '支持图片、视频、实况截图；建议 1-9 个素材，最大 40s 视频'}</Text>
@@ -896,6 +930,33 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12.8,
     fontWeight: '600',
+  },
+  formSection: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  formSectionHeader: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  formSectionCopy: { flex: 1 },
+  formSectionSummary: {
+    color: COLORS.muted,
+    fontSize: 11.5,
+    marginTop: -4,
+    paddingBottom: 9,
+  },
+  formSectionChevron: {
+    color: COLORS.accent,
+    fontSize: 24,
+    fontWeight: '400',
+    paddingHorizontal: 8,
+  },
+  formSectionBody: {
+    paddingBottom: 4,
   },
   spotWrap: {
     flexDirection: 'row',
