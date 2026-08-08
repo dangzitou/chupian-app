@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -63,6 +63,7 @@ export default function PostsScreen({ navigation }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sort, setSort] = useState('latest');
   const [keyword, setKeyword] = useState('');
+  const busyActionIdsRef = useRef(new Set());
 
   const load = useCallback(async (targetCursor = null, append = false, nextSort = sort) => {
     if (append && loadingMore) return;
@@ -131,63 +132,100 @@ export default function PostsScreen({ navigation }) {
     load(null, false);
   }, [load]);
 
-  const optimisticPatch = useCallback((id, patch) => {
-    setPosts((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const setBusyForPost = useCallback((id, active) => {
+    const key = String(id);
+    const next = new Set(busyActionIdsRef.current);
+    if (active) {
+      next.add(key);
+    } else {
+      next.delete(key);
+    }
+    busyActionIdsRef.current = next;
   }, []);
 
-  const onCardAction = useMemo(() => ({
-    onLike: async (item) => {
-      const nextLiked = !item.liked;
-      optimisticPatch(item.id, {
+  const patchPostById = useCallback((id, patch) => {
+    let current = null;
+    setPosts((prev) => prev.map((item) => {
+      if (String(item.id) !== String(id)) return item;
+      current = item;
+      const nextPatch = typeof patch === 'function' ? patch(item) : patch;
+      return { ...item, ...nextPatch };
+    }));
+    return current;
+  }, []);
+
+  const onLike = useCallback(async (postId) => {
+    const id = String(postId);
+    if (busyActionIdsRef.current.has(id)) return;
+    const base = patchPostById(id, (post) => {
+      const nextLiked = !post.liked;
+      return {
         liked: nextLiked,
-        likes: Math.max(0, Number(item.likes || 0) + (nextLiked ? 1 : -1)),
+        likes: Math.max(0, Number(post.likes || 0) + (nextLiked ? 1 : -1)),
+      };
+    });
+    if (!base) return;
+
+    setBusyForPost(id, true);
+    try {
+      const nextLiked = !base.liked;
+      await api.toggleLike(id, base.author, nextLiked ? 'like' : 'unlike');
+      const fresh = await api.getPost(id);
+      patchPostById(id, {
+        likes: Number(fresh.likes || 0),
+        liked: Boolean(fresh.liked),
       });
-      try {
-        await api.toggleLike(item.id, item.author, nextLiked ? 'like' : 'unlike');
-        const fresh = await api.getPost(item.id);
-        optimisticPatch(item.id, {
-          likes: Number(fresh.likes || 0),
-          liked: Boolean(fresh.liked),
-        });
-      } catch (_err) {
-        optimisticPatch(item.id, {
-          liked: item.liked,
-          likes: item.likes,
-        });
-      }
-    },
-    onFavorite: async (item) => {
-      const next = !item.favorited;
-      optimisticPatch(item.id, {
-        favorited: next,
-        favorites: Math.max(0, Number(item.favorites || 0) + (next ? 1 : -1)),
+    } catch (_err) {
+      patchPostById(id, {
+        liked: base.liked,
+        likes: base.likes,
       });
-      try {
-        await api.toggleFavorite(item.id, item.author, next ? 'favorite' : 'unfavorite');
-        const fresh = await api.getPost(item.id);
-        optimisticPatch(item.id, {
-          favorites: Number(fresh.favorites || 0),
-          favorited: Boolean(fresh.favorited),
-        });
-      } catch (_err) {
-        optimisticPatch(item.id, {
-          favorited: item.favorited,
-          favorites: item.favorites,
-        });
-      }
-    },
-    onComment: (item) => navigation.navigate('PostDetail', { postId: item.id }),
-  }), [navigation, optimisticPatch]);
+    } finally {
+      setBusyForPost(id, false);
+    }
+  }, [patchPostById, setBusyForPost]);
+
+  const onFavorite = useCallback(async (postId) => {
+    const id = String(postId);
+    if (busyActionIdsRef.current.has(id)) return;
+
+    const base = patchPostById(id, (post) => {
+      const nextFavorited = !post.favorited;
+      return {
+        favorited: nextFavorited,
+        favorites: Math.max(0, Number(post.favorites || 0) + (nextFavorited ? 1 : -1)),
+      };
+    });
+    if (!base) return;
+
+    setBusyForPost(id, true);
+    try {
+      const nextFavorited = !base.favorited;
+      await api.toggleFavorite(id, base.author, nextFavorited ? 'favorite' : 'unfavorite');
+      const fresh = await api.getPost(id);
+      patchPostById(id, {
+        favorites: Number(fresh.favorites || 0),
+        favorited: Boolean(fresh.favorited),
+      });
+    } catch (_err) {
+      patchPostById(id, {
+        favorited: base.favorited,
+        favorites: base.favorites,
+      });
+    } finally {
+      setBusyForPost(id, false);
+    }
+  }, [patchPostById, setBusyForPost]);
 
   const renderCard = useCallback(({ item }) => (
     <PostCard
       post={item}
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
-      onLike={() => onCardAction.onLike(item)}
-      onFavorite={() => onCardAction.onFavorite(item)}
-      onComment={() => onCardAction.onComment(item)}
+      onLike={() => onLike(item.id)}
+      onFavorite={() => onFavorite(item.id)}
+      onComment={() => navigation.navigate('PostDetail', { postId: item.id })}
     />
-  ), [navigation, onCardAction]);
+  ), [navigation, onFavorite, onLike]);
 
   const ListHeader = useMemo(() => (
     <View>
@@ -203,7 +241,7 @@ export default function PostsScreen({ navigation }) {
       <SearchBar value={keyword} onChange={setKeyword} />
       <SortTabs value={sort} onChange={safeLoad} />
     </View>
-  ), [keyword, navigation, onCardAction, sort, safeLoad]);
+  ), [keyword, navigation, sort, safeLoad]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore) return null;
