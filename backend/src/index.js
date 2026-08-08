@@ -1808,6 +1808,54 @@ app.get("/api/v1/auth/me", asyncHandler(async (req, res) => {
   return res.json({ user: publicUser(rows[0]) });
 }));
 
+app.patch("/api/v1/auth/me", asyncHandler(async (req, res) => {
+  const userId = readUserSession(req);
+  if (!userId) return res.status(401).json({ error: "login required" });
+  const displayName = safeText(req.body?.displayName || req.body?.name || "", 64).trim();
+  const bio = safeText(req.body?.bio || "", 160).trim();
+  if (!displayName) throw Object.assign(new Error("昵称不能为空"), { status: 400 });
+
+  const updated = await tx(async (conn) => {
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    );
+    if (!userRows.length) throw Object.assign(new Error("account not found"), { status: 401 });
+
+    await conn.execute(
+      "UPDATE users SET display_name = ?, bio = ? WHERE id = ?",
+      [displayName, bio, userId]
+    );
+
+    const actorId = actorHash(userId);
+    await conn.execute(
+      "UPDATE posts SET author_name = ?, author_bio = ? WHERE author_id = ?",
+      [displayName, bio, actorId]
+    );
+    await conn.execute(
+      "UPDATE post_comments SET actor_name = ? WHERE actor_id = ?",
+      [displayName, actorId]
+    );
+    await conn.execute(
+      "UPDATE author_follows SET actor_name = ? WHERE follower_id = ?",
+      [displayName, actorId]
+    );
+    await conn.execute(
+      "UPDATE notifications SET actor_name = ? WHERE actor_id = ?",
+      [displayName, actorId]
+    );
+
+    const [rows] = await conn.execute(
+      "SELECT id, username, display_name, bio FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    );
+    return rows[0];
+  });
+
+  await invalidateAllPostsCaches();
+  return res.json({ user: publicUser(updated) });
+}));
+
 app.post("/api/v1/auth/logout", asyncHandler(async (_req, res) => {
   return res.json({ ok: true });
 }));

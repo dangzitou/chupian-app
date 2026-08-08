@@ -194,6 +194,10 @@ export default function ProfileScreen({ navigation }) {
     navigation.navigate('BlockedAuthors');
   }, [navigation]);
 
+  const onOpenEditProfile = useCallback(() => {
+    navigation.navigate('EditProfile');
+  }, [navigation]);
+
   useFocusEffect(useCallback(() => {
     setActorName(getActorName());
     setAuthenticated(isAuthenticated());
@@ -330,6 +334,11 @@ export default function ProfileScreen({ navigation }) {
               </View>
             ) : null}
           </Pressable>
+          {authenticated ? (
+            <Pressable style={styles.profileAction} onPress={onOpenEditProfile}>
+              <Text style={styles.profileActionText}>编辑资料</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.profileAction} onPress={onAuthAction}>
             <Text style={styles.profileActionText}>{authenticated ? '退出' : '登录 / 注册'}</Text>
           </Pressable>
@@ -391,7 +400,7 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.blockedManageHint}>管理不想再看到的创作者</Text>
       </Pressable>
     </View>
-  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenEditProfile, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
