@@ -1559,12 +1559,19 @@ app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
   const targetAuthorId = String(req.params.authorId || "").trim();
   const action = String(req.body?.action || "toggle");
   const actorName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
-  const state = await applyAuthorFollow({
+  const idempotent = await runWithIdempotency({
+    req,
     actor,
-    actorName,
-    targetAuthorId,
-    action,
+    scope: `author:${targetAuthorId}:follow`,
+    handler: () => applyAuthorFollow({
+      actor,
+      actorName,
+      targetAuthorId,
+      action,
+    }),
   });
+  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+  const state = idempotent.payload;
   res.json({
     ok: true,
     authorId: targetAuthorId,

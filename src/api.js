@@ -440,15 +440,18 @@ export const api = {
     if (!target) throw new Error('authorId required');
     const encoded = encodeURIComponent(target);
     const body = { action, author: getDefaultAuthor() };
+    const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('author-follow', `${target}-${action}`) };
     try {
       return await request(`${API_PREFIX}/authors/${encoded}/follow`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
       return request(`/api/authors/${encoded}/follow`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
     }
