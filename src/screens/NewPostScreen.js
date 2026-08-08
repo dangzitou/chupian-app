@@ -395,7 +395,7 @@ export default function NewPostScreen({ navigation, route }) {
     if (skippedVideos > 0) {
       Alert.alert('提示', `检测到 ${skippedVideos} 个视频超过 ${MAX_VIDEO_SECONDS}s，已自动忽略`);
     }
-  }, []);
+  }, [applyExifDefaults]);
 
   const shootWithCamera = useCallback(async () => {
     const ok = await requestCameraPermission();
