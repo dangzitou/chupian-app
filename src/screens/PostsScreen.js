@@ -135,24 +135,6 @@ function SignalStrip({ items, activeTag, onSelect, loading }) {
   );
 }
 
-function DiscoveryStatsBar({ stats, onOpenMap }) {
-  if (!stats) return null;
-  const totalPosts = Number(stats.totalPosts || 0);
-  const authors = Number(stats.authors || 0);
-  const totalLikes = Number(stats.totalLikes || 0);
-
-  return (
-    <View style={styles.discoveryStatsWrap}>
-      <Text style={styles.discoveryStatsText}>
-        {`共 ${totalPosts} 条 · ${authors} 位创作者 · ${totalLikes} 次点赞`}
-      </Text>
-      <Pressable style={styles.discoveryMapBtn} onPress={onOpenMap}>
-        <Text style={styles.discoveryMapBtnText}>🗺️ 去地图逛拍</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 export default function PostsScreen({ navigation }) {
   const [feedLayout, setFeedLayout] = useState('masonry');
   const [feedMode, setFeedMode] = useState('recommend');
@@ -341,7 +323,6 @@ export default function PostsScreen({ navigation }) {
       <View style={styles.headerTop}>
         <View>
           <Text style={styles.title}>发现</Text>
-          <Text style={styles.subtitle}>拍照位置、参数与实况都在这儿</Text>
         </View>
         <View style={styles.headerActions}>
           <Pressable
@@ -445,47 +426,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   title: { fontSize: 22, color: COLORS.ink, fontWeight: '700', letterSpacing: -0.3 },
-  subtitle: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
-  discoveryStatsWrap: {
-    marginHorizontal: 8,
-    marginTop: 8,
-    marginBottom: 2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.panel,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  discoveryStatsText: {
-    color: COLORS.muted,
-    fontSize: 11.5,
-    flex: 1,
-  },
-  discoveryMapBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.accent,
-    backgroundColor: COLORS.accentBg,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  discoveryMapBtnText: {
-    color: COLORS.accent,
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  newBtn: {
-    backgroundColor: COLORS.accent,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  newBtnText: { color: COLORS.onAccent, fontWeight: '700', fontSize: 12.5 },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -548,7 +488,7 @@ const styles = StyleSheet.create({
 
   searchWrap: {
     marginHorizontal: 4,
-    marginTop: 2,
+    marginTop: 4,
     backgroundColor: COLORS.panel,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
@@ -574,7 +514,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
     marginHorizontal: 8,
-    marginTop: 8,
+    marginTop: 4,
     marginBottom: 2,
   },
   feedTab: {
