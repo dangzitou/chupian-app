@@ -101,10 +101,6 @@ export default function MapScreen({ navigation, route }) {
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
         />
-        <link
-          rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        />
         <script
           src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
           onerror="this.onerror=null;this.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';"
@@ -149,6 +145,33 @@ export default function MapScreen({ navigation, route }) {
             padding: 6px 10px;
             width: 100%;
             cursor: pointer;
+          }
+          .map-pin {
+            width: 22px;
+            height: 22px;
+            border: 3px solid #fff;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            box-shadow: 0 2px 7px rgba(20, 28, 38, 0.28);
+          }
+          .map-pin::after {
+            content: '';
+            display: block;
+            width: 7px;
+            height: 7px;
+            margin: 5px auto 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.9);
+          }
+          .map-pin-post { background: #d93657; }
+          .map-pin-spot { background: #263b50; }
+          .map-pin-me {
+            width: 14px;
+            height: 14px;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            background: #d93657;
+            box-shadow: 0 1px 5px rgba(20, 28, 38, 0.32);
           }
         </style>
       </head>
@@ -217,9 +240,6 @@ export default function MapScreen({ navigation, route }) {
                 attribution: '&copy; OpenStreetMap',
                 maxZoom: 19,
               }).addTo(map);
-              L.marker([lat, lng], {
-                title: '我在这里',
-              }).addTo(map).bindPopup('我在这里');
               L.circleMarker([lat, lng], {
                 radius: 8,
                 color: '#e53935',
@@ -234,13 +254,15 @@ export default function MapScreen({ navigation, route }) {
                 fillOpacity: 0.75,
                 weight: 0,
               }).addTo(map);
-              const fallbackMarker = L.divIcon({
+              const currentIcon = L.divIcon({
                 className: '',
-                html: '<div class=\"pulse\"></div>',
-                iconSize: [14, 14],
-                iconAnchor: [7, 7],
+                html: '<div class=\"map-pin-me\"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10],
               });
-              L.marker([lat, lng], { icon: fallbackMarker }).addTo(map).bindPopup('${FALLBACK_MARKER}');
+              L.marker([lat, lng], { icon: currentIcon, title: '我在这里' })
+                .addTo(map)
+                .bindPopup('${FALLBACK_MARKER}');
 
               window.__pickSpot = (id) => {
                 const target = markers.find((item) => item.type === 'spot' && String(item.id) === String(id));
@@ -271,7 +293,14 @@ export default function MapScreen({ navigation, route }) {
 
               markers.forEach((item) => {
                 if (!item) return;
-                const marker = L.marker([item.lat, item.lng], { title: item.name || '拍摄点' })
+                const markerIcon = L.divIcon({
+                  className: '',
+                  html: '<div class="map-pin ' + (item.type === 'post' ? 'map-pin-post' : 'map-pin-spot') + '"></div>',
+                  iconSize: [28, 28],
+                  iconAnchor: [8, 24],
+                  popupAnchor: [0, -22],
+                });
+                const marker = L.marker([item.lat, item.lng], { icon: markerIcon, title: item.name || '拍摄点' })
                   .addTo(map)
                   .bindPopup(renderMarkerPopup(item));
                 marker.on('popupopen', () => {
