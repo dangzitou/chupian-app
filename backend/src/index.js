@@ -699,10 +699,10 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
   };
 }
 
-async function fetchAuthorFeedRows({ actorId, limit, cursor, sort = "latest" }) {
+async function fetchAuthorFeedRows({ actorId, authorId = actorId, limit, cursor, sort = "latest" }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
   const where = ["p.status='published'", "p.author_id = ?"];
-  const params = [actorId];
+  const params = [authorId];
   const baseWhere = [...where];
   const baseParams = [...params];
   const whereClause = baseWhere.join(" AND ");
@@ -1488,6 +1488,23 @@ app.get("/api/v1/community/me/posts", asyncHandler(async (req, res) => {
     sort,
   });
   res.json(payload);
+}));
+
+app.get("/api/v1/authors/:authorId/posts", asyncHandler(async (req, res) => {
+  const viewerActorId = readActorId(req, req.query);
+  const authorId = String(req.params.authorId || "").trim();
+  if (!authorId) return res.status(400).json({ error: "author id required" });
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchAuthorFeedRows({
+    actorId: viewerActorId,
+    authorId,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json({ ...payload, authorId });
 }));
 
 app.get("/api/v1/community/me/favorites", asyncHandler(async (req, res) => {

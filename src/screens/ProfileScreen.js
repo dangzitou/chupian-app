@@ -204,6 +204,9 @@ export default function ProfileScreen({ navigation }) {
         post={item}
       compact
       onPress={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, title: item.title } })}
+      onAuthorPress={item.authorId
+        ? () => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'AuthorProfile', params: { authorId: item.authorId, authorName: item.author } })
+        : undefined}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
       onFollow={() => onFollow(item.id)}

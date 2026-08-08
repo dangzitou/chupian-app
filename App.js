@@ -16,6 +16,7 @@ import SpotsScreen from './src/screens/SpotsScreen';
 import PostDetailScreen from './src/screens/PostDetailScreen';
 import NewPostScreen from './src/screens/NewPostScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import AuthorProfileScreen from './src/screens/AuthorProfileScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -35,6 +36,7 @@ function DiscoveryStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PostsList" component={PostsScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
+      <Stack.Screen name="AuthorProfile" component={AuthorProfileScreen} />
       <Stack.Screen name="SpotsList" component={SpotsScreen} />
       <Stack.Screen name="SpotDetail" component={SpotDetailScreen} />
     </Stack.Navigator>
