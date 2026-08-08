@@ -31,7 +31,13 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "出片地图",
+      "shortName": "出片",
+      "themeColor": "#d93657",
+      "backgroundColor": "#f8f7f6",
+      "display": "standalone",
+      "lang": "zh-CN"
     }
   }
 }
