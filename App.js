@@ -20,6 +20,16 @@ import ProfileScreen from './src/screens/ProfileScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+function TabIcon({ glyph, focused, primary = false }) {
+  return (
+    <View style={[styles.tabIcon, primary && styles.tabIconPrimary]}>
+      <Text style={[styles.tabGlyph, focused && styles.tabGlyphActive, primary && styles.tabGlyphPrimary]}>
+        {glyph}
+      </Text>
+    </View>
+  );
+}
+
 function DiscoveryStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -103,22 +113,34 @@ export default function App() {
           <Tab.Screen
             name={APP_ROUTES.DISCOVERY}
             component={DiscoveryStack}
-            options={{ tabBarLabel: '发现' }}
+            options={{
+              tabBarLabel: '发现',
+              tabBarIcon: ({ focused }) => <TabIcon glyph="⌂" focused={focused} />,
+            }}
           />
           <Tab.Screen
             name={APP_ROUTES.MAP}
             component={MapStack}
-            options={{ tabBarLabel: '地图' }}
+            options={{
+              tabBarLabel: '地图',
+              tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
+            }}
           />
           <Tab.Screen
             name={APP_ROUTES.CREATE}
             component={CreateStack}
-            options={{ tabBarLabel: '发布' }}
+            options={{
+              tabBarLabel: '发布',
+              tabBarIcon: ({ focused }) => <TabIcon glyph="＋" focused={focused} primary />,
+            }}
           />
           <Tab.Screen
             name={APP_ROUTES.PROFILE}
             component={ProfileStack}
-            options={{ tabBarLabel: '我的' }}
+            options={{
+              tabBarLabel: '我的',
+              tabBarIcon: ({ focused }) => <TabIcon glyph="○" focused={focused} />,
+            }}
           />
         </Tab.Navigator>
       </NavigationContainer>
@@ -128,6 +150,32 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  tabIcon: {
+    width: 25,
+    height: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconPrimary: {
+    width: 34,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: '#d93657',
+  },
+  tabGlyph: {
+    color: '#8f8987',
+    fontSize: 21,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  tabGlyphActive: {
+    color: '#d93657',
+  },
+  tabGlyphPrimary: {
+    color: '#ffffff',
+    fontSize: 21,
+    lineHeight: 24,
+  },
   bootScreen: {
     flex: 1,
     alignItems: 'center',
