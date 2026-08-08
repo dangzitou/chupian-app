@@ -13,13 +13,27 @@ function clampColumns(value) {
   return Math.max(1, Math.min(3, value));
 }
 
+function MediaFallback({ kind }) {
+  return (
+    <View style={[styles.mediaWrap, styles.mediaFallback]}>
+      <Text style={styles.fallbackTitle}>{kind === 'video' ? '视频暂不可用' : '图片暂不可用'}</Text>
+      <Text style={styles.fallbackHint}>素材地址已失效或无法加载</Text>
+    </View>
+  );
+}
+
 function MediaCover({ item, playing }) {
+  const [failed, setFailed] = useState(false);
+  const handleError = useCallback(() => setFailed(true), []);
+
   if (!item) return null;
+  if (failed) return <MediaFallback kind={item.kind} />;
 
   if (item.kind === 'video') {
+    if (!item.url) return <MediaFallback kind="video" />;
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} />
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay={playing} onError={handleError} />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
@@ -31,11 +45,12 @@ function MediaCover({ item, playing }) {
   }
 
   const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
+  if (!imageUri) return <MediaFallback kind="image" />;
 
   if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
     return (
       <View style={styles.mediaWrap}>
-        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop />
+        <VideoSurface uri={item.url} style={styles.videoSurface} shouldPlay loop onError={handleError} />
         <Text style={styles.liveMark}>实况 · 播放中</Text>
       </View>
     );
@@ -43,7 +58,7 @@ function MediaCover({ item, playing }) {
 
   return (
     <View>
-      <Image source={{ uri: imageUri }} style={styles.mediaWrap} resizeMode="cover" />
+      <Image source={{ uri: imageUri }} style={styles.mediaWrap} resizeMode="cover" onError={handleError} />
       {item.kind === 'live' ? <Text style={styles.liveMark}>{item.cover ? '实况 · 动态' : '实况'}</Text> : null}
     </View>
   );
@@ -109,6 +124,22 @@ const styles = StyleSheet.create({
     aspectRatio: IMAGE_RATIO,
     borderRadius: 10,
     backgroundColor: '#e8e8e8',
+  },
+  mediaFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  fallbackTitle: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fallbackHint: {
+    color: COLORS.muted,
+    fontSize: 10.5,
+    marginTop: 4,
+    textAlign: 'center',
   },
   videoSurface: {
     width: '100%',
