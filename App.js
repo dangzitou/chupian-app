@@ -41,12 +41,42 @@ const linking = {
   },
 };
 
-function TabIcon({ glyph, focused, primary = false }) {
+function TabIcon({ type, focused, primary = false }) {
+  const color = focused ? '#191919' : '#8f8987';
+
+  if (primary) {
+    return (
+      <View style={[styles.tabIcon, styles.tabIconPrimary]}>
+        <View style={styles.plusHorizontal} />
+        <View style={styles.plusVertical} />
+      </View>
+    );
+  }
+
+  if (type === 'map') {
+    return (
+      <View style={styles.tabIcon}>
+        <View style={[styles.mapGlyph, { borderColor: color }]}>
+          <View style={[styles.mapGlyphDot, { backgroundColor: color }]} />
+        </View>
+      </View>
+    );
+  }
+
+  if (type === 'discover') {
+    return (
+      <View style={[styles.tabIcon, styles.discoverGlyph]}>
+        {[0, 1, 2, 3].map((item) => (
+          <View key={item} style={[styles.discoverCell, { borderColor: color }]} />
+        ))}
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.tabIcon, primary && styles.tabIconPrimary]}>
-      <Text style={[styles.tabGlyph, focused && styles.tabGlyphActive, primary && styles.tabGlyphPrimary]}>
-        {glyph}
-      </Text>
+    <View style={[styles.tabIcon, styles.profileGlyph]}>
+      <View style={[styles.profileHead, { borderColor: color }]} />
+      <View style={[styles.profileBody, { borderColor: color }]} />
     </View>
   );
 }
@@ -101,6 +131,22 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+    [html, body, root].filter(Boolean).forEach((node) => {
+      node.style.width = '100%';
+      node.style.height = '100%';
+      node.style.margin = '0';
+      node.style.overflow = 'hidden';
+    });
+    body.style.backgroundColor = '#e9e6e2';
+    body.style.webkitFontSmoothing = 'antialiased';
+  }, []);
+
   if (!actorReady) {
     return (
       <SafeAreaProvider>
@@ -123,17 +169,18 @@ export default function App() {
               initialRouteName={APP_ROUTES.MAP}
               screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: '#d93657',
+                tabBarActiveTintColor: '#191919',
                 tabBarInactiveTintColor: '#8f8987',
-                tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+                tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600' },
                 tabBarItemStyle: { minWidth: 0 },
                 tabBarStyle: {
-                  height: 64,
-                  paddingTop: 5,
-                  paddingBottom: 7,
+                  height: 68,
+                  paddingTop: 6,
+                  paddingBottom: 8,
                   borderTopWidth: 1,
                   borderTopColor: 'rgba(25,25,25,0.08)',
                   backgroundColor: '#ffffff',
+                  elevation: 0,
                 },
               }}
             >
@@ -142,7 +189,7 @@ export default function App() {
                 component={MapStack}
                 options={{
                   tabBarLabel: '首页',
-                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌖" focused={focused} />,
+                  tabBarIcon: ({ focused }) => <TabIcon type="map" focused={focused} />,
                 }}
               />
               <Tab.Screen
@@ -150,7 +197,7 @@ export default function App() {
                 component={DiscoveryStack}
                 options={{
                   tabBarLabel: '发现',
-                  tabBarIcon: ({ focused }) => <TabIcon glyph="⌂" focused={focused} />,
+                  tabBarIcon: ({ focused }) => <TabIcon type="discover" focused={focused} />,
                 }}
               />
               <Tab.Screen
@@ -158,7 +205,7 @@ export default function App() {
                 component={CreateStack}
                 options={{
                   tabBarLabel: '发布',
-                  tabBarIcon: ({ focused }) => <TabIcon glyph="＋" focused={focused} primary />,
+                  tabBarIcon: ({ focused }) => <TabIcon type="create" focused={focused} primary />,
                 }}
               />
               <Tab.Screen
@@ -166,7 +213,7 @@ export default function App() {
                 component={ProfileStack}
                 options={{
                   tabBarLabel: '我的',
-                  tabBarIcon: ({ focused }) => <TabIcon glyph="○" focused={focused} />,
+                  tabBarIcon: ({ focused }) => <TabIcon type="profile" focused={focused} />,
                 }}
               />
             </Tab.Navigator>
@@ -182,16 +229,23 @@ const styles = StyleSheet.create({
   viewport: {
     flex: 1,
     width: '100%',
+    height: '100%',
     minHeight: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#e9e6e2',
   },
   mobileShell: {
     flex: 1,
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 430,
+    height: '100%',
+    minHeight: 0,
     overflow: 'hidden',
     backgroundColor: '#f8f7f6',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(25,25,25,0.06)',
     shadowColor: '#1c1c1c',
     shadowOpacity: 0.12,
     shadowRadius: 24,
@@ -210,19 +264,67 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: '#d93657',
   },
-  tabGlyph: {
-    color: '#8f8987',
-    fontSize: 21,
-    lineHeight: 22,
-    fontWeight: '600',
+  plusHorizontal: {
+    position: 'absolute',
+    width: 16,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#ffffff',
   },
-  tabGlyphActive: {
-    color: '#d93657',
+  plusVertical: {
+    position: 'absolute',
+    width: 2,
+    height: 16,
+    borderRadius: 1,
+    backgroundColor: '#ffffff',
   },
-  tabGlyphPrimary: {
-    color: '#ffffff',
-    fontSize: 21,
-    lineHeight: 24,
+  mapGlyph: {
+    width: 19,
+    height: 19,
+    borderWidth: 1.8,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapGlyphDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  discoverGlyph: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignContent: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+  },
+  discoverCell: {
+    width: 7,
+    height: 7,
+    borderWidth: 1.5,
+    borderRadius: 2,
+    margin: 1.5,
+  },
+  profileGlyph: {
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  profileHead: {
+    width: 8,
+    height: 8,
+    borderWidth: 1.6,
+    borderRadius: 5,
+  },
+  profileBody: {
+    width: 18,
+    height: 9,
+    marginTop: 2,
+    borderWidth: 1.6,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
   },
   bootScreen: {
     alignItems: 'center',
