@@ -83,6 +83,10 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
   const toggleLive = useCallback((index, item) => {
+    if (onPressMedia) {
+      onPressMedia(item, index);
+      return;
+    }
     const playable = item?.kind === 'video'
       || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
     if (!playable) {
