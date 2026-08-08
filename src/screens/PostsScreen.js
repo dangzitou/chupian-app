@@ -161,6 +161,7 @@ export default function PostsScreen({ navigation }) {
   const [signals, setSignals] = useState([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [signalsError, setSignalsError] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const bootstrappedRef = useRef(false);
   const feedModeRef = useRef('');
 
@@ -351,20 +352,34 @@ export default function PostsScreen({ navigation }) {
               {feedLayout === 'masonry' ? '☷ 列表' : '▦ 网格'}
             </Text>
           </Pressable>
+          <Pressable
+            style={[styles.layoutBtn, filtersOpen && styles.layoutBtnActive]}
+            onPress={() => setFiltersOpen((value) => !value)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: filtersOpen }}
+          >
+            <Text style={[styles.layoutBtnText, filtersOpen && styles.layoutBtnTextActive]}>
+              {filtersOpen ? '收起筛选' : '筛选'}
+            </Text>
+          </Pressable>
         </View>
       </View>
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
-      <SortTabs value={sort} onChange={applySort} />
-      <SignalStrip
-        items={signals}
-        activeTag={activeTag}
-        onSelect={applyTagFilter}
-        loading={signalsLoading}
-      />
-      {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
+      {filtersOpen ? (
+        <>
+          <SortTabs value={sort} onChange={applySort} />
+          <SignalStrip
+            items={signals}
+            activeTag={activeTag}
+            onSelect={applyTagFilter}
+            loading={signalsLoading}
+          />
+          {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
+        </>
+      ) : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, isMasonry, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -487,6 +502,14 @@ const styles = StyleSheet.create({
   layoutBtnText: {
     color: COLORS.ink,
     fontSize: 11.8,
+  },
+  layoutBtnActive: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accentBg,
+  },
+  layoutBtnTextActive: {
+    color: COLORS.accent,
+    fontWeight: '700',
   },
   layoutChips: {
     flexDirection: 'row',
