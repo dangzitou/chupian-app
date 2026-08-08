@@ -33,11 +33,20 @@ const LAYOUT_OPTIONS = [
   { key: 'list', label: '列表' },
 ];
 
+function SearchGlyph() {
+  return (
+    <View style={styles.searchGlyph} accessible accessibilityLabel="搜索">
+      <View style={styles.searchLens} />
+      <View style={styles.searchHandle} />
+    </View>
+  );
+}
+
 function SearchBar({ value, onSubmit, onChange }) {
   return (
     <View style={styles.searchWrap}>
       <View style={styles.searchInner}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <SearchGlyph />
         <TextInput
           style={styles.searchInput}
           placeholder="搜索标题 / 地点 / 标签"
@@ -321,7 +330,8 @@ export default function PostsScreen({ navigation }) {
   const ListHeader = useMemo(() => (
     <View style={styles.headerSection}>
       <View style={styles.headerTop}>
-        <View>
+        <View style={styles.titleStack}>
+          <Text style={styles.titleEyebrow}>广州 · 出片记录</Text>
           <Text style={styles.title}>发现</Text>
         </View>
         <View style={styles.headerActions}>
@@ -330,7 +340,7 @@ export default function PostsScreen({ navigation }) {
             onPress={() => setFeedLayout((prev) => (prev === 'masonry' ? 'list' : 'masonry'))}
           >
             <Text style={styles.layoutBtnText}>
-              {feedLayout === 'masonry' ? '☷ 列表' : '▦ 网格'}
+              {feedLayout === 'masonry' ? '列表' : '网格'}
             </Text>
           </Pressable>
           <Pressable
@@ -412,7 +422,7 @@ const styles = StyleSheet.create({
   listMasonry: { paddingHorizontal: 4 },
   headerWrap: { paddingBottom: 8 },
   headerSection: {
-    paddingTop: 2,
+    paddingTop: 4,
     paddingHorizontal: 2,
     marginBottom: 4,
     backgroundColor: COLORS.bg,
@@ -425,17 +435,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 8,
   },
-  title: { fontSize: 22, color: COLORS.ink, fontWeight: '700', letterSpacing: -0.3 },
+  titleStack: { gap: 1 },
+  titleEyebrow: {
+    color: COLORS.muted,
+    fontSize: 10.5,
+    letterSpacing: 0.6,
+    fontWeight: '700',
+  },
+  title: { fontSize: 25, color: COLORS.ink, fontWeight: '800', letterSpacing: -0.6 },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   layoutBtn: {
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderWidth: 0,
     borderRadius: 999,
-    backgroundColor: COLORS.card,
+    backgroundColor: 'transparent',
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -489,10 +505,9 @@ const styles = StyleSheet.create({
   searchWrap: {
     marginHorizontal: 4,
     marginTop: 4,
-    backgroundColor: COLORS.panel,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    borderRadius: 14,
+    minHeight: 44,
+    backgroundColor: '#efedeb',
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -501,10 +516,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  searchIcon: { color: COLORS.muted, fontSize: 14 },
+  searchGlyph: {
+    width: 17,
+    height: 17,
+    position: 'relative',
+    marginLeft: 2,
+  },
+  searchLens: {
+    position: 'absolute',
+    left: 1,
+    top: 1,
+    width: 11,
+    height: 11,
+    borderWidth: 1.7,
+    borderColor: COLORS.muted,
+    borderRadius: 7,
+  },
+  searchHandle: {
+    position: 'absolute',
+    left: 11,
+    top: 12,
+    width: 6,
+    height: 1.7,
+    backgroundColor: COLORS.muted,
+    transform: [{ rotate: '45deg' }],
+    borderRadius: 2,
+  },
   searchInput: {
     flex: 1,
-    height: 34,
+    height: 36,
     color: COLORS.ink,
     fontSize: 13.5,
   },
@@ -514,8 +554,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
     marginHorizontal: 8,
-    marginTop: 4,
-    marginBottom: 2,
+    marginTop: 8,
+    marginBottom: 1,
   },
   feedTab: {
     minWidth: 42,
@@ -536,8 +576,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     width: 20,
-    height: 3,
-    borderRadius: 99,
+    height: 2,
+    borderRadius: 2,
     backgroundColor: COLORS.accent,
   },
   tabs: {
@@ -620,12 +660,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   gridCard: {
-    flex: 0.495,
-    marginBottom: 12,
-    marginHorizontal: 4,
+    flex: 0.49,
+    marginBottom: 16,
+    marginHorizontal: 2,
   },
   listCard: {
-    marginBottom: 12,
+    marginBottom: 16,
     marginHorizontal: 6,
   },
 });

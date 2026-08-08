@@ -58,6 +58,7 @@ function PostCard({
       .map(([name, value]) => `${name}: ${value}`);
   }, [compact, post]);
   const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, compact ? 2 : 3);
+  const compactParam = shotBits[0] || tags[0] || '';
   const content = String(post.content || '').trim();
   const shouldCut = content.length > 96 && !expanded;
   const contentText = shouldCut ? `${content.slice(0, 96)}...` : content;
@@ -105,14 +106,12 @@ function PostCard({
           <Pressable onPress={onPress}>
             <Text style={styles.titleCompact} numberOfLines={2}>{post.title || '无标题'}</Text>
           </Pressable>
-          <Text style={styles.compactLocation} numberOfLines={1}>{locationText}</Text>
-          {tags.length > 0 ? (
-            <View style={styles.compactTags}>
-              {tags.slice(0, 2).map((tag) => (
-                <Text style={styles.compactTag} key={tag}>#{tag}</Text>
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.compactMetaLine}>
+            <Text style={styles.compactLocation} numberOfLines={1}>{locationText}</Text>
+            {!!compactParam ? (
+              <Text style={styles.compactParam} numberOfLines={1}>{compactParam}</Text>
+            ) : null}
+          </View>
           <View style={styles.compactFooter}>
             <Pressable style={styles.compactAuthor} onPress={onAuthorPress || onPress}>
               <View style={styles.avatarCompact}>
@@ -278,11 +277,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   cardCompact: {
+    backgroundColor: 'transparent',
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 8,
     marginHorizontal: 0,
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
+    shadowOpacity: 0,
+    shadowRadius: 0,
     shadowOffset: { width: 0, height: 2 },
   },
   header: {
@@ -422,22 +422,25 @@ const styles = StyleSheet.create({
   },
   compactBody: {
     paddingHorizontal: 9,
-    paddingBottom: 5,
+    paddingBottom: 2,
   },
-  compactLocation: {
-    color: COLORS.muted,
-    fontSize: 10.5,
+  compactMetaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 4,
   },
-  compactTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 5,
-    marginTop: 5,
+  compactLocation: {
+    flex: 1,
+    color: COLORS.muted,
+    fontSize: 10.5,
   },
-  compactTag: {
+  compactParam: {
+    maxWidth: '54%',
     color: COLORS.accent,
     fontSize: 10.5,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   compactFooter: {
     minHeight: 28,

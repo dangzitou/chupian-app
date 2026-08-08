@@ -694,7 +694,7 @@ export default function NewPostScreen({ navigation, route }) {
       >
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>发布出片</Text>
-          <Text style={styles.subtitle}>完善拍摄参数 + 发布照片/视频，打造可收藏的广州出片帖</Text>
+          <Text style={styles.subtitle}>先选素材，再补齐机位与拍摄参数，发布一条可复用的出片记录</Text>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
           {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
@@ -715,6 +715,29 @@ export default function NewPostScreen({ navigation, route }) {
               <Text style={styles.secondaryBtnText}>清空草稿</Text>
             </Pressable>
           </View>
+
+          <Text style={styles.sectionTitle}>素材</Text>
+          <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '先选 1-9 个素材，再补齐机位与拍摄参数；视频最大 40s'}</Text>
+          <View style={styles.mediaActions}>
+            <Pressable style={styles.mediaBtn} onPress={pickFromLibrary}>
+              <Text style={styles.mediaBtnText}>从相册</Text>
+            </Pressable>
+            <Pressable style={styles.mediaBtn} onPress={shootWithCamera}>
+              <Text style={styles.mediaBtnText}>拍摄</Text>
+            </Pressable>
+            <Pressable style={styles.mediaBtn} onPress={addLivePhoto}>
+              <Text style={styles.mediaBtnText}>实况</Text>
+            </Pressable>
+            <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/{MAX_MEDIA_COUNT}</Text></View>
+            {mediaList.length >= MAX_MEDIA_COUNT ? <Text style={styles.mediaCountWarn}>已达上限</Text> : null}
+          </View>
+
+          <MediaBuilder
+            mediaList={mediaList}
+            onRemove={removeMedia}
+            coverIndex={coverIndex}
+            onSetCover={setCover}
+          />
 
         <PostInput
           label="标题 *"
@@ -926,29 +949,6 @@ export default function NewPostScreen({ navigation, route }) {
             maxLength={80}
           />
         </FormSection>
-
-        <Text style={styles.sectionTitle}>素材</Text>
-        <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '支持图片、视频、实况截图；建议 1-9 个素材，最大 40s 视频'}</Text>
-        <View style={styles.mediaActions}>
-          <Pressable style={styles.mediaBtn} onPress={pickFromLibrary}>
-            <Text style={styles.mediaBtnText}>从相册</Text>
-          </Pressable>
-          <Pressable style={styles.mediaBtn} onPress={shootWithCamera}>
-            <Text style={styles.mediaBtnText}>拍摄</Text>
-          </Pressable>
-          <Pressable style={styles.mediaBtn} onPress={addLivePhoto}>
-            <Text style={styles.mediaBtnText}>实况</Text>
-          </Pressable>
-          <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/{MAX_MEDIA_COUNT}</Text></View>
-          {mediaList.length >= MAX_MEDIA_COUNT ? <Text style={styles.mediaCountWarn}>已达上限</Text> : null}
-        </View>
-
-        <MediaBuilder
-          mediaList={mediaList}
-          onRemove={removeMedia}
-          coverIndex={coverIndex}
-          onSetCover={setCover}
-        />
 
         <View style={styles.previewWrap}>
           <ShotMetaBoard
