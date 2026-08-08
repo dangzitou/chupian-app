@@ -25,6 +25,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "web:build": "npx expo export --platform web",
+    "web:serve": "npx serve web-build -l 80",
     "qa:integration": "node scripts/qa-integration.mjs",
     "qa:adversarial": "node scripts/qa-adversarial.mjs",
     "qa": "npm run qa:integration && npm run qa:adversarial"

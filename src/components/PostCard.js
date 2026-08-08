@@ -21,6 +21,13 @@ function formatShortTime(value) {
 
 export default function PostCard({ post, onPress, onLike, onFavorite, onComment }) {
   const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, 3);
+  const gearText = [
+    post.angle || null,
+    post.direction || null,
+    post.timeWindow || null,
+    post.bestTime || null,
+  ].filter(Boolean);
+  const cardMedia = post.media || [];
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
@@ -37,15 +44,27 @@ export default function PostCard({ post, onPress, onLike, onFavorite, onComment 
           </Text>
           <Text style={styles.sub}>{formatShortTime(post.createdAt)}</Text>
         </View>
+        <View style={styles.countWrap}>
+          <Text style={styles.countText}>{post.likes || 0}</Text>
+          <Text style={styles.countHint}>赞</Text>
+        </View>
       </View>
 
-      <MediaGallery media={post.media || []} showAll columns={post.media?.length > 1 ? 1 : 1} />
+      <MediaGallery media={cardMedia} showAll columns={cardMedia?.length > 1 ? 1 : 1} />
+      {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
 
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
           {post.title || '无标题'}
         </Text>
         {!!post.content && <Text style={styles.content} numberOfLines={3}>{post.content}</Text>}
+
+        {!!gearText.length ? <Text style={styles.param} numberOfLines={1}>📷 {gearText.join(' · ')}</Text> : null}
+        {gearText.length === 0 && (post.gear?.camera || post.gear?.focal) ? (
+          <Text style={styles.param} numberOfLines={1}>
+            📷 {[post.gear?.camera, post.gear?.lens, post.gear?.focal].filter(Boolean).join(' · ')}
+          </Text>
+        ) : null}
 
         {tags.length > 0 ? (
           <View style={styles.tags}>
@@ -54,10 +73,6 @@ export default function PostCard({ post, onPress, onLike, onFavorite, onComment 
             ))}
           </View>
         ) : null}
-
-        {!!post.angle ? <Text style={styles.param}>📐 {post.angle}</Text> : null}
-        {!!post.gear?.camera ? <Text style={styles.param}>📷 {post.gear.camera}</Text> : null}
-        {!!post.gear?.focal ? <Text style={styles.param}>🔍 {post.gear.focal}</Text> : null}
 
         <ActionBar
           likes={post.likes || 0}
@@ -119,6 +134,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  param: {
+    marginTop: 7,
+    color: COLORS.muted,
+    fontSize: 11.5,
+  },
+  multiMark: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    color: COLORS.onAccent,
+    fontSize: 11,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.56)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
+  },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   tag: {
     backgroundColor: COLORS.accentBg,
@@ -128,5 +161,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  param: { marginTop: 6, color: COLORS.muted, fontSize: 11.5 },
+  countWrap: {
+    alignItems: 'center',
+    minWidth: 34,
+    backgroundColor: COLORS.accentBg,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  countText: {
+    color: COLORS.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  countHint: {
+    color: COLORS.accent,
+    fontSize: 10,
+    marginTop: 1,
+  },
 });
