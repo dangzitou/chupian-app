@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
 import PostCard from '../components/PostCard';
+import FeedSkeleton from '../components/FeedSkeleton';
 
 const PAGE_SIZE = 12;
 const SORT_OPTIONS = [
@@ -251,13 +252,8 @@ export default function PostsScreen({ navigation }) {
     return <View style={styles.footer}><ActivityIndicator color={COLORS.accent} /></View>;
   }, [hasMore, loadingMore]);
 
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.center} edges={["top"]}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
-      </SafeAreaView>
-    );
-  }
+  const showSkeleton = loading && !refreshing && !posts.length;
+  const showEmpty = !loading && !loadingMore && !filteredPosts.length;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -272,12 +268,20 @@ export default function PostsScreen({ navigation }) {
         contentContainerStyle={styles.list}
         renderItem={renderCard}
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            {error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
-            <Text style={styles.empty}>{loading ? '加载中…' : '还没有攻略，先发布一条出片内容吧'}</Text>
-          </View>
+          showSkeleton ? <FeedSkeleton count={3} /> : (
+            <View style={styles.emptyWrap}>
+              {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
+              {showEmpty ? <Text style={styles.empty}>还没有攻略，先发布一条出片内容吧</Text> : null}
+              {showEmpty && !error ? (
+                <Pressable style={styles.retryBtn} onPress={() => load()}>
+                  <Text style={styles.retryText}>刷新</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )
         }
         ListFooterComponent={ListFooter}
+        ListHeaderComponentStyle={styles.headerWrap}
       />
     </SafeAreaView>
   );
@@ -285,8 +289,8 @@ export default function PostsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg },
   list: { paddingHorizontal: 0, paddingBottom: 40 },
+  headerWrap: { paddingBottom: 6 },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -353,4 +357,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingTop: 8,
   },
+  retryBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: COLORS.card,
+  },
+  retryText: { color: COLORS.accent, fontWeight: '700', fontSize: 12.5 },
 });
