@@ -21,6 +21,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import BlockedAuthorsScreen from './src/screens/BlockedAuthorsScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
+import AppTabBar from './src/components/AppTabBar';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -44,46 +45,6 @@ const linking = {
     },
   },
 };
-
-function TabIcon({ type, focused, primary = false }) {
-  const color = focused ? '#191919' : '#8f8987';
-
-  if (primary) {
-    return (
-      <View style={[styles.tabIcon, styles.tabIconPrimary]}>
-        <View style={styles.plusHorizontal} />
-        <View style={styles.plusVertical} />
-      </View>
-    );
-  }
-
-  if (type === 'map') {
-    return (
-      <View style={styles.tabIcon}>
-        <View style={[styles.mapGlyph, { borderColor: color }]}>
-          <View style={[styles.mapGlyphDot, { backgroundColor: color }]} />
-        </View>
-      </View>
-    );
-  }
-
-  if (type === 'discover') {
-    return (
-      <View style={[styles.tabIcon, styles.discoverGlyph]}>
-        {[0, 1, 2, 3].map((item) => (
-          <View key={item} style={[styles.discoverCell, { borderColor: color }]} />
-        ))}
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.tabIcon, styles.profileGlyph]}>
-      <View style={[styles.profileHead, { borderColor: color }]} />
-      <View style={[styles.profileBody, { borderColor: color }]} />
-    </View>
-  );
-}
 
 function DiscoveryStack() {
   return (
@@ -177,19 +138,7 @@ export default function App() {
               initialRouteName={APP_ROUTES.MAP}
               screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: '#191919',
-                tabBarInactiveTintColor: '#8f8987',
-                tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600' },
-                tabBarItemStyle: { minWidth: 0 },
-                tabBarStyle: {
-                  height: 68,
-                  paddingTop: 6,
-                  paddingBottom: 8,
-                  borderTopWidth: 1,
-                  borderTopColor: 'rgba(25,25,25,0.08)',
-                  backgroundColor: '#ffffff',
-                  elevation: 0,
-                },
+                tabBar: (props) => <AppTabBar {...props} />,
               }}
             >
               <Tab.Screen
@@ -197,7 +146,6 @@ export default function App() {
                 component={MapStack}
                 options={{
                   tabBarLabel: '首页',
-                  tabBarIcon: ({ focused }) => <TabIcon type="map" focused={focused} />,
                 }}
               />
               <Tab.Screen
@@ -205,7 +153,6 @@ export default function App() {
                 component={DiscoveryStack}
                 options={{
                   tabBarLabel: '发现',
-                  tabBarIcon: ({ focused }) => <TabIcon type="discover" focused={focused} />,
                 }}
               />
               <Tab.Screen
@@ -213,7 +160,6 @@ export default function App() {
                 component={CreateStack}
                 options={{
                   tabBarLabel: '发布',
-                  tabBarIcon: ({ focused }) => <TabIcon type="create" focused={focused} primary />,
                 }}
               />
               <Tab.Screen
@@ -221,7 +167,6 @@ export default function App() {
                 component={ProfileStack}
                 options={{
                   tabBarLabel: '我的',
-                  tabBarIcon: ({ focused }) => <TabIcon type="profile" focused={focused} />,
                 }}
               />
             </Tab.Navigator>
@@ -259,80 +204,6 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
-  },
-  tabIcon: {
-    width: 25,
-    height: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconPrimary: {
-    width: 34,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: '#d93657',
-  },
-  plusHorizontal: {
-    position: 'absolute',
-    width: 16,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: '#ffffff',
-  },
-  plusVertical: {
-    position: 'absolute',
-    width: 2,
-    height: 16,
-    borderRadius: 1,
-    backgroundColor: '#ffffff',
-  },
-  mapGlyph: {
-    width: 19,
-    height: 19,
-    borderWidth: 1.8,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapGlyphDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  discoverGlyph: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignContent: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    paddingVertical: 2,
-  },
-  discoverCell: {
-    width: 7,
-    height: 7,
-    borderWidth: 1.5,
-    borderRadius: 2,
-    margin: 1.5,
-  },
-  profileGlyph: {
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 2,
-  },
-  profileHead: {
-    width: 8,
-    height: 8,
-    borderWidth: 1.6,
-    borderRadius: 5,
-  },
-  profileBody: {
-    width: 18,
-    height: 9,
-    marginTop: 2,
-    borderWidth: 1.6,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
   },
   bootScreen: {
     alignItems: 'center',
