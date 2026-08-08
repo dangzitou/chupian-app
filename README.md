@@ -55,14 +55,48 @@ chupian-app/
 
 ## 与后端协同
 
-推荐后端保持与 `chupian-map/server.py` 同源接口，不变更以下路径：
+后端现在支持 `/api/v1` 与传统 `/api` 两套兼容路径（优先 `/api/v1`）：
 
-- `GET /api/spots`
-- `GET /api/posts`
-- `POST /api/posts`
-- `POST /api/posts/{id}/like`
-- `POST /api/posts/{id}/comment`
-- `GET /api/weather`
+- 健康检查
+  - `GET /api/v1/health`
+- 点位
+  - `GET /api/v1/spots`
+  - `GET /api/spots`（兼容）
+- 社区
+  - `GET /api/v1/community/feed`
+  - `GET /api/v1/posts`
+  - `GET /api/v1/posts/{id}`
+  - `POST /api/v1/posts`
+  - `POST /api/v1/posts/{id}/like`
+  - `POST /api/v1/posts/{id}/favorite`
+  - `POST /api/v1/posts/{id}/comments`
+  - `POST /api/v1/media/upload`
+  - `GET /api/v1/weather`
+- 兼容端点
+  - `GET /api/posts`
+  - `GET /api/posts/{id}`
+  - `POST /api/posts`
+  - `POST /api/posts/{id}/like`
+  - `POST /api/posts/{id}/favorite`
+  - `POST /api/posts/{id}/comment`
+  - `POST /api/posts/{id}/comments`
+  - `GET /api/weather`
+
+## 联调与安全验证（本地）
+
+```bash
+cd backend && npm install
+cd ..
+npm run qa:integration      # 联调核验（健康检查、接口兼容、核心业务流程）
+npm run qa:adversarial      # 攻防/对抗性测试（异常参数、边界输入、非法文件类型、签名）
+```
+
+无数据库可用时，`qa:integration` 会标记数据库依赖项为“待补环境”而非失败；若要做完整验收，请启动 MySQL/Redis 并执行：
+
+```bash
+cd backend && mysql -h 127.0.0.1 -u root -p < schema.sql
+REDIS_URL=redis://127.0.0.1:6379 QA_REQUIRE_DB=1 npm run qa:integration
+```
 
 ## 说明
 

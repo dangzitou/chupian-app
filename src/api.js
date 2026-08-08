@@ -116,7 +116,11 @@ export const api = {
   },
 
   async weather() {
-    return request('/api/weather');
+    try {
+      return request('/api/v1/weather');
+    } catch (err) {
+      return request('/api/weather');
+    }
   },
 
   async spots() {
@@ -233,12 +237,12 @@ export const api = {
         body: JSON.stringify(body),
       });
     } catch (err) {
-      // optional fallback: reuse legacy like endpoint
-      const res = await request(`/api/posts/${id}/like`, {
+      // optional fallback: legacy endpoint
+      const res = await request(`/api/posts/${id}/favorite`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      return { ...res, favorite: Boolean((res && res.liked) || false) };
+      return { ...res, favorited: Boolean((res && res.favorited) || false) };
     }
   },
 
