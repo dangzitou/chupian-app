@@ -31,7 +31,6 @@ const MAX_MEDIA_COUNT = 9;
 const MAX_VIDEO_SECONDS = 40;
 const DRAFT_DEBOUNCE_MS = 900;
 const DRAFT_STORAGE_KEY = 'chupian:new-post-v1';
-const LIVE_MEDIA_URI = 'https://picsum.photos/seed/live-photo/900/1200';
 
 const draftStorage = createDraftStorage(DRAFT_STORAGE_KEY);
 
@@ -52,10 +51,17 @@ function parseMediaDuration(raw, kind) {
 function buildMediaPayload(sourceAsset) {
   const uri = String(sourceAsset?.uri || '').trim();
   if (!uri) return null;
-  const isVideo = String(sourceAsset?.type || '').toLowerCase() === 'video'
+  const assetType = String(sourceAsset?.type || '').toLowerCase();
+  const isVideo = assetType === 'video'
     || String(sourceAsset?.mimeType || '').toLowerCase().includes('video')
     || String(sourceAsset?.mediaType || '').toLowerCase() === 'video';
-  const kind = isVideo ? MEDIA_KINDS.VIDEO : (sourceAsset?.kind || MEDIA_KINDS.IMAGE);
+  const isLive = assetType === 'livephoto'
+    || assetType === 'live_photo'
+    || assetType === 'live'
+    || sourceAsset?.isLivePhoto === true;
+  const kind = isVideo
+    ? MEDIA_KINDS.VIDEO
+    : (isLive ? MEDIA_KINDS.LIVE : (sourceAsset?.kind || MEDIA_KINDS.IMAGE));
   return {
     uri,
     kind,
@@ -102,6 +108,8 @@ function normalizeSpotPrefill(raw) {
     id: raw.id || raw.spotId || '',
     name: raw.name || raw.spotName || '',
     district: raw.district || '',
+    latitude: raw.latitude ?? raw.lat ?? '',
+    longitude: raw.longitude ?? raw.lng ?? '',
   };
 }
 
@@ -221,10 +229,16 @@ export default function NewPostScreen({ navigation, route }) {
     const nextSpotId = String(routeSpot.id || '').trim();
     const nextSpotName = String(routeSpot.name || '').trim();
     const nextDistrict = String(routeSpot.district || '').trim();
+    const nextLatitude = Number(routeSpot.latitude);
+    const nextLongitude = Number(routeSpot.longitude);
+    const hasCoordinates = Number.isFinite(nextLatitude) && Number.isFinite(nextLongitude);
     const shouldApply = (
       (!!nextSpotId && String(state.spotId) !== nextSpotId)
       || (!!nextSpotName && state.spotName !== nextSpotName)
       || (!!nextDistrict && state.district !== nextDistrict)
+      || (hasCoordinates && (
+        Number(state.latitude) !== nextLatitude || Number(state.longitude) !== nextLongitude
+      ))
     );
     if (!shouldApply) return;
 
@@ -234,9 +248,11 @@ export default function NewPostScreen({ navigation, route }) {
         spotId: nextSpotId || state.spotId,
         spotName: nextSpotName || state.spotName,
         district: nextDistrict || state.district,
+        latitude: hasCoordinates ? String(nextLatitude) : state.latitude,
+        longitude: hasCoordinates ? String(nextLongitude) : state.longitude,
       },
     });
-  }, [routeSpot, state.district, state.spotId, state.spotName]);
+  }, [routeSpot, state.district, state.latitude, state.longitude, state.spotId, state.spotName]);
 
   useEffect(() => {
     setCoverIndex((prev) => {
@@ -266,6 +282,8 @@ export default function NewPostScreen({ navigation, route }) {
         spotId: item.id,
         spotName: item.name,
         district: item.district || state.district,
+        latitude: String(item.latitude ?? item.lat ?? ''),
+        longitude: String(item.longitude ?? item.lng ?? ''),
       },
     });
   }, [state.district]);
@@ -357,24 +375,30 @@ export default function NewPostScreen({ navigation, route }) {
     });
   }, []);
 
-  const addLivePhoto = useCallback(() => {
+  const addLivePhoto = useCallback(async () => {
+    const ok = await requestGalleryPermission();
+    if (!ok) return;
+
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 1,
+      allowsMultipleSelection: false,
+    });
+    if (res.canceled || !res.assets?.length) return;
+
+    const normalized = buildMediaPayload(res.assets[0]);
+    if (!normalized || normalized.kind !== MEDIA_KINDS.LIVE) {
+      Alert.alert('不是实况照片', '请在相册中选择一张 Live Photo 后重试');
+      return;
+    }
+
     setMediaList((prev) => {
       if (prev.length >= MAX_MEDIA_COUNT) {
         Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
         return prev;
       }
-      if (prev.some((x) => x.kind === MEDIA_KINDS.LIVE)) {
-        return prev.filter((x) => x.kind !== MEDIA_KINDS.LIVE).concat({
-          uri: LIVE_MEDIA_URI,
-          kind: MEDIA_KINDS.LIVE,
-          mime: 'image/jpeg',
-        });
-      }
-      return [...prev, {
-        uri: LIVE_MEDIA_URI,
-        kind: MEDIA_KINDS.LIVE,
-        mime: 'image/jpeg',
-      }];
+      if (prev.some((item) => item.uri === normalized.uri)) return prev;
+      return [...prev, normalized];
     });
   }, []);
 
@@ -447,10 +471,12 @@ export default function NewPostScreen({ navigation, route }) {
               duration: item.duration || 0,
             };
           }
-          const res = await api.uploadMedia(item.uri, item.mime);
+          const res = await api.uploadMedia(item.uri, item.mime, item.kind);
           const mediaRecord = (res.media || [])[0] || {};
           return {
-            kind: mediaRecord.kind || item.kind || MEDIA_KINDS.IMAGE,
+            kind: item.kind === MEDIA_KINDS.LIVE
+              ? MEDIA_KINDS.LIVE
+              : (mediaRecord.kind || item.kind || MEDIA_KINDS.IMAGE),
             url: mediaRecord.url || item.uri,
             width: mediaRecord.width || 0,
             height: mediaRecord.height || 0,
@@ -465,6 +491,8 @@ export default function NewPostScreen({ navigation, route }) {
         spotId: selectedSpot?.id || state.spotId || '',
         spotName: selectedSpot?.name || state.spotName || '',
         district: selectedSpot?.district || state.district || '',
+        latitude: Number.isFinite(Number(state.latitude)) ? Number(state.latitude) : null,
+        longitude: Number.isFinite(Number(state.longitude)) ? Number(state.longitude) : null,
         media: uploaded,
         cover: uploaded[0]?.url || '',
         angle: state.angle.trim(),

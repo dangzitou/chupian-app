@@ -27,19 +27,28 @@ const {
   MAX_FEED_LIMIT = "40",
   UPLOAD_DIR = "./uploads",
   CORS_ORIGIN = "*",
-  ALLOWED_UPLOAD_EXT = ".jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.m4v,.mp3",
+  ALLOWED_UPLOAD_EXT = ".jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.mp4,.mov,.m4v,.mp3",
   MAX_JSON_SIZE = "2mb",
   MAX_FILE_SIZE = "120mb",
   SPOT_CACHE_TTL = "90",
 } = process.env;
 
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
+const HTTP_KEEP_ALIVE_TIMEOUT_MS = Number.parseInt(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || "65000", 10) || 65000;
+const HTTP_HEADERS_TIMEOUT_MS = Number.parseInt(process.env.HTTP_HEADERS_TIMEOUT_MS || "20000", 10) || 20000;
+const HTTP_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS || "180000", 10) || 180000;
 const IDEMPOTENCY_TTL_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "3600", 10) || 3600;
 const IDEMPOTENCY_LOCK_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_LOCK_SECONDS || "60", 10) || 60;
 const API_RATE_LIMIT_WINDOW_SECONDS = 60;
 const API_RATE_LIMIT_MAX = 240;
 const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
 const apiRateLimitMemory = new Map();
+const SYSTEM_ROUTES = new Set([
+  "/health",
+  "/api/health",
+  "/api/v1/health",
+  "/api/v1/system/health",
+]);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +63,8 @@ const allowedMimes = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
   "video/mp4",
   "video/quicktime",
   "video/x-msvideo",
@@ -63,6 +74,7 @@ const allowedMimes = new Set([
 
 const app = express();
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -94,6 +106,17 @@ app.use((err, _req, res, next) => {
   }
   return next(err);
 });
+app.use((req, res, next) => {
+  const requestId = req.headers["x-request-id"] || req.headers["x-correlation-id"]
+    || randomUUID().replace(/-/g, "");
+  req.requestId = requestId;
+  res.setHeader("X-Request-Id", requestId);
+  next();
+});
+
+function isBypassedFromRateLimit(req) {
+  return req && req.path && SYSTEM_ROUTES.has(req.path);
+}
 
 function buildApiRateLimitPayload(req, windowNow) {
   const bucketStart = Math.floor(windowNow / API_RATE_LIMIT_WINDOW_MS);
@@ -126,6 +149,7 @@ async function checkInMemoryRateLimit(key, bucketResetMs) {
 }
 
 async function apiLimiter(req, res, next) {
+  if (isBypassedFromRateLimit(req)) return next();
   const now = Date.now();
   const { bucketResetMs, key } = buildApiRateLimitPayload(req, now);
   const remainingWindowMs = Math.max(bucketResetMs - now, 0);
@@ -199,6 +223,16 @@ function parseSearchText(raw) {
   const text = clampString(raw, 80);
   if (!text) return "";
   return text.replace(/[\r\n]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["0", "false", "off", "no", "f"].includes(normalized)) return false;
+  if (["1", "true", "on", "yes", "y"].includes(normalized)) return true;
+  return fallback;
 }
 
 function extractPaginationParams(req, fallback = 20) {
@@ -325,6 +359,12 @@ function pickInt(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.
   return n;
 }
 
+function pickFloat(value, fallback, { min = -Infinity, max = Infinity } = {}) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < min || n > max) return fallback;
+  return n;
+}
+
 function appendSearchConditions({ where, params }, queryText, topic) {
   if (queryText) {
     const token = `%${escapeLike(queryText)}%`;
@@ -355,11 +395,14 @@ function buildFeedBaseWhere({ q = "", tag = "" } = {}) {
 
 async function loadPostMeta(rows, options = {}) {
   const includeComments = options.includeComments !== false;
+  const actor = String(options.actor || "").trim();
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const inQuery = ids.map(() => "?").join(",");
+  const authorIds = Array.from(new Set(rows.map((r) => String(r.author_id || "").trim()).filter(Boolean)));
+  const authorQuery = authorIds.map(() => "?").join(",");
 
-  const [mediaRows, tagRows, styleRows, commentAggRows, likeAggRows, favAggRows, commentRows] = await Promise.all([
+  const [mediaRows, tagRows, styleRows, commentAggRows, likeAggRows, favAggRows, commentRows, followerRows] = await Promise.all([
     query(
       `SELECT post_id, kind, url, width, height, duration, cover_url, sort_order
        FROM post_media
@@ -382,6 +425,15 @@ async function loadPostMeta(rows, options = {}) {
         ids
       )
       : Promise.resolve([]),
+    authorIds.length
+      ? query(
+        `SELECT followed_id AS author_id, COUNT(*) AS c
+         FROM author_follows
+         WHERE followed_id IN (${authorQuery})
+         GROUP BY followed_id`,
+        authorIds
+      )
+      : Promise.resolve([]),
   ]);
 
   const mediaMap = new Map();
@@ -391,6 +443,7 @@ async function loadPostMeta(rows, options = {}) {
   const commentCountMap = new Map();
   const likeMap = new Map();
   const favMap = new Map();
+  const followerMap = new Map();
 
   for (const r of mediaRows) {
     const key = String(r.post_id);
@@ -435,6 +488,9 @@ async function loadPostMeta(rows, options = {}) {
   for (const item of favAggRows) {
     favMap.set(String(item.post_id), Number(item.c || 0));
   }
+  for (const item of followerRows) {
+    followerMap.set(String(item.author_id), Number(item.c || 0));
+  }
 
   return rows.map((row) => {
     const key = String(row.id);
@@ -449,6 +505,8 @@ async function loadPostMeta(rows, options = {}) {
       spotId: row.spot_id ? String(row.spot_id) : "",
       spotName: row.spot_name || "",
       district: row.district || "",
+      latitude: row.latitude === null || row.latitude === undefined ? null : Number(row.latitude),
+      longitude: row.longitude === null || row.longitude === undefined ? null : Number(row.longitude),
       cover: row.cover_url || "",
       angle: row.angle || "",
       direction: row.direction || "",
@@ -474,6 +532,8 @@ async function loadPostMeta(rows, options = {}) {
       commentsCount: commentCount,
       liked: Boolean(row.liked),
       favorited: Boolean(row.favorited),
+      followed: actor ? Boolean(row.followed) : false,
+      followers: Number(followerMap.get(String(row.author_id || "")) || 0),
       createdAt: row.created_at,
     };
   });
@@ -497,7 +557,8 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
     ", (SELECT COUNT(*) FROM post_favorites f WHERE f.post_id = p.id) AS favorites_count",
     ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comments_count",
     ", EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked",
-    ", EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited"
+    ", EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited",
+    ", EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed"
   );
 
   if (cursor) {
@@ -507,11 +568,11 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
 
   const rows = await query(
     `${clauses.join("")} ${fromClause} WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
-    [actorId, actorId, ...params, max + 1]
+    [actorId, actorId, actorId, ...params, max + 1]
   );
 
   const useRows = rows.slice(0, max);
-  const posts = await loadPostMeta(useRows, { includeComments: false });
+  const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
 
   const totalRows = await query(
@@ -574,14 +635,15 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
   const rows = await query(
     `SELECT p.*,
       EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
-      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited
+      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited,
+      EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed
      ${fromClause}
      WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
-    [actorId, actorId, ...params, max + 1]
+    [actorId, actorId, actorId, ...params, max + 1]
   );
 
   const useRows = rows.slice(0, max);
-  const posts = await loadPostMeta(useRows, { includeComments: false });
+  const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
   const totalRows = await query(`SELECT COUNT(*) AS c ${fromClause} WHERE ${whereClause}`, baseParams);
   const total = Number(totalRows[0]?.c || 0);
@@ -615,14 +677,15 @@ async function fetchAuthorFeedRows({ actorId, limit, cursor, sort = "latest" }) 
   const rows = await query(
     `SELECT p.*,
       EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
-      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited
+      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited,
+      EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed
      FROM posts p
      WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
-    [actorId, actorId, ...params, max + 1]
+    [actorId, actorId, actorId, ...params, max + 1]
   );
 
   const useRows = rows.slice(0, max);
-  const posts = await loadPostMeta(useRows, { includeComments: false });
+  const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
   const totalRows = await query(
     `SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`,
@@ -690,35 +753,193 @@ function asyncHandler(handler) {
 
 async function ensurePostsSchemaCompatibility() {
   try {
-    const columns = await query("SHOW COLUMNS FROM posts LIKE 'author_id'");
-    if (!Array.isArray(columns) || columns.length === 0) {
-      await query("ALTER TABLE posts ADD COLUMN author_id VARCHAR(64) DEFAULT '' AFTER content");
+    const ensureColumn = async (name, definition, after) => {
+      const columns = await query(`SHOW COLUMNS FROM posts LIKE '${name}'`);
+      if (!Array.isArray(columns) || columns.length === 0) {
+        await query(`ALTER TABLE posts ADD COLUMN ${name} ${definition} AFTER ${after}`);
+      }
+    };
+    await ensureColumn("author_id", "VARCHAR(64) DEFAULT ''", "content");
+    await ensureColumn("latitude", "DECIMAL(10,7) DEFAULT NULL", "district");
+    await ensureColumn("longitude", "DECIMAL(10,7) DEFAULT NULL", "latitude");
+
+    const indexes = [
+      ["idx_posts_author_id", "INDEX idx_posts_author_id (author_id)"],
+      ["idx_posts_author_status_created", "INDEX idx_posts_author_status_created (author_id, status, created_at, id)"],
+      ["idx_posts_status_author", "INDEX idx_posts_status_author (status, author_id, created_at, id)"],
+      ["idx_posts_spot_name", "INDEX idx_posts_spot_name (spot_name)"],
+      ["idx_posts_district", "INDEX idx_posts_district (district)"],
+      ["idx_posts_best_time", "INDEX idx_posts_best_time (best_time)"],
+      ["idx_posts_shot_at", "INDEX idx_posts_shot_at (shot_at)"],
+      ["idx_posts_status_hot", "INDEX idx_posts_status_hot (status, stats_likes, created_at, id)"],
+      ["idx_posts_status_favorites", "INDEX idx_posts_status_favorites (status, stats_favorites, created_at, id)"],
+      ["ft_posts_search", "FULLTEXT INDEX ft_posts_search (title, content, spot_name, district)"],
+    ];
+    for (const [name, definition] of indexes) {
+      const existing = await query("SHOW INDEX FROM posts WHERE Key_name = ?", [name]);
+      if (!Array.isArray(existing) || existing.length === 0) {
+        await query(`ALTER TABLE posts ADD ${definition}`);
+      }
     }
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_author_id (author_id)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_author_status_created (author_id, status, created_at, id)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_author (status, author_id, created_at, id)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_spot_name (spot_name)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_district (district)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_best_time (best_time)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_shot_at (shot_at)");
-    await query("ALTER TABLE posts ADD FULLTEXT INDEX IF NOT EXISTS ft_posts_search (title, content, spot_name, district)");
+  } catch (err) {
+    console.warn(`[schema] ensurePostsSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
+async function ensureFollowSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS author_follows (
+        follower_id VARCHAR(64) NOT NULL,
+        followed_id VARCHAR(64) NOT NULL,
+        actor_name VARCHAR(64) DEFAULT '匿名拍友',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (follower_id, followed_id),
+        INDEX idx_af_follower (follower_id),
+        INDEX idx_af_followed (followed_id)
+      ) ENGINE=InnoDB
+    `);
   } catch (_err) {
-    console.warn("[schema] ensurePostsSchemaCompatibility skipped");
+    console.warn("[schema] ensureFollowSchemaCompatibility skipped");
+  }
+}
+
+async function getFollowState(actor, targetAuthorId) {
+  if (!actor || !targetAuthorId) {
+    return { isFollowing: false, followers: 0 };
   }
 
-  try {
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id)");
-    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_favorites (status, stats_favorites, created_at, id)");
-  } catch (_err) {
-    // keep compatibility
+  const [followRow] = await query(
+    "SELECT COUNT(*) AS isFollowing FROM author_follows WHERE follower_id = ? AND followed_id = ?",
+    [actor, targetAuthorId]
+  );
+  const [countRow] = await query(
+    "SELECT COUNT(*) AS followers FROM author_follows WHERE followed_id = ?",
+    [targetAuthorId]
+  );
+
+  return {
+    isFollowing: Boolean(Number(followRow?.isFollowing || 0)),
+    followers: Number(countRow?.followers || 0),
+  };
+}
+
+async function applyAuthorFollow({ actor, actorName, targetAuthorId, action = "toggle" }) {
+  const normalizedAction = String(action || "toggle");
+  const allowedActions = ["toggle", "follow", "unfollow"];
+  if (!allowedActions.includes(normalizedAction)) {
+    const actionErr = new Error(`invalid action: ${normalizedAction}`);
+    actionErr.status = 400;
+    throw actionErr;
   }
+
+  if (!actor || !targetAuthorId) {
+    const err = new Error("target author required");
+    err.status = 400;
+    throw err;
+  }
+  if (actor === targetAuthorId) {
+    const err = new Error("cannot follow yourself");
+    err.status = 400;
+    throw err;
+  }
+
+  const [authorExists] = await query("SELECT 1 FROM posts WHERE author_id = ? LIMIT 1", [targetAuthorId]);
+  if (!authorExists) {
+    const err = new Error("author not found");
+    err.status = 404;
+    throw err;
+  }
+
+  return tx(async (conn) => {
+    const [stateRows] = await conn.execute(
+      "SELECT COUNT(*) AS isFollowing FROM author_follows WHERE follower_id = ? AND followed_id = ?",
+      [actor, targetAuthorId]
+    );
+    const isFollowing = Boolean(Number(stateRows?.[0]?.isFollowing || 0));
+    const shouldFollow = normalizedAction === "toggle" ? !isFollowing : normalizedAction === "follow";
+
+    if (shouldFollow && !isFollowing) {
+      await conn.execute(
+        "INSERT IGNORE INTO author_follows (follower_id, followed_id, actor_name) VALUES (?, ?, ?)",
+        [actor, targetAuthorId, actorName]
+      );
+    }
+
+    if (!shouldFollow && isFollowing) {
+      await conn.execute(
+        "DELETE FROM author_follows WHERE follower_id = ? AND followed_id = ?",
+        [actor, targetAuthorId]
+      );
+    }
+
+    const [countRows] = await conn.execute(
+      "SELECT COUNT(*) AS followers FROM author_follows WHERE followed_id = ?",
+      [targetAuthorId]
+    );
+    const [stateRowsAfter] = await conn.execute(
+      "SELECT COUNT(*) AS isFollowing FROM author_follows WHERE follower_id = ? AND followed_id = ?",
+      [actor, targetAuthorId]
+    );
+
+    return {
+      following: Boolean(Number(stateRowsAfter?.[0]?.isFollowing || 0)),
+      followers: Number(countRows?.[0]?.followers || 0),
+    };
+  });
+}
+
+async function fetchFollowingFeedRows({ actorId, limit, cursor, sort = "latest" }) {
+  const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
+  const where = [
+    "p.status='published'",
+    "p.author_id IN (SELECT af.followed_id FROM author_follows af WHERE af.follower_id = ?)",
+  ];
+  const params = [actorId];
+  const baseWhere = [...where];
+  const whereClause = baseWhere.join(" AND ");
+  if (cursor) {
+    where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+
+  const order = sort === "hot"
+    ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
+    : " ORDER BY p.created_at DESC, p.id DESC";
+
+  const rows = await query(
+    `SELECT p.*,
+      EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
+      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited,
+      EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed
+     FROM posts p
+     WHERE ${whereClause}
+     ${order} LIMIT ?`,
+    [actorId, actorId, actorId, ...params.slice(1), max + 1]
+  );
+
+  const useRows = rows.slice(0, max);
+  const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
+  const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
+
+  const totalRows = await query(`SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`, baseWhere);
+  const total = Number(totalRows[0]?.c || 0);
+
+  return {
+    posts,
+    nextCursor,
+    hasMore: useRows.length === max,
+    total,
+    stats: { totalPosts: total },
+  };
 }
 
 async function getPostHandler(req, res) {
   const postId = Number(req.params.id);
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
   const actor = readActorId(req, req.query);
-  const cacheKey = `post:detail:${postId}:${actor}`;
+  const withComments = parseBoolean(req.query.withComments, true);
+  const cacheKey = `post:detail:${postId}:${actor}:${withComments ? "with-comments" : "no-comments"}`;
 
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
@@ -726,17 +947,64 @@ async function getPostHandler(req, res) {
   const rows = await query(
     `SELECT p.*,
        EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
-       EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited
+       EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited,
+       EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed
      FROM posts p WHERE p.id = ?`,
-    [actor, actor, postId]
+    [actor, actor, actor, postId]
   );
   if (!rows.length) return res.status(404).json({ error: "post not found" });
 
-  const post = (await loadPostMeta(rows))[0];
+  const post = (await loadPostMeta(rows, { includeComments: withComments, actor }))[0];
   await query("UPDATE posts SET stats_views = stats_views + 1 WHERE id = ?", [postId]);
   post.views += 1;
   await cacheSetJson(cacheKey, { post }, 120);
   return res.json({ post });
+}
+
+async function getPostCommentsPayload(req) {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    const err = new Error("invalid post id");
+    err.status = 400;
+    throw err;
+  }
+
+  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
+  if (!exists?.id) {
+    const err = new Error("post not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 12, { min: 1, max: Number(MAX_FEED_LIMIT) });
+  const [rows, countRows] = await Promise.all([
+    query(
+      `SELECT id, actor_name AS author, content, created_at
+       FROM post_comments
+       WHERE post_id = ? ${cursor ? "AND (created_at < ? OR (created_at = ? AND id < ?))" : ""}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`,
+      cursor
+        ? [postId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1]
+        : [postId, limit + 1]
+    ),
+    query("SELECT COUNT(*) AS c FROM post_comments WHERE post_id = ?", [postId]),
+  ]);
+
+  const useRows = rows.slice(0, limit);
+  const nextCursor = useRows.length === limit ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
+  return {
+    comments: useRows.map((row) => ({
+      id: row.id,
+      author: row.author,
+      text: row.content,
+      createdAt: row.created_at,
+    })),
+    nextCursor,
+    hasMore: useRows.length === limit,
+    total: Number(countRows[0]?.c || 0),
+  };
 }
 
 async function createPostHandler(req) {
@@ -751,6 +1019,8 @@ async function createPostHandler(req) {
   const spotId = pickInt(body.spotId, 0);
   const spotName = safeText(body.spotName || "", 80);
   const district = safeText(body.district || "", 64);
+  const latitude = pickFloat(body.latitude, null, { min: -90, max: 90 });
+  const longitude = pickFloat(body.longitude, null, { min: -180, max: 180 });
   const tags = normalizeList(body.tags || body.tag || "");
   const styles = normalizeList(body.styles || "");
   const actorId = readActorId(req, body);
@@ -772,6 +1042,8 @@ async function createPostHandler(req) {
         spotId || null,
         spotName,
         district,
+        latitude,
+        longitude,
         safeText(body.direction || "", 80),
         safeText(body.angle || "", 80),
         safeText(body.timeWindow || "", 80),
@@ -790,10 +1062,10 @@ async function createPostHandler(req) {
 
       const [postResult] = await conn.execute(
         `INSERT INTO posts
-         (title, content, author_id, author_name, author_bio, spot_id, spot_name, district, direction, angle,
+         (title, content, author_id, author_name, author_bio, spot_id, spot_name, district, latitude, longitude, direction, angle,
         time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
         media_type, cover_url, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
         postValues
       );
 
@@ -932,36 +1204,49 @@ async function createCommentHandler(req) {
     throw err;
   }
 
-  await query(
+  const result = await query(
     "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
     [postId, actor, author, text]
   );
   await invalidateAllPostsCaches();
   await cacheDel(`post:detail:${postId}:*`);
+  const insertedId = Number(result?.insertId || 0);
+  const [insertedComment] = insertedId
+    ? await query("SELECT created_at FROM post_comments WHERE id = ?", [insertedId])
+    : [{ created_at: new Date().toISOString() }];
   return {
     ok: true,
     comment: {
+      id: insertedId || null,
       postId,
       actorName: author,
       text,
+      createdAt: insertedComment?.created_at || new Date().toISOString(),
     },
   };
 }
 
-function createErrorHandler(err, _req, res, _next) {
+function createErrorHandler(err, req, res, _next) {
+  const requestId = req?.requestId;
   if (Number.isInteger(err?.status)) {
-    return res.status(err.status).json({ error: err.message || "bad request" });
+    return res.status(err.status).json({
+      error: err.message || "bad request",
+      requestId,
+    });
   }
   if (err?.message === "Unsupported file type") {
-    return res.status(415).json({ error: "Unsupported file type" });
+    return res.status(415).json({ error: "Unsupported file type", requestId });
   }
   if (err?.type === "entity.too.large") {
-    return res.status(413).json({ error: "payload too large" });
+    return res.status(413).json({ error: "payload too large", requestId });
   }
   if (err?.code === "LIMIT_FILE_SIZE") {
-    return res.status(413).json({ error: "file too large" });
+    return res.status(413).json({ error: "file too large", requestId });
   }
-  return res.status(500).json({ error: err?.message || "internal error" });
+  return res.status(500).json({
+    error: err?.message || "internal error",
+    requestId,
+  });
 }
 
 const healthHandler = async (_req, res) => {
@@ -1014,6 +1299,7 @@ const weatherHandler = async (_req, res) => {
 };
 app.get("/health", healthHandler);
 app.get("/api/v1/health", healthHandler);
+app.get("/api/v1/system/health", healthHandler);
 app.get("/api/weather", weatherHandler);
 app.get("/api/v1/weather", weatherHandler);
 
@@ -1118,7 +1404,7 @@ app.get("/api/community/discovery", asyncHandler(async (req, res) => {
       total: signals.length,
     },
   });
-});
+}));
 
 app.get("/api/v1/community/me/likes", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
@@ -1163,8 +1449,111 @@ app.get("/api/v1/community/me/favorites", asyncHandler(async (req, res) => {
   });
   res.json(payload);
 }));
+app.get("/api/v1/community/me/following", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchFollowingFeedRows({
+    actorId: actor,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json(payload);
+}));
+
+app.get("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  if (!targetAuthorId) {
+    return res.status(400).json({ error: "author id required" });
+  }
+  const state = await getFollowState(actor, targetAuthorId);
+  res.json({
+    ok: true,
+    authorId: targetAuthorId,
+    followed: state.isFollowing,
+    followers: state.followers,
+  });
+}));
+
+app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  const action = String(req.body?.action || "toggle");
+  const actorName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
+  const state = await applyAuthorFollow({
+    actor,
+    actorName,
+    targetAuthorId,
+    action,
+  });
+  res.json({
+    ok: true,
+    authorId: targetAuthorId,
+    followed: state.following,
+    following: state.following,
+    followers: state.followers,
+    action,
+  });
+}));
+
+app.get("/api/community/me/following", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchFollowingFeedRows({
+    actorId: actor,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json(payload);
+}));
+
+app.get("/api/community/authors/:authorId/follow", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  if (!targetAuthorId) {
+    return res.status(400).json({ error: "author id required" });
+  }
+  const state = await getFollowState(actor, targetAuthorId);
+  res.json({
+    ok: true,
+    authorId: targetAuthorId,
+    followed: state.isFollowing,
+    followers: state.followers,
+  });
+}));
+
+app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  const action = String(req.body?.action || "toggle");
+  const actorName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
+  const state = await applyAuthorFollow({
+    actor,
+    actorName,
+    targetAuthorId,
+    action,
+  });
+  res.json({
+    ok: true,
+    authorId: targetAuthorId,
+    followed: state.following,
+    following: state.following,
+    followers: state.followers,
+    action,
+  });
+}));
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
+app.get("/api/v1/posts/:id/comments", asyncHandler(async (req, res) => {
+  const payload = await getPostCommentsPayload(req);
+  return res.json(payload);
+}));
 
 app.post("/api/v1/posts", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.body || {});
@@ -1279,6 +1668,10 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
   });
 }));
 app.get("/api/posts/:id", asyncHandler(getPostHandler));
+app.get("/api/posts/:id/comments", asyncHandler(async (req, res) => {
+  const payload = await getPostCommentsPayload(req);
+  return res.json(payload);
+}));
 app.post("/api/posts", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.body || {});
   const result = await runWithIdempotency({
@@ -1358,6 +1751,7 @@ app.post("/api/posts/:id/comments", asyncHandler(async (req, res) => {
 app.use(createErrorHandler);
 
 await ensurePostsSchemaCompatibility();
+await ensureFollowSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;
@@ -1398,5 +1792,8 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 server = app.listen(Number(PORT), () => {
+  server.keepAliveTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS;
+  server.headersTimeout = HTTP_HEADERS_TIMEOUT_MS;
+  server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
   console.log(`chupian service running on http://0.0.0.0:${PORT}`);
 });

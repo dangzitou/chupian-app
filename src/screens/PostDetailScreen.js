@@ -24,6 +24,7 @@ import ShotMetaBoard from '../components/ShotMetaBoard';
 import { formatRelativeTime } from '../utils/time';
 import { buildPostShareMessage } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
+import { getActorName } from '../lib/actor';
 
 const COMMENT_PAGE_SIZE = 12;
 
@@ -56,7 +57,11 @@ export default function PostDetailScreen({ route }) {
   const [commentInput, setCommentInput] = useState('');
   const [commentSending, setCommentSending] = useState(false);
   const [commentError, setCommentError] = useState(null);
-  const [commentPageSize, setCommentPageSize] = useState(COMMENT_PAGE_SIZE);
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsCursor, setCommentsCursor] = useState(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsLoadError, setCommentsLoadError] = useState(null);
 
   const listRef = useRef(null);
   const commentInputRef = useRef(null);
@@ -90,18 +95,51 @@ export default function PostDetailScreen({ route }) {
     busyKey: (id, stateField) => `${String(id)}:${String(stateField || '')}`,
   });
 
+  const loadComments = useCallback(async ({ append = false } = {}) => {
+    if (!postId) return;
+    if (commentsLoading) return;
+    const cursor = append ? commentsCursor : null;
+    setCommentsLoading(true);
+    if (!append) {
+      setComments([]);
+      setCommentsCursor(null);
+      setCommentsHasMore(false);
+    }
+    setCommentsLoadError(null);
+
+    try {
+      const payload = await api.getPostComments(postId, {
+        limit: COMMENT_PAGE_SIZE,
+        cursor,
+      });
+      setComments((prev) => (append ? [...prev, ...payload.comments] : payload.comments));
+      setCommentsCursor(payload.nextCursor || null);
+      setCommentsHasMore(Boolean(payload.hasMore));
+    } catch (err) {
+      setCommentsLoadError(err?.message || '评论加载失败');
+      if (!append) {
+        setComments([]);
+        setCommentsCursor(null);
+        setCommentsHasMore(false);
+      }
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [api, postId, commentsCursor, commentsLoading]);
+
   const loadPost = useCallback(async () => {
     if (!postId) return;
     setLoading(true);
     setError(null);
+    setCommentError(null);
+    setCommentsLoadError(null);
 
     try {
-      const payload = await api.getPost(postId);
+      const payload = await api.getPost(postId, { withComments: false });
       setPost(payload);
-      setCommentPageSize(COMMENT_PAGE_SIZE);
-      setCommentError(null);
       commentIdempotencyRef.current = '';
       commentSeedRef.current = '';
+      await loadComments();
     } catch (err) {
       setError(err?.message || '加载失败');
       setPost(null);
@@ -109,7 +147,7 @@ export default function PostDetailScreen({ route }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [postId]);
+  }, [api, loadComments, postId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -126,7 +164,7 @@ export default function PostDetailScreen({ route }) {
       postId: post.id,
       metricField: 'likes',
       stateField: 'liked',
-      actionResolver: async ({ post: resolvedPost, next }) => api.toggleLike(resolvedPost.id, resolvedPost.author, next ? 'like' : 'unlike'),
+      actionResolver: async ({ post: resolvedPost, next }) => api.toggleLike(resolvedPost.id, undefined, next ? 'like' : 'unlike'),
     });
   }, [api, post, toggleAction]);
 
@@ -136,7 +174,7 @@ export default function PostDetailScreen({ route }) {
       postId: post.id,
       metricField: 'favorites',
       stateField: 'favorited',
-      actionResolver: async ({ post: resolvedPost, next }) => api.toggleFavorite(resolvedPost.id, resolvedPost.author, next ? 'favorite' : 'unfavorite'),
+      actionResolver: async ({ post: resolvedPost, next }) => api.toggleFavorite(resolvedPost.id, undefined, next ? 'favorite' : 'unfavorite'),
     });
   }, [api, post, toggleAction]);
 
@@ -183,41 +221,42 @@ export default function PostDetailScreen({ route }) {
     setCommentError(null);
     applyPost((prev) => {
       if (!prev) return prev;
-      const nextCount = Math.max(0, Number(prev.commentsCount || prev.comments?.length || 0) + 1);
-      const nextComments = [
-        ...(prev.comments || []),
-        {
-          id: tempId,
-          author: prev.author || '匿名拍友',
-          text,
-          createdAt: tempAt,
-          _optimistic: true,
-        },
-      ];
       return {
         ...prev,
-        comments: nextComments,
-        commentsCount: nextCount,
+        commentsCount: Math.max(0, Number(prev.commentsCount || 0) + 1),
       };
     });
     setCommentInput('');
     Keyboard.dismiss();
     scrollToBottom();
 
+    setComments((prev) => [
+      {
+        id: tempId,
+        author: getActorName(),
+        text,
+        createdAt: tempAt,
+        _optimistic: true,
+      },
+      ...prev,
+    ]);
+
     try {
-      const response = await api.comment(post.id, post.author, text, commentIdempotencyRef.current);
+      const response = await api.comment(post.id, undefined, text, commentIdempotencyRef.current);
+      const normalized = normalizeComment(response.comment || response, post.author);
+      setComments((prev) => {
+        const withoutTemp = prev.filter((item) => item.id !== tempId);
+        return [
+          { ...normalized, _fromNetwork: true },
+          ...withoutTemp,
+        ];
+      });
       applyPost((prev) => {
         if (!prev) return prev;
-        const comments = (prev.comments || []).filter((item) => item.id !== tempId);
-        const normalized = normalizeComment(response, prev.author);
-        comments.push({
-          ...normalized,
-          _fromNetwork: true,
-        });
+        const nextCount = Math.max(Number(prev.commentsCount || 0), 0);
         return {
           ...prev,
-          comments,
-          commentsCount: comments.length,
+          commentsCount: nextCount,
         };
       });
       setCommentError(null);
@@ -226,13 +265,13 @@ export default function PostDetailScreen({ route }) {
       Keyboard.dismiss();
       scrollToBottom();
     } catch (err) {
+      setComments((prev) => prev.filter((item) => item.id !== tempId));
       applyPost((prev) => {
         if (!prev) return prev;
-        const comments = (prev.comments || []).filter((item) => item.id !== tempId);
+        const previousCount = Number(prev.commentsCount || prev.comments?.length || 0);
         return {
           ...prev,
-          comments,
-          commentsCount: Math.max(0, Number(prev.commentsCount || prev.comments?.length || 0) - 1),
+          commentsCount: Math.max(previousCount - 1, 0),
         };
       });
       setCommentError(err?.message || '评论发送失败');
@@ -251,15 +290,13 @@ export default function PostDetailScreen({ route }) {
       post?.district || '',
     ].filter(Boolean);
     const subtitle = subtitlePieces.join(' · ') || '匿名作品';
-    const comments = Array.isArray(post?.comments) ? post.comments : [];
-    const commentsCount = Number(post?.commentsCount || comments.length || 0);
+    const commentsCount = Number(post?.commentsCount || 0);
 
     return {
       media,
       tags,
       title,
       subtitle,
-      comments,
       commentsCount,
     };
   }, [post]);
@@ -329,36 +366,42 @@ export default function PostDetailScreen({ route }) {
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
-  const visibleComments = useMemo(() => {
-    if (!Array.isArray(postMeta.comments) || postMeta.comments.length <= commentPageSize) {
-      return postMeta.comments;
-    }
-    return postMeta.comments.slice(0, commentPageSize);
-  }, [postMeta.comments, commentPageSize]);
-
-  const hasMoreComments = postMeta.comments.length > commentPageSize;
+  const remainingCommentCount = Math.max(0, postMeta.commentsCount - comments.length);
+  const hasMoreComments = commentsHasMore;
   const onLoadMoreComments = useCallback(() => {
-    setCommentPageSize((prev) => prev + COMMENT_PAGE_SIZE);
-  }, []);
+    if (!postId || commentsLoading || !commentsHasMore) return;
+    return loadComments({ append: true });
+  }, [commentsHasMore, commentsLoading, loadComments, postId]);
 
   const renderCommentFooter = useMemo(() => {
+    if (commentsLoading) {
+      return <ActivityIndicator color={COLORS.accent} />;
+    }
+    if (commentsLoadError) {
+      return (
+        <Text style={styles.commentStatusText}>
+          {commentsLoadError}
+        </Text>
+      );
+    }
     if (!hasMoreComments) return null;
     return (
       <Pressable onPress={onLoadMoreComments} style={styles.loadMoreWrap}>
         <Text style={styles.loadMoreText}>
-          查看更多评论（还有 {postMeta.comments.length - commentPageSize} 条）
+          查看更多评论（还有 {remainingCommentCount} 条）
         </Text>
       </Pressable>
     );
-  }, [hasMoreComments, onLoadMoreComments, commentPageSize, postMeta.comments.length]);
+  }, [commentsLoadError, commentsLoading, hasMoreComments, onLoadMoreComments, remainingCommentCount]);
   const listEmptyComment = useMemo(() => {
-    if (loading) return <View style={styles.commentEmpty}><ActivityIndicator color={COLORS.accent} /></View>;
+    if (loading || commentsLoading) return <View style={styles.commentEmpty}><ActivityIndicator color={COLORS.accent} /></View>;
+    if (commentsLoadError) return <Text style={styles.commentStatusText}>{commentsLoadError}</Text>;
     return (
       <View style={styles.commentEmpty}>
         <Text style={styles.commentEmptyText}>暂时没有评论，抢占第一条吧。</Text>
       </View>
     );
-  }, [loading]);
+  }, [commentsLoading, commentsLoadError, loading]);
 
   if (!postId) {
     return (
@@ -396,7 +439,7 @@ export default function PostDetailScreen({ route }) {
       >
         <FlatList
           ref={listRef}
-          data={visibleComments}
+          data={comments}
           keyExtractor={(item, index) => String(item.id || item.createdAt || `${post?.id || 'post'}-${index}`)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.accent]} />}
           keyboardShouldPersistTaps="handled"
@@ -602,6 +645,12 @@ const styles = StyleSheet.create({
   commentEmptyText: {
     color: COLORS.muted,
     fontSize: 13,
+  },
+  commentStatusText: {
+    color: '#a83f3f',
+    fontSize: 11.5,
+    textAlign: 'center',
+    paddingHorizontal: 12,
   },
   commentBar: {
     flexDirection: 'row',

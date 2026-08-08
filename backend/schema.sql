@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS posts (
   spot_id BIGINT UNSIGNED DEFAULT NULL,
   spot_name VARCHAR(128) DEFAULT '',
   district VARCHAR(64) DEFAULT '',
+  latitude DECIMAL(10,7) DEFAULT NULL,
+  longitude DECIMAL(10,7) DEFAULT NULL,
   direction VARCHAR(80) DEFAULT '',
   angle VARCHAR(80) DEFAULT '',
   time_window VARCHAR(80) DEFAULT '',
@@ -123,6 +125,16 @@ CREATE TABLE IF NOT EXISTS post_styles (
   CONSTRAINT fk_post_styles_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
   PRIMARY KEY (post_id, style),
   INDEX idx_post_styles_style (style)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS author_follows (
+  follower_id VARCHAR(64) NOT NULL,
+  followed_id VARCHAR(64) NOT NULL,
+  actor_name VARCHAR(64) DEFAULT '匿名拍友',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (follower_id, followed_id),
+  INDEX idx_af_follower (follower_id),
+  INDEX idx_af_followed (followed_id)
 ) ENGINE=InnoDB;
 
 ALTER TABLE posts

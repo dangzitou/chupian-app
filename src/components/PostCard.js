@@ -23,9 +23,11 @@ function PostCard({
   onFavorite,
   onComment,
   onShare,
+  onFollow,
   showFollow = true,
   likeBusy = false,
   favoriteBusy = false,
+  followBusy = false,
   compact = false,
   style,
 }) {
@@ -68,11 +70,13 @@ function PostCard({
     ].filter(Boolean);
     return statPieces.join(' · ');
   }, [post.comments?.length, post.commentsCount, post.likes, post.views]);
+  const isFollowing = Boolean(post.followed);
+  const followLabel = isFollowing ? '已关注' : '关注';
+  const followable = Boolean(post.authorId);
 
   return (
-    <Pressable
+    <View
       style={[styles.card, compact && styles.cardCompact, style]}
-      onPress={onPress}
       onLayout={(event) => {
         const nextWidth = Math.floor(event.nativeEvent.layout.width);
         if (nextWidth && nextWidth > 0 && nextWidth !== cardWidth) {
@@ -81,49 +85,59 @@ function PostCard({
       }}
     >
       <View style={[styles.header, compact && styles.headerCompact]}>
-        <View style={[styles.avatar, compact && styles.avatarCompact]}>
-          <AuthorAvatar name={post.author} />
-        </View>
-        <View style={styles.meta}>
-          <Text style={[styles.author, compact && styles.authorCompact]} numberOfLines={1}>
-            {post.author}
-          </Text>
-          <Text style={[styles.sub, compact && styles.subCompact]}>{locationText}</Text>
-          <Text style={[styles.sub, compact && styles.subCompact]}>{created}</Text>
-        </View>
+        <Pressable style={styles.authorTap} onPress={onPress}>
+          <View style={[styles.avatar, compact && styles.avatarCompact]}>
+            <AuthorAvatar name={post.author} />
+          </View>
+          <View style={styles.meta}>
+            <Text style={[styles.author, compact && styles.authorCompact]} numberOfLines={1}>
+              {post.author}
+            </Text>
+            <Text style={[styles.sub, compact && styles.subCompact]}>{locationText}</Text>
+            <Text style={[styles.sub, compact && styles.subCompact]}>{created}</Text>
+          </View>
+        </Pressable>
         {showFollow ? (
           <View style={compact && styles.followWrapCompact}>
-            <Pressable style={styles.followBtn}>
-              <Text style={styles.followText}>关注</Text>
+            <Pressable
+              style={[styles.followBtn, isFollowing && styles.followBtnActive]}
+              disabled={!onFollow || followBusy || !followable}
+              onPress={() => onFollow?.(post.authorId)}
+            >
+              <Text style={[styles.followText, isFollowing && styles.followTextActive]}>{followLabel}</Text>
             </Pressable>
           </View>
         ) : null}
       </View>
 
-      <MediaGallery
-        media={cardMedia}
-        showAll
-        columns={compact ? 1 : mediaColumns}
-        containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
-      />
-      {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
+      <View style={styles.mediaTapWrap}>
+        <Pressable onPress={onPress}>
+          <MediaGallery
+            media={cardMedia}
+            showAll={!compact}
+            columns={compact ? 1 : mediaColumns}
+            containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
+          />
+        </Pressable>
+        {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
+      </View>
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
-        <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
-          {post.title || '无标题'}
-        </Text>
-        {!!content && (
-          <>
+        <Pressable onPress={onPress}>
+          <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
+            {post.title || '无标题'}
+          </Text>
+          {!!content ? (
             <Text style={[styles.content, compact && styles.contentCompact]} numberOfLines={expanded ? undefined : 2}>
               {contentText}
             </Text>
-            {content.length > 96 ? (
-              <Pressable onPress={() => setExpanded((v) => !v)} style={styles.expandWrap}>
-                <Text style={styles.expandText}>{expanded ? '收起' : '展开全文'}</Text>
-              </Pressable>
-            ) : null}
-          </>
-        )}
+          ) : null}
+        </Pressable>
+        {content.length > 96 ? (
+          <Pressable onPress={() => setExpanded((v) => !v)} style={styles.expandWrap}>
+            <Text style={styles.expandText}>{expanded ? '收起' : '展开全文'}</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.tagRow}>
           {shotBits.slice(0, compact ? 3 : 5).map((item) => (
@@ -165,7 +179,7 @@ function PostCard({
           onShare={onShare}
         />
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -203,6 +217,12 @@ const styles = StyleSheet.create({
   headerCompact: {
     padding: 8,
     gap: 6,
+  },
+  authorTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   avatar: {
     width: 32,
@@ -285,10 +305,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
+  followBtnActive: {
+    backgroundColor: '#ececf1',
+  },
   followText: {
     color: COLORS.accent,
     fontSize: 11.5,
     fontWeight: '700',
+  },
+  followTextActive: {
+    color: COLORS.muted,
   },
   tagsWrap: {
     flexDirection: 'row',
@@ -308,5 +334,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     overflow: 'hidden',
+  },
+  mediaTapWrap: {
+    position: 'relative',
   },
 });

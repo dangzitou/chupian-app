@@ -32,6 +32,14 @@ export default function SpotsScreen({ navigation }) {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
+  const openMap = useCallback(() => {
+    const parent = navigation.getParent && navigation.getParent();
+    if (parent) {
+      parent.navigate(APP_ROUTES.MAP);
+      return;
+    }
+    navigation.navigate(APP_ROUTES.MAP);
+  }, [navigation]);
   const onCreatePost = useCallback((spot) => {
     const parent = navigation.getParent && navigation.getParent();
     const prefillSpot = {
@@ -65,7 +73,7 @@ export default function SpotsScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.title}>出片点位</Text>
         <Text style={styles.subtitle}>{filtered.length} 个地点 · 广州</Text>
-        <Pressable style={styles.mapBtn} onPress={() => navigation.navigate('Map')}>
+        <Pressable style={styles.mapBtn} onPress={openMap}>
           <Text style={styles.mapBtnText}>🗺️ 打开地图</Text>
         </Pressable>
       </View>

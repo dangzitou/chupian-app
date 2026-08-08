@@ -1,9 +1,22 @@
 const resolveApiBase = () => {
-  const raw =
+  const fromEnv =
     (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_API_BASE) ||
-    (typeof process !== 'undefined' && process.env.API_BASE) ||
-    'http://42.194.251.188';
-  return String(raw).replace(/\/+$/, '');
+    (typeof process !== 'undefined' && process.env.API_BASE);
+
+  if (fromEnv) {
+    return String(fromEnv).replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const hostname = window.location.hostname || '';
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(hostname);
+    const isPrivateLan = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(hostname);
+    if (!isLocalhost && !isPrivateLan) {
+      return String(window.location.origin).replace(/\/+$/, '');
+    }
+  }
+
+  return 'http://42.194.251.188';
 };
 
 export const API_BASE = resolveApiBase();

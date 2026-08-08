@@ -1,20 +1,18 @@
-version: "3.9"
-
 services:
   mysql:
     image: mysql:8.4
     container_name: chupian-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: chupian
       MYSQL_USER: chupian
-      MYSQL_PASSWORD: chupian_pwd
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chupian_pwd}
     volumes:
       - mysql_data:/var/lib/mysql
       - ../backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
       interval: 8s
       timeout: 4s
       retries: 8
@@ -43,14 +41,20 @@ services:
       redis:
         condition: service_healthy
     environment:
+      NODE_ENV: production
       PORT: 3000
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: chupian
-      MYSQL_PASSWORD: chupian_pwd
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chupian_pwd}
       MYSQL_DATABASE: chupian
+      MYSQL_CONNECTION_LIMIT: ${MYSQL_CONNECTION_LIMIT:-24}
+      MYSQL_QUEUE_LIMIT: ${MYSQL_QUEUE_LIMIT:-1000}
+      HTTP_KEEP_ALIVE_TIMEOUT_MS: ${HTTP_KEEP_ALIVE_TIMEOUT_MS:-65000}
+      HTTP_HEADERS_TIMEOUT_MS: ${HTTP_HEADERS_TIMEOUT_MS:-20000}
+      HTTP_REQUEST_TIMEOUT_MS: ${HTTP_REQUEST_TIMEOUT_MS:-180000}
       REDIS_URL: redis://redis:6379
-      CORS_ORIGIN: "http://localhost"
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
       SPOT_CACHE_TTL: 90
       MAX_FEED_LIMIT: 40
     volumes:
