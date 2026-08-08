@@ -115,6 +115,25 @@ npm run web:serve
 npx serve web-build -l 80 --single
 ```
 
+### 一键生产部署（含数据库与 Redis）
+
+```bash
+cd deploy
+docker compose up -d --build
+```
+
+服务会以 80 端口对外（Nginx），并通过同网关把 `/api`、`/media`、`/health` 代理到后端服务。
+
+## 生产级可用说明（生产前建议）
+
+- 后端使用 **MySQL + Redis + Node**：已内置连接池、请求限流、缓存和缓存失效逻辑；
+- 评论/点赞/收藏统一通过 `postId + actorId` 幂等化，支持高并发幂等写入；
+- feed 查询已补充高频索引（`schema.sql`）：热点列表按 `status + created_at` 与 `status + stats_likes` 多维索引；
+- 上线前执行：
+  - `cd backend && npm i && npm start`
+  - `cd .. && npm run qa:integration`
+  - `cd .. && npm run qa:adversarial`
+
 ## 说明
 
 - 本项目当前状态为 `App v0.1`

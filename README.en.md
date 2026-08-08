@@ -99,6 +99,25 @@ npm run web:serve
 npx serve web-build -l 80 --single
 ```
 
+### Production deploy (MySQL + Redis + backend + nginx)
+
+```bash
+cd deploy
+docker compose up -d --build
+```
+
+Nginx listens on 80 and proxies `/api`, `/media`, `/health` to the backend.
+
+## Production readiness checklist
+
+- Backend uses **MySQL + Redis + Node** with pooling, rate limiting, and cache invalidation.
+- Like/favorite/comment writes are idempotent based on `postId + actorId`.
+- Feed critical indexes are included in `backend/schema.sql` (`status + created_at`, `status + stats_likes` etc.) for high-concurrency reads.
+- Recommended before go-live:
+  - `cd backend && npm i && npm start`
+  - `cd .. && npm run qa:integration`
+  - `cd .. && npm run qa:adversarial`
+
 ## Project structure
 
 ```text
