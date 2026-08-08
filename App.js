@@ -3,9 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from './src/config';
+import { APP_ROUTES } from './src/constants/routes';
 
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
@@ -19,10 +20,10 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const icons = {
-  首页: { icon: '🏠', active: '🏠' },
-  地图: { icon: '🗺️', active: '🗺️' },
-  发布: { icon: '+', active: '＋' },
-  我的: { icon: '👤', active: '👤' },
+  [APP_ROUTES.DISCOVERY]: { icon: '🏠', active: '🏠' },
+  [APP_ROUTES.MAP]: { icon: '🗺️', active: '🗺️' },
+  [APP_ROUTES.CREATE]: { icon: '＋', active: '＋' },
+  [APP_ROUTES.PROFILE]: { icon: '👤', active: '👤' },
 };
 
 function HomeStack() {
@@ -46,32 +47,50 @@ function MapStack() {
 }
 
 function RedBookTabBar({ state, descriptors, navigation }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: Math.max(10, insets.bottom + 4) }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const label = descriptors[route.key].options.tabBarLabel ?? route.name;
         const activeStyle = isFocused;
         const config = icons[label] || { icon: 'ellipse-outline', active: 'ellipse' };
         const iconName = activeStyle ? config.active : config.icon;
+        const isPlus = label === APP_ROUTES.CREATE;
 
         return (
           <Pressable
             key={route.key}
+            accessibilityRole="button"
             style={[
               styles.tabBtn,
-              label === '发布' && styles.plusBtnWrap,
-              activeStyle && label === '发布' && styles.plusBtnActive,
+              isPlus && styles.plusBtnWrap,
+              activeStyle && isPlus && styles.plusBtnActive,
             ]}
-            onPress={() => navigation.navigate(route.name)}
             android_ripple={{ color: '#ddd', borderless: false }}
+            onPress={() => navigation.navigate(route.name)}
           >
-            <View style={[styles.tabInner, activeStyle && styles.tabInnerActive, label === '发布' && styles.plusCircle]}>
-              <Text style={[styles.tabIcon, activeStyle && styles.tabIconActive]}>
+            <View
+              style={[
+                styles.tabInner,
+                activeStyle && styles.tabInnerActive,
+                isPlus && styles.plusCircle,
+                activeStyle && isPlus ? styles.plusCircleActive : null,
+              ]}
+            >
+              <Text style={[
+                styles.tabIcon,
+                activeStyle && styles.tabIconActive,
+                isPlus && styles.plusText,
+              ]}>
                 {iconName}
               </Text>
             </View>
-            <Text style={[styles.tabText, activeStyle && styles.tabTextActive]}>{label}</Text>
+            <Text style={[
+              styles.tabText,
+              activeStyle && styles.tabTextActive,
+              isPlus && styles.plusLabel,
+            ]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -83,16 +102,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={{ headerShown: false }}
-          tabBar={(props) => <RedBookTabBar {...props} />}
-          initialRouteName="首页"
-        >
-          <Tab.Screen name="首页" component={HomeStack} />
-          <Tab.Screen name="地图" component={MapStack} />
-          <Tab.Screen name="发布" component={NewPostScreen} />
-          <Tab.Screen name="我的" component={ProfileScreen} />
-        </Tab.Navigator>
+      <Tab.Navigator
+        screenOptions={{ headerShown: false }}
+        tabBar={(props) => <RedBookTabBar {...props} />}
+        initialRouteName={APP_ROUTES.DISCOVERY}
+      >
+        <Tab.Screen name={APP_ROUTES.DISCOVERY} component={HomeStack} />
+        <Tab.Screen name={APP_ROUTES.MAP} component={MapStack} />
+        <Tab.Screen name={APP_ROUTES.CREATE} component={NewPostScreen} />
+        <Tab.Screen name={APP_ROUTES.PROFILE} component={ProfileScreen} />
+      </Tab.Navigator>
       </NavigationContainer>
       <StatusBar style="dark" />
     </SafeAreaProvider>
@@ -103,13 +122,13 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: COLORS.card,
-    borderTopColor: COLORS.cardBorder,
+    borderTopColor: 'rgba(0,0,0,0.08)',
     borderTopWidth: 1,
-    paddingBottom: 4,
-    paddingTop: 6,
+    paddingBottom: 8,
+    paddingTop: 8,
     justifyContent: 'space-around',
     alignItems: 'center',
-    height: 64,
+    height: 67,
   },
   tabBtn: {
     flex: 1,
@@ -117,8 +136,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabInner: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -127,7 +146,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accentBg,
   },
   plusBtnWrap: {
-    marginTop: -14,
+    marginTop: -18,
   },
   plusBtnActive: {
     transform: [{ translateY: -2 }],
@@ -137,13 +156,19 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     backgroundColor: COLORS.accent,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    borderWidth: 4,
+    borderColor: COLORS.card,
   },
-  plusIcon: {
-    color: COLORS.onAccent,
-    fontSize: 28,
+  plusCircleActive: {
+    borderColor: '#f7f7f7',
   },
   tabIcon: {
-    fontSize: 19,
+    fontSize: 18,
     color: COLORS.muted,
     fontWeight: '700',
   },
@@ -158,5 +183,15 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: COLORS.accent,
     fontWeight: '600',
+  },
+  plusText: {
+    color: COLORS.onAccent,
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '800',
+  },
+  plusLabel: {
+    color: COLORS.accent,
+    fontWeight: '700',
   },
 });

@@ -1,109 +1,381 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, Pressable, Linking,
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  Share,
+  View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
-import { API_BASE, COLORS } from '../config';
+import { COLORS } from '../config';
+import { APP_ROUTES } from '../constants/routes';
+import PostCard from '../components/PostCard';
+import FeedSkeleton from '../components/FeedSkeleton';
+import { useFeedList } from '../hooks/useFeedList';
+import { usePostListActions } from '../hooks/usePostListActions';
+import { buildPostShareMessage } from '../utils/share';
 
-export default function ProfileScreen() {
+const PAGE_SIZE = 8;
+
+const PROFILE_TABS = [
+  { key: 'mePosts', label: '我的发布' },
+  { key: 'meLikes', label: '我赞过' },
+  { key: 'meFavorites', label: '我的收藏' },
+];
+
+function ProfileStats({ spotCount, posts, authors, likes }) {
+  return (
+    <View style={styles.statsRow}>
+      <View style={styles.statCard}>
+        <Text style={styles.statNum}>{spotCount}</Text>
+        <Text style={styles.statLabel}>点位</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statNum}>{posts}</Text>
+        <Text style={styles.statLabel}>发布</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statNum}>{authors}</Text>
+        <Text style={styles.statLabel}>创作者</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statNum}>{likes}</Text>
+        <Text style={styles.statLabel}>点赞</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function ProfileScreen({ navigation }) {
   const [weather, setWeather] = useState(null);
-  const [stats, setStats] = useState({ posts: 0, authors: 0, totalLikes: 0 });
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [statsError, setStatsError] = useState(null);
   const [spotCount, setSpotCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [section, setSection] = useState('mePosts');
+
+  const loadSectionPayload = useCallback((params) => {
+    if (section === 'meLikes') return api.meLikes(params);
+    if (section === 'meFavorites') return api.meFavorites(params);
+    return api.mePosts(params);
+  }, [section]);
+
+  const {
+    posts,
+    loading,
+    refreshing,
+    loadingMore,
+    error,
+    hasMore,
+    load,
+    onRefresh,
+    onEndReached,
+    patchById,
+    setBusyForPost,
+    isPostBusy,
+  } = useFeedList(loadSectionPayload, { limit: PAGE_SIZE, sort: 'latest' });
+
+  const getPostById = useCallback(
+    (postId) => posts.find((item) => String(item.id) === String(postId)),
+    [posts],
+  );
+  const {
+    isBusy: isActionBusy,
+    toggleAction,
+  } = usePostListActions({
+    getPostById,
+    patchById,
+    setBusyForPost,
+    isBusyExternal: isPostBusy,
+  });
+
+  const [totalPosts, setTotalPosts] = useState(0);
+  const [authors, setAuthors] = useState(0);
+  const [likes, setLikes] = useState(0);
+  const [meSectionStats, setMeSectionStats] = useState({
+    mePosts: 0,
+    meLikes: 0,
+    meFavorites: 0,
+  });
+
+  const loadSectionMetrics = useCallback(async () => {
+    try {
+      const [w, userPostsFeed, globalFeed, s] = await Promise.all([
+        api.weather(),
+        api.mePosts({ limit: 1, sort: 'latest' }),
+        api.feed({ limit: 1 }),
+        api.spots(),
+      ]);
+
+      setWeather(w);
+      setTotalPosts(Number(userPostsFeed?.total || 0));
+      setAuthors(Number(globalFeed?.stats?.authors || 0));
+      setLikes(Number(globalFeed?.stats?.totalLikes || 0));
+      setSpotCount((s.spots || []).length);
+      setMeSectionStats((prev) => ({
+        ...prev,
+        mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
+      }));
+      setStatsError(null);
+    } catch (err) {
+      setStatsError(err?.message || '个人数据加载失败');
+    } finally {
+      setLoadingMeta(false);
+    }
+  }, []);
+
+  const ensureSectionMetric = useCallback(async (targetSection) => {
+    if (meSectionStats[targetSection] > 0) return;
+    try {
+      const payload = await (targetSection === 'meLikes'
+        ? api.meLikes({ limit: 1, sort: 'latest' })
+        : targetSection === 'meFavorites'
+          ? api.meFavorites({ limit: 1, sort: 'latest' })
+          : api.mePosts({ limit: 1, sort: 'latest' }));
+      setMeSectionStats((prev) => ({
+        ...prev,
+        [targetSection]: Number(payload.total || payload.posts?.length || 0),
+      }));
+    } catch (_err) {
+      // keep stale count on error; section-specific metric is best-effort.
+    }
+  }, [meSectionStats]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [w, p, s] = await Promise.all([api.weather(), api.feed({ limit: 1 }), api.spots()]);
-        setWeather(w);
-        setStats({
-          posts: p.total || 0,
-          authors: (p.stats && p.stats.authors) || 0,
-          totalLikes: (p.stats && p.stats.totalLikes) || 0,
-        });
-        setSpotCount((s.spots || []).length);
-      } catch (e) { /* ignore */ } finally {
-        setLoading(false);
-      }
-    })();
+    loadSectionMetrics();
+  }, [loadSectionMetrics]);
+
+  useEffect(() => {
+    load({ append: false });
+    ensureSectionMetric(section);
+  }, [load, section, ensureSectionMetric]);
+
+  const onSwitchSection = useCallback((key) => {
+    if (key === section) return;
+    setSection(key);
+  }, [section]);
+
+  const onLike = useCallback((postId) => toggleAction({
+    postId,
+    metricField: 'likes',
+    stateField: 'liked',
+    actionResolver: async ({ post, next }) => api.toggleLike(post.id, post.author, next ? 'like' : 'unlike'),
+  }), [api, toggleAction]);
+
+  const onFavorite = useCallback((postId) => toggleAction({
+    postId,
+    metricField: 'favorites',
+    stateField: 'favorited',
+    actionResolver: async ({ post, next }) => api.toggleFavorite(post.id, post.author, next ? 'favorite' : 'unfavorite'),
+  }), [api, toggleAction]);
+
+  const onShare = useCallback(async (item) => {
+    if (!item) return;
+    try {
+      await Share.share({ message: buildPostShareMessage(item) });
+    } catch (_err) {
+      // share unsupported in current runtime, fail silently for list usage
+    }
   }, []);
+
+  const renderCard = useCallback(({ item }) => (
+      <PostCard
+        post={item}
+      onPress={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, title: item.title } })}
+      onLike={() => onLike(item.id)}
+      onFavorite={() => onFavorite(item.id)}
+      onComment={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id } })}
+      onShare={() => onShare(item)}
+      likeBusy={isActionBusy(item.id, 'liked', 'liked')}
+      favoriteBusy={isActionBusy(item.id, 'favorited', 'favorited')}
+      style={styles.profileCard}
+    />
+  ), [isActionBusy, onFavorite, onLike, onShare]);
+
+  const ListHeader = useMemo(() => (
+    <View>
+      <View style={styles.heroCard}>
+        <Image
+          source={{ uri: 'https://picsum.photos/seed/chupian-avatar/240/240' }}
+          style={styles.avatar}
+        />
+        <View style={styles.heroMeta}>
+          <Text style={styles.name}>出片地图</Text>
+          <Text style={styles.bio}>广州拍照机位 · 问题复盘 · 打卡地图</Text>
+        </View>
+      </View>
+
+      <ProfileStats
+        spotCount={spotCount}
+        posts={totalPosts}
+        authors={authors}
+        likes={likes}
+      />
+
+      {weather?.ok && (
+        <View style={styles.weatherCard}>
+          <Text style={styles.weatherTitle}>☀️ 广州天气</Text>
+          <Text style={styles.weatherMain}>
+            {weather.label} {Math.round(weather.temp)}°C（体感 {Math.round(weather.feelsLike)}°）
+          </Text>
+          <Text style={styles.weatherHint}>湿度 {weather.humidity}% · 风速 {weather.wind} km/h</Text>
+        </View>
+      )}
+
+      <ScrollView
+        style={styles.menuCard}
+        contentContainerStyle={styles.menuRow}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {PROFILE_TABS.map((tab) => (
+          <Pressable
+            key={tab.key}
+            style={[styles.tabPill, section === tab.key && styles.tabPillActive]}
+            onPress={() => onSwitchSection(tab.key)}
+          >
+            <Text style={[styles.tabLabel, section === tab.key && styles.tabLabelActive]}>
+              {tab.label}
+              <Text style={styles.tabCount}>
+                {`  (${meSectionStats[tab.key] || 0})`}
+              </Text>
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  ), [authors, likes, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather]);
+
+  const ListFooter = useMemo(() => {
+    if (!hasMore || !loadingMore) return null;
+    return <View style={styles.footer}><ActivityIndicator size="small" color={COLORS.accent} /></View>;
+  }, [hasMore, loadingMore]);
+
+  const empty = !loading && !posts.length ? (
+    <View style={styles.emptyWrap}>
+      {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
+      <Text style={styles.emptyText}>
+        该区域还没有内容
+      </Text>
+      <Pressable style={styles.retryBtn} onPress={() => load({ append: false, cursor: null })}>
+        <Text style={styles.retryText}>去刷新</Text>
+      </Pressable>
+    </View>
+  ) : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.profileCard}>
-          <Image
-            source={{ uri: 'https://picsum.photos/seed/chupian-avatar/200/200' }}
-            style={styles.avatar}
-          />
-          <Text style={styles.name}>出片地图</Text>
-          <Text style={styles.bio}>广州拍照机位 · 博主攻略 · 社区正循环</Text>
+      <FlatList
+        data={posts}
+        keyExtractor={(post) => String(post.id)}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.2}
+        ListHeaderComponent={ListHeader}
+        contentContainerStyle={styles.list}
+        renderItem={renderCard}
+        ListEmptyComponent={loading ? <FeedSkeleton count={4} /> : empty}
+        ListFooterComponent={ListFooter}
+      />
+      {statsError ? <Text style={styles.warn}>{statsError}</Text> : null}
+      {loadingMeta ? (
+        <View style={styles.metaLoadingMask}>
+          <ActivityIndicator color={COLORS.accent} />
         </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}><Text style={styles.statNum}>{spotCount}</Text><Text style={styles.statLabel}>点位</Text></View>
-          <View style={styles.statBox}><Text style={styles.statNum}>{stats.posts}</Text><Text style={styles.statLabel}>攻略</Text></View>
-          <View style={styles.statBox}><Text style={styles.statNum}>{stats.authors}</Text><Text style={styles.statLabel}>参与</Text></View>
-          <View style={styles.statBox}><Text style={styles.statNum}>{stats.totalLikes}</Text><Text style={styles.statLabel}>点赞</Text></View>
-        </View>
-
-        {weather?.ok && (
-          <View style={styles.weatherCard}>
-            <Text style={styles.weatherTitle}>☀️ 广州天气</Text>
-            <Text style={styles.weatherMain}>
-              {weather.label} {Math.round(weather.temp)}°C（体感 {Math.round(weather.feelsLike)}°）
-            </Text>
-            <Text style={styles.weatherHint}>湿度 {weather.humidity}% · 风速 {weather.wind} km/h</Text>
-          </View>
-        )}
-
-        <View style={styles.menuCard}>
-          <Pressable
-            style={styles.menuItem}
-            onPress={() => {
-              const target = `${API_BASE.replace(/\/?$/, '')}/`;
-              Linking.openURL(target);
-            }}
-          >
-            <Text style={styles.menuText}>🌐 网页版（完整功能）</Text>
-          </Pressable>
-          <Pressable style={styles.menuItem} onPress={() => Linking.openURL('https://www.openstreetmap.org/copyright')}>
-            <Text style={styles.menuText}>🗺️ 地图数据 © OpenStreetMap</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.version}>出片地图 App v0.1 · React Native / Expo</Text>
-      </ScrollView>
+      ) : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  body: { padding: 16, paddingBottom: 50 },
-  profileCard: { alignItems: 'center', paddingVertical: 20 },
-  avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.bgDeep },
-  name: { fontSize: 20, fontWeight: '700', color: COLORS.ink, marginTop: 10 },
-  bio: { fontSize: 13, color: COLORS.muted, marginTop: 4 },
-  statsRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  statBox: {
-    flex: 1, backgroundColor: COLORS.panel, borderRadius: 14, paddingVertical: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: COLORS.line,
+  list: { paddingBottom: 40, paddingHorizontal: 12 },
+  heroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.panel,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    gap: 12,
+    marginBottom: 8,
+    marginTop: 6,
   },
-  statNum: { fontSize: 20, fontWeight: '700', color: COLORS.accent },
-  statLabel: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.bgDeep,
+  },
+  heroMeta: { flex: 1 },
+  name: { fontSize: 20, color: COLORS.ink, fontWeight: '700' },
+  bio: { color: COLORS.muted, marginTop: 3, fontSize: 12.8 },
+  statsRow: { flexDirection: 'row', gap: 8 },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.panel,
+    borderRadius: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    alignItems: 'center',
+  },
+  statNum: { color: COLORS.accent, fontSize: 20, fontWeight: '700' },
+  statLabel: { color: COLORS.muted, marginTop: 3, fontSize: 11.8 },
   weatherCard: {
-    backgroundColor: COLORS.accentSoft, borderRadius: 14, padding: 14, marginTop: 14,
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 14,
+    marginTop: 10,
+    padding: 14,
   },
-  weatherTitle: { fontSize: 13, fontWeight: '600', color: '#6d3112' },
-  weatherMain: { fontSize: 15, fontWeight: '700', color: '#6d3112', marginTop: 4 },
-  weatherHint: { fontSize: 12, color: '#8a5a3a', marginTop: 3 },
-  menuCard: {
-    backgroundColor: COLORS.panel, borderRadius: 14, marginTop: 14,
-    borderWidth: 1, borderColor: COLORS.line, overflow: 'hidden',
+  weatherTitle: { color: '#6d3112', fontWeight: '600', fontSize: 13 },
+  weatherMain: { color: '#6d3112', marginTop: 4, fontWeight: '700', fontSize: 15 },
+  weatherHint: { color: '#a16b44', marginTop: 4, fontSize: 11.5 },
+
+  menuCard: { marginTop: 12 },
+  menuRow: { gap: 8, paddingBottom: 4 },
+  tabPill: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 999,
+    backgroundColor: COLORS.panel,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  menuItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: COLORS.line },
-  menuText: { fontSize: 14, color: COLORS.ink },
-  version: { textAlign: 'center', color: COLORS.muted, fontSize: 11.5, marginTop: 24 },
+  tabPillActive: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accentBg,
+  },
+  tabLabel: { color: COLORS.muted, fontWeight: '600', fontSize: 12.6 },
+  tabLabelActive: { color: COLORS.accent },
+  tabCount: { color: COLORS.mutedText || COLORS.muted, fontSize: 11 },
+  profileCard: {
+    marginBottom: 8,
+  },
+  error: { color: '#a34a2a', fontSize: 12.5, textAlign: 'center', marginTop: 10 },
+  emptyWrap: { alignItems: 'center', marginTop: 24 },
+  emptyText: { color: COLORS.muted, marginTop: 8, fontSize: 13 },
+  retryBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: COLORS.panel,
+  },
+  retryText: { color: COLORS.accent, fontWeight: '700', fontSize: 12.5 },
+  footer: { alignItems: 'center', paddingVertical: 12 },
+  warn: { color: '#b97c2a', textAlign: 'center', marginTop: 8, marginBottom: 2, fontSize: 11 },
+  metaLoadingMask: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+  },
 });

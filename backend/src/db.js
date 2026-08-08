@@ -31,6 +31,10 @@ export const query = async (sql, params = []) => {
   return rows;
 };
 
+export async function closeDb() {
+  await mysqlPool.end();
+}
+
 export const tx = async (fn) => {
   const conn = await mysqlPool.getConnection();
   try {

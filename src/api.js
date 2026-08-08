@@ -216,6 +216,39 @@ function toPostShape(item) {
   return normalizePostShape(item);
 }
 
+function buildFeedQuery(params = {}, defaults = {}) {
+  const query = new URLSearchParams();
+
+  const merged = {
+    sort: defaults.sort || 'latest',
+    limit: String(defaults.limit || 20),
+    q: '',
+    tag: '',
+    cursor: '',
+    ...defaults,
+    ...params,
+  };
+
+  if (merged.q) query.set('q', String(merged.q).trim());
+  if (merged.tag) query.set('tag', String(merged.tag).trim());
+  if (merged.cursor) query.set('cursor', merged.cursor);
+  query.set('limit', String(merged.limit || 20));
+  query.set('sort', merged.sort === 'hot' ? 'hot' : 'latest');
+  return query.toString();
+}
+
+function normalizeCommunityFeedResponse(raw) {
+  const list = Array.isArray(raw.posts) ? raw.posts.map(toPostShape) : [];
+  return {
+    posts: list,
+    nextCursor: raw.nextCursor || null,
+    hasMore: Boolean(raw.hasMore),
+    total: Number(raw.total || raw.totalPosts || list.length || 0),
+    stats: raw.stats || null,
+  };
+}
+
+
 export const api = {
   async health() {
     return safeRequestWithFallback('/api/v1/health', '/health');
@@ -238,33 +271,67 @@ export const api = {
   },
 
   async feed(params = {}) {
-    const searchKeyword = params.q ? String(params.q).trim() : "";
-    const tag = params.tag ? String(params.tag).trim() : "";
-    const queryString = new URLSearchParams({
-      ...(searchKeyword ? { q: searchKeyword } : {}),
-      ...(tag ? { tag } : {}),
-      ...(params.cursor ? { cursor: params.cursor } : {}),
-      limit: String(params.limit || 20),
-      sort: params.sort || 'latest',
-    }).toString();
-
+    const queryString = buildFeedQuery({
+      q: params.q,
+      tag: params.tag,
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
     const primary = await safeRequestWithFallback(
       `${API_PREFIX}/community/feed?${queryString}`,
       `/api/posts?${queryString}`,
       { cacheTtl: 2500, noCache: params.noCache },
     );
+    return normalizeCommunityFeedResponse(primary);
+  },
 
-    const list = Array.isArray(primary.posts)
-      ? primary.posts.map(toPostShape)
-      : [];
+  async mePosts(params = {}) {
+    const queryString = buildFeedQuery({
+      q: params.q,
+      tag: params.tag,
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/posts?${queryString}`,
+      `/api/community/me/posts?${queryString}`,
+      { cacheTtl: 2500, noCache: params.noCache },
+    );
+    return normalizeCommunityFeedResponse(raw);
+  },
 
-    return {
-      posts: list,
-      nextCursor: primary.nextCursor || null,
-      hasMore: Boolean(primary.hasMore),
-      total: Number(primary.total || primary.posts?.length || 0),
-      stats: primary.stats || null,
-    };
+  async meLikes(params = {}) {
+    const queryString = buildFeedQuery({
+      q: params.q,
+      tag: params.tag,
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/likes?${queryString}`,
+      `/api/community/me/likes?${queryString}`,
+      { cacheTtl: 2500, noCache: params.noCache },
+    );
+    return normalizeCommunityFeedResponse(raw);
+  },
+
+  async meFavorites(params = {}) {
+    const queryString = buildFeedQuery({
+      q: params.q,
+      tag: params.tag,
+      cursor: params.cursor,
+      limit: params.limit || 20,
+      sort: params.sort,
+    });
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/favorites?${queryString}`,
+      `/api/community/me/favorites?${queryString}`,
+      { cacheTtl: 2500, noCache: params.noCache },
+    );
+    return normalizeCommunityFeedResponse(raw);
   },
 
   async discovery(params = {}) {
@@ -297,11 +364,13 @@ export const api = {
     return toPostShape(item);
   },
 
-  async createPost(body) {
+  async createPost(body, idempotencyKey) {
     const payload = buildPostPayload(body);
+    const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;
     try {
       return await request(`${API_PREFIX}/posts`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(payload),
       });
     } catch (err) {
@@ -310,6 +379,7 @@ export const api = {
       const mediaFirst = (payload.media || [])[0]?.url || '';
       return request('/api/posts', {
         method: 'POST',
+        headers,
         body: JSON.stringify({
           title: payload.title,
           cover: mediaFirst,
@@ -390,15 +460,17 @@ export const api = {
     }
   },
 
-  async comment(id, author, text) {
+  async comment(id, author, text, idempotencyKey) {
     const body = {
       author: (author || '').trim() || getDefaultAuthor(),
       text: (text || '').trim(),
     };
+    const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;
     if (!body.text) throw new Error('comment required');
     try {
       const fresh = await request(`${API_PREFIX}/posts/${id}/comments`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       clearNetworkCaches();
@@ -406,6 +478,7 @@ export const api = {
     } catch (err) {
       const fresh = await request(`/api/posts/${id}/comment`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       clearNetworkCaches();

@@ -8,11 +8,13 @@ export const SHOT_PRESETS = {
   ],
 };
 
+
 export const EMPTY_SHOT = {
   title: '',
   spotId: '',
   spotName: '',
   district: '',
+  shotAt: '',
   content: '',
   angle: '',
   direction: '',

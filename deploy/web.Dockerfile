@@ -11,5 +11,5 @@ WORKDIR /app
 RUN npm i -g serve
 
 COPY --from=builder /app/dist ./dist
-EXPOSE 3001
-CMD ["serve", "dist", "-l", "3001", "--single"]
+EXPOSE 80
+CMD ["serve", "dist", "-l", "80", "--single"]

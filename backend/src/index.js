@@ -7,10 +7,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import multer from "multer";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import { tx, query } from "./db.js";
-import { cacheDel, cacheGetJson, cacheSetJson } from "./cache.js";
+import { closeDb, tx, query } from "./db.js";
+import {
+  cacheDel,
+  cacheGetJson,
+  cacheIncrWithTtl,
+  cacheSetIfNotExists,
+  cacheSetJson,
+  closeCache,
+  pingCache,
+} from "./cache.js";
 import { makeCursor, parseCursor, safeJsonList } from "./utils.js";
 
 dotenv.config();
@@ -27,6 +34,12 @@ const {
 } = process.env;
 
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
+const IDEMPOTENCY_TTL_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "3600", 10) || 3600;
+const IDEMPOTENCY_LOCK_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_LOCK_SECONDS || "60", 10) || 60;
+const API_RATE_LIMIT_WINDOW_SECONDS = 60;
+const API_RATE_LIMIT_MAX = 240;
+const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
+const apiRateLimitMemory = new Map();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,7 +73,14 @@ app.use(
   cors({
     origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(","),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "x-actor-id", "x-forwarded-for", "authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "x-actor-id",
+      "x-forwarded-for",
+      "authorization",
+      "idempotency-key",
+      "x-idempotency-key",
+    ],
     maxAge: 86400,
   })
 );
@@ -75,13 +95,73 @@ app.use((err, _req, res, next) => {
   return next(err);
 });
 
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 240,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: false,
-});
+function buildApiRateLimitPayload(req, windowNow) {
+  const bucketStart = Math.floor(windowNow / API_RATE_LIMIT_WINDOW_MS);
+  const identity = ipToActorFingerprint(req);
+  const bucketStartMs = bucketStart * API_RATE_LIMIT_WINDOW_MS;
+  return {
+    bucketStartMs,
+    bucketResetMs: bucketStartMs + API_RATE_LIMIT_WINDOW_MS,
+    key: `rate_limit:${identity}:${bucketStart}`,
+  };
+}
+
+async function checkInMemoryRateLimit(key, bucketResetMs) {
+  const now = Date.now();
+  for (const [existingKey, existing] of apiRateLimitMemory) {
+    if (existing.resetMs <= now) {
+      apiRateLimitMemory.delete(existingKey);
+    }
+  }
+
+  const existing = apiRateLimitMemory.get(key);
+
+  if (!existing || existing.resetMs <= now) {
+    apiRateLimitMemory.set(key, { count: 1, resetMs: bucketResetMs });
+    return 1;
+  }
+
+  existing.count += 1;
+  return existing.count;
+}
+
+async function apiLimiter(req, res, next) {
+  const now = Date.now();
+  const { bucketResetMs, key } = buildApiRateLimitPayload(req, now);
+  const remainingWindowMs = Math.max(bucketResetMs - now, 0);
+
+  let count = null;
+
+  const redisCount = await cacheIncrWithTtl(key, API_RATE_LIMIT_WINDOW_SECONDS, 1);
+  if (Number.isFinite(redisCount)) {
+    count = Number(redisCount);
+  }
+
+  if (count == null) {
+    count = await checkInMemoryRateLimit(key, bucketResetMs);
+  }
+
+  const remainingCount = Math.max(API_RATE_LIMIT_MAX - count, 0);
+  res.setHeader("X-Rate-Limit-Limit", String(API_RATE_LIMIT_MAX));
+  res.setHeader("X-Rate-Limit-Remaining", String(remainingCount));
+  res.setHeader("X-Rate-Limit-Reset", String(Math.ceil(bucketResetMs / 1000)));
+
+  if (count > API_RATE_LIMIT_MAX) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((bucketResetMs - now) / 1000));
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    return res.status(429).json({
+      error: "too many requests",
+      limit: API_RATE_LIMIT_MAX,
+      remaining: remainingCount,
+      resetAt: new Date(bucketResetMs).toISOString(),
+      retryAfter: retryAfterSeconds,
+      mode: count === redisCount ? "redis" : "memory",
+      remainingWindowMs,
+    });
+  }
+
+  return next();
+}
 app.use("/api", apiLimiter);
 
 app.use("/media", express.static(ASSET_DIR));
@@ -151,6 +231,80 @@ function readActorId(req, body = {}) {
   return crypto.createHash("md5").update(candidate).digest("hex").slice(0, 24);
 }
 
+function resolveIdempotencyKey(req) {
+  return String(
+    req.headers["idempotency-key"] ||
+    req.headers["x-idempotency-key"] ||
+    (req.body && req.body.idempotencyKey) ||
+    ""
+  ).trim();
+}
+
+function buildIdempotencyKey(scope, actor, rawKey) {
+  return crypto.createHash("sha256").update(`${scope}|${actor}|${rawKey}`).digest("hex");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runWithIdempotency({
+  req,
+  actor,
+  scope,
+  handler,
+  ttlSeconds = IDEMPOTENCY_TTL_SECONDS,
+  lockSeconds = IDEMPOTENCY_LOCK_SECONDS,
+}) {
+  const rawKey = resolveIdempotencyKey(req);
+  if (!rawKey) {
+    return {
+      replay: false,
+      payload: await handler(),
+    };
+  }
+
+  const cacheKey = `idem:${scope}:${actor}:${buildIdempotencyKey(scope, actor, rawKey)}`;
+  const lockKey = `${cacheKey}:lock`;
+
+  const cached = await cacheGetJson(cacheKey);
+  if (cached?.ok) {
+    return {
+      replay: true,
+      payload: cached.payload,
+    };
+  }
+
+  const lockAcquired = await cacheSetIfNotExists(lockKey, "1", lockSeconds);
+  if (!lockAcquired) {
+    for (let i = 0; i < 8; i += 1) {
+      const waited = await cacheGetJson(cacheKey);
+      if (waited?.ok) {
+        return {
+          replay: true,
+          payload: waited.payload,
+        };
+      }
+      await sleep(220 + i * 30);
+    }
+
+    const err = new Error("请求处理中，请稍后重试");
+    err.status = 409;
+    throw err;
+  }
+
+  try {
+    const payload = await handler();
+    await cacheSetJson(cacheKey, { ok: true, payload }, ttlSeconds);
+    return {
+      replay: false,
+      payload,
+    };
+  } finally {
+    await cacheDel(lockKey);
+  }
+}
+
 function normalizeList(raw) {
   if (!raw) return [];
   return String(raw)
@@ -199,12 +353,13 @@ function buildFeedBaseWhere({ q = "", tag = "" } = {}) {
   return { where, params };
 }
 
-async function loadPostMeta(rows) {
+async function loadPostMeta(rows, options = {}) {
+  const includeComments = options.includeComments !== false;
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const inQuery = ids.map(() => "?").join(",");
 
-  const [mediaRows, tagRows, styleRows, commentRows, likeAggRows, favAggRows] = await Promise.all([
+  const [mediaRows, tagRows, styleRows, commentAggRows, likeAggRows, favAggRows, commentRows] = await Promise.all([
     query(
       `SELECT post_id, kind, url, width, height, duration, cover_url, sort_order
        FROM post_media
@@ -214,22 +369,26 @@ async function loadPostMeta(rows) {
     ),
     query(`SELECT post_id, tag FROM post_tags WHERE post_id IN (${inQuery})`, ids),
     query(`SELECT post_id, style FROM post_styles WHERE post_id IN (${inQuery})`, ids),
-    query(
-      `SELECT post_id, id, actor_name AS author, content, created_at
-       FROM post_comments
-       WHERE post_id IN (${inQuery})
-       ORDER BY post_id, id DESC
-       LIMIT 80`,
-      ids
-    ),
+    query(`SELECT post_id, COUNT(*) AS c FROM post_comments WHERE post_id IN (${inQuery}) GROUP BY post_id`, ids),
     query(`SELECT post_id, COUNT(*) AS c FROM post_likes WHERE post_id IN (${inQuery}) GROUP BY post_id`, ids),
     query(`SELECT post_id, COUNT(*) AS c FROM post_favorites WHERE post_id IN (${inQuery}) GROUP BY post_id`, ids),
+    includeComments
+      ? query(
+        `SELECT post_id, id, actor_name AS author, content, created_at
+         FROM post_comments
+         WHERE post_id IN (${inQuery})
+         ORDER BY post_id, id DESC
+         LIMIT 80`,
+        ids
+      )
+      : Promise.resolve([]),
   ]);
 
   const mediaMap = new Map();
   const tagMap = new Map();
   const styleMap = new Map();
   const commentMap = new Map();
+  const commentCountMap = new Map();
   const likeMap = new Map();
   const favMap = new Map();
 
@@ -255,18 +414,23 @@ async function loadPostMeta(rows) {
     if (!styleMap.has(key)) styleMap.set(key, []);
     styleMap.get(key).push(r.style);
   }
-  for (const r of commentRows) {
-    const key = String(r.post_id);
-    if (!commentMap.has(key)) commentMap.set(key, []);
-    commentMap.get(key).push({
-      id: r.id,
-      author: r.author,
-      text: r.content,
-      createdAt: r.created_at,
-    });
+  if (includeComments) {
+    for (const r of commentRows) {
+      const key = String(r.post_id);
+      if (!commentMap.has(key)) commentMap.set(key, []);
+      commentMap.get(key).push({
+        id: r.id,
+        author: r.author,
+        text: r.content,
+        createdAt: r.created_at,
+      });
+    }
   }
   for (const item of likeAggRows) {
     likeMap.set(String(item.post_id), Number(item.c || 0));
+  }
+  for (const item of commentAggRows) {
+    commentCountMap.set(String(item.post_id), Number(item.c || 0));
   }
   for (const item of favAggRows) {
     favMap.set(String(item.post_id), Number(item.c || 0));
@@ -274,10 +438,12 @@ async function loadPostMeta(rows) {
 
   return rows.map((row) => {
     const key = String(row.id);
+    const commentCount = Number(commentCountMap.get(key) || (commentMap.get(key) || []).length || 0);
     return {
       id: row.id,
       title: row.title,
       content: row.content,
+      authorId: row.author_id || "",
       author: row.author_name || "匿名拍友",
       authorBio: row.author_bio || "",
       spotId: row.spot_id ? String(row.spot_id) : "",
@@ -304,7 +470,8 @@ async function loadPostMeta(rows) {
       likes: Number(row.stats_likes || likeMap.get(key) || 0),
       favorites: Number(row.stats_favorites || favMap.get(key) || 0),
       views: Number(row.stats_views || 0),
-      comments: commentMap.get(key) || [],
+    comments: includeComments ? (commentMap.get(key) || []) : [],
+      commentsCount: commentCount,
       liked: Boolean(row.liked),
       favorited: Boolean(row.favorited),
       createdAt: row.created_at,
@@ -317,11 +484,9 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   const clauses = ["SELECT p.*"];
   const fromClause = " FROM posts p";
   const { where, params } = buildFeedBaseWhere({ q, tag });
-
-  if (cursor) {
-    where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
-    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
-  }
+  const baseWhere = [...where];
+  const baseParams = [...params];
+  const whereClause = baseWhere.length ? ` WHERE ${baseWhere.join(" AND ")}` : "";
 
   const order = sort === "hot"
     ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
@@ -330,9 +495,15 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   clauses.push(
     ", (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = p.id) AS likes_count",
     ", (SELECT COUNT(*) FROM post_favorites f WHERE f.post_id = p.id) AS favorites_count",
+    ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comments_count",
     ", EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked",
     ", EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited"
   );
+
+  if (cursor) {
+    where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
 
   const rows = await query(
     `${clauses.join("")} ${fromClause} WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
@@ -340,22 +511,36 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   );
 
   const useRows = rows.slice(0, max);
-  const posts = await loadPostMeta(useRows);
+  const posts = await loadPostMeta(useRows, { includeComments: false });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
 
   const totalRows = await query(
-    `SELECT COUNT(*) AS c FROM posts p ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`,
-    [...params]
+    `SELECT COUNT(*) AS c FROM posts p${whereClause}`,
+    [...baseParams]
   );
   const total = Number(totalRows[0]?.c || 0);
   const hasMore = useRows.length === max;
+
+  const statsRows = await query(
+    `SELECT
+      COUNT(*) AS total_posts,
+      COUNT(DISTINCT p.author_id) AS authors,
+      COALESCE(SUM(p.stats_likes), 0) AS total_likes
+     FROM posts p${whereClause}`,
+    [...baseParams]
+  );
+  const statsRow = statsRows[0] || {};
 
   return {
     posts,
     nextCursor,
     hasMore,
     total,
-    stats: { totalPosts: total },
+    stats: {
+      totalPosts: total,
+      authors: Number(statsRow.authors || 0),
+      totalLikes: Number(statsRow.total_likes || 0),
+    },
   };
 }
 
@@ -373,6 +558,9 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
   `;
   const where = ["p.status='published'", `t.actor_id = ?`];
   const params = [actorId];
+  const baseWhere = [...where];
+  const baseParams = [...params];
+  const whereClause = baseWhere.join(" AND ");
 
   if (cursor) {
     where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
@@ -393,9 +581,53 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
   );
 
   const useRows = rows.slice(0, max);
-  const posts = await loadPostMeta(useRows);
+  const posts = await loadPostMeta(useRows, { includeComments: false });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
-  const totalRows = await query(`SELECT COUNT(*) AS c ${fromClause} WHERE ${where.join(" AND ")}`, params);
+  const totalRows = await query(`SELECT COUNT(*) AS c ${fromClause} WHERE ${whereClause}`, baseParams);
+  const total = Number(totalRows[0]?.c || 0);
+
+  return {
+    posts,
+    nextCursor,
+    hasMore: useRows.length === max,
+    total,
+    stats: { totalPosts: total },
+  };
+}
+
+async function fetchAuthorFeedRows({ actorId, limit, cursor, sort = "latest" }) {
+  const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
+  const where = ["p.status='published'", "p.author_id = ?"];
+  const params = [actorId];
+  const baseWhere = [...where];
+  const baseParams = [...params];
+  const whereClause = baseWhere.join(" AND ");
+
+  if (cursor) {
+    where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+
+  const order = sort === "hot"
+    ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
+    : " ORDER BY p.created_at DESC, p.id DESC";
+
+  const rows = await query(
+    `SELECT p.*,
+      EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
+      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited
+     FROM posts p
+     WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
+    [actorId, actorId, ...params, max + 1]
+  );
+
+  const useRows = rows.slice(0, max);
+  const posts = await loadPostMeta(useRows, { includeComments: false });
+  const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
+  const totalRows = await query(
+    `SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`,
+    baseParams
+  );
   const total = Number(totalRows[0]?.c || 0);
 
   return {
@@ -440,12 +672,46 @@ function asyncHandler(handler) {
     try {
       await handler(req, res, next);
     } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[api:error]", {
+          path: req.path,
+          method: req.method,
+          code: err?.code,
+          message: err?.message,
+        });
+      }
       const status = Number(err?.status) || 500;
       if (!res.headersSent) {
         res.status(status).json({ error: err.message || "internal server error" });
       }
     }
   };
+}
+
+async function ensurePostsSchemaCompatibility() {
+  try {
+    const columns = await query("SHOW COLUMNS FROM posts LIKE 'author_id'");
+    if (!Array.isArray(columns) || columns.length === 0) {
+      await query("ALTER TABLE posts ADD COLUMN author_id VARCHAR(64) DEFAULT '' AFTER content");
+    }
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_author_id (author_id)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_author_status_created (author_id, status, created_at, id)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_author (status, author_id, created_at, id)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_spot_name (spot_name)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_district (district)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_best_time (best_time)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_shot_at (shot_at)");
+    await query("ALTER TABLE posts ADD FULLTEXT INDEX IF NOT EXISTS ft_posts_search (title, content, spot_name, district)");
+  } catch (_err) {
+    console.warn("[schema] ensurePostsSchemaCompatibility skipped");
+  }
+
+  try {
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id)");
+    await query("ALTER TABLE posts ADD INDEX IF NOT EXISTS idx_posts_status_favorites (status, stats_favorites, created_at, id)");
+  } catch (_err) {
+    // keep compatibility
+  }
 }
 
 async function getPostHandler(req, res) {
@@ -473,20 +739,21 @@ async function getPostHandler(req, res) {
   return res.json({ post });
 }
 
-async function createPostHandler(req, res) {
+async function createPostHandler(req) {
   const body = req.body || {};
   const title = safeText(body.title, 200);
-  if (!title) return res.status(400).json({ error: "title required" });
+  if (!title) throw Object.assign(new Error("title required"), { status: 400 });
   const media = Array.isArray(body.media) ? body.media : [];
-  if (!media.length) return res.status(400).json({ error: "media required" });
+  if (!media.length) throw Object.assign(new Error("media required"), { status: 400 });
 
   const content = safeText(body.content, 3000);
-  if (!content) return res.status(400).json({ error: "content required" });
+  if (!content) throw Object.assign(new Error("content required"), { status: 400 });
   const spotId = pickInt(body.spotId, 0);
   const spotName = safeText(body.spotName || "", 80);
   const district = safeText(body.district || "", 64);
   const tags = normalizeList(body.tags || body.tag || "");
   const styles = normalizeList(body.styles || "");
+  const actorId = readActorId(req, body);
   let shotAt = null;
   if (body.shotAt) {
     const parsed = new Date(body.shotAt);
@@ -496,15 +763,10 @@ async function createPostHandler(req, res) {
   }
 
     const result = await tx(async (conn) => {
-      const [postResult] = await conn.execute(
-        `INSERT INTO posts
-         (title, content, author_name, author_bio, spot_id, spot_name, district, direction, angle,
-        time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
-        media_type, cover_url, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
-      [
+      const postValues = [
         title,
         content,
+        safeText(actorId, 64),
         safeText(body.author || "匿名拍友", 64),
         safeText(body.authorBio || "", 120),
         spotId || null,
@@ -524,8 +786,16 @@ async function createPostHandler(req, res) {
         safeText(body.whiteBalance || "", 40),
         Array.isArray(media) && media[0] ? (media[0].kind || "image").slice(0, 16) : "image",
         Array.isArray(media) && media[0] ? safeText(media[0].url || "", 500) : "",
-      ]
-    );
+      ];
+
+      const [postResult] = await conn.execute(
+        `INSERT INTO posts
+         (title, content, author_id, author_name, author_bio, spot_id, spot_name, district, direction, angle,
+        time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
+        media_type, cover_url, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
+        postValues
+      );
 
       const postId = postResult.insertId;
       let acceptedMedia = 0;
@@ -537,30 +807,30 @@ async function createPostHandler(req, res) {
         await conn.execute(
           `INSERT INTO post_media (post_id, kind, url, cover_url, width, height, duration, sort_order)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          postId,
-          String(item.kind || "image").slice(0, 12),
-          url,
-          safeText(item.cover || "", 500),
-          Number(item.width || 0),
-          Number(item.height || 0),
-          Number(item.duration || 0),
-          i,
-        ]
+          [
+            postId,
+            String(item.kind || "image").slice(0, 12),
+            url,
+            safeText(item.cover || "", 500),
+            Number(item.width || 0),
+            Number(item.height || 0),
+            Number(item.duration || 0),
+            i,
+          ]
         );
       }
-      if (acceptedMedia === 0) {
+  if (acceptedMedia === 0) {
         throw Object.assign(new Error("media required"), { status: 400 });
       }
 
-    for (const t of tags) {
-      if (!t) continue;
-      await conn.execute("INSERT IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)", [postId, t]);
-    }
-    for (const s of styles) {
-      if (!s) continue;
-      await conn.execute("INSERT IGNORE INTO post_styles (post_id, style) VALUES (?, ?)", [postId, s]);
-    }
+      for (const t of tags) {
+        if (!t) continue;
+        await conn.execute("INSERT IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)", [postId, t]);
+      }
+      for (const s of styles) {
+        if (!s) continue;
+        await conn.execute("INSERT IGNORE INTO post_styles (post_id, style) VALUES (?, ?)", [postId, s]);
+      }
 
     return postId;
   });
@@ -568,7 +838,7 @@ async function createPostHandler(req, res) {
   await invalidateAllPostsCaches();
   const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [result]);
   const normalized = (await loadPostMeta(detail))[0];
-  return res.json({ ok: true, post: normalized });
+  return { ok: true, post: normalized };
 }
 
 async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
@@ -590,44 +860,92 @@ async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
     const [postRows] = await conn.execute("SELECT id FROM posts WHERE id = ?", [postId]);
     if (!postRows.length) throw new Error("post not found");
 
-    const [existRows] = await conn.execute(
-      `SELECT id FROM ${actionTable} WHERE post_id = ? AND actor_id = ?`,
+    const [existsRows] = await conn.execute(
+      `SELECT EXISTS(SELECT 1 FROM ${actionTable} WHERE post_id = ? AND actor_id = ?) AS exist`,
       [postId, actor]
     );
-    const exists = existRows.length > 0;
-    let shouldAdd = false;
+    const existed = Boolean(Number(existsRows?.[0]?.exist || 0));
 
-    if (normalizedAction === "like" || normalizedAction === "favorite") shouldAdd = true;
-    if (normalizedAction === "unlike" || normalizedAction === "unfavorite") shouldAdd = false;
-    if (normalizedAction === "toggle") shouldAdd = !exists;
-
-    if (shouldAdd && !exists) {
-      await conn.execute(
-        `INSERT INTO ${actionTable} (post_id, actor_id, actor_name) VALUES (?, ?, ?)`,
-        [postId, actor, actorName]
-      );
-      await conn.execute(`UPDATE posts SET ${countColumn} = ${countColumn} + 1 WHERE id = ?`, [postId]);
+    let targetActive;
+    if (normalizedAction === "toggle") {
+      targetActive = !existed;
+    } else {
+      targetActive = normalizedAction === "like" || normalizedAction === "favorite";
     }
 
-    if (!shouldAdd && exists) {
-      await conn.execute(
+    if (targetActive && !existed) {
+      const [insertResult] = await conn.execute(
+        `INSERT IGNORE INTO ${actionTable} (post_id, actor_id, actor_name) VALUES (?, ?, ?)`,
+        [postId, actor, actorName]
+      );
+      if (insertResult.affectedRows === 1) {
+        await conn.execute(`UPDATE posts SET ${countColumn} = ${countColumn} + 1 WHERE id = ?`, [postId]);
+      }
+    }
+
+    if (!targetActive && existed) {
+      const [deleteResult] = await conn.execute(
         `DELETE FROM ${actionTable} WHERE post_id = ? AND actor_id = ?`,
         [postId, actor]
       );
-      await conn.execute(
-        `UPDATE posts SET ${countColumn} = GREATEST(${countColumn} - 1, 0) WHERE id = ?`,
-        [postId]
-      );
+      if (deleteResult.affectedRows === 1) {
+        await conn.execute(
+          `UPDATE posts SET ${countColumn} = GREATEST(${countColumn} - 1, 0) WHERE id = ?`,
+          [postId]
+        );
+      }
     }
 
     const [updated] = await conn.execute(`SELECT ${countColumn} AS c FROM posts WHERE id = ?`, [postId]);
+    const [state] = await conn.execute(
+      `SELECT EXISTS(SELECT 1 FROM ${actionTable} WHERE post_id = ? AND actor_id = ?) AS active`,
+      [postId, actor]
+    );
 
     return {
       count: Number(updated[0]?.c || 0),
-      active: shouldAdd,
-      exists,
+      active: Boolean(Number(state?.[0]?.active || 0)),
     };
   });
+}
+
+async function createCommentHandler(req) {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    const err = new Error("invalid post id");
+    err.status = 400;
+    throw err;
+  }
+  const text = safeText(req.body?.text || req.body?.content || "", 500);
+  if (!text) {
+    const err = new Error("comment required");
+    err.status = 400;
+    throw err;
+  }
+
+  const actor = readActorId(req, req.body || {});
+  const author = safeText(req.body?.author || "匿名拍友", 80);
+  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
+  if (!exists?.id) {
+    const err = new Error("post not found");
+    err.status = 404;
+    throw err;
+  }
+
+  await query(
+    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
+    [postId, actor, author, text]
+  );
+  await invalidateAllPostsCaches();
+  await cacheDel(`post:detail:${postId}:*`);
+  return {
+    ok: true,
+    comment: {
+      postId,
+      actorName: author,
+      text,
+    },
+  };
 }
 
 function createErrorHandler(err, _req, res, _next) {
@@ -647,7 +965,41 @@ function createErrorHandler(err, _req, res, _next) {
 }
 
 const healthHandler = async (_req, res) => {
-  res.json({ ok: true, service: "chupian-service", now: new Date().toISOString() });
+  const startedAt = Date.now();
+  const dependencyChecks = await Promise.allSettled([
+    query("SELECT 1 AS ok"),
+    pingCache(),
+  ]);
+
+  const dbCheck = dependencyChecks[0];
+  const cacheCheck = dependencyChecks[1];
+
+  const dependencies = {
+    database: {
+      ok: dbCheck.status === "fulfilled",
+      latencyMs: Date.now() - startedAt,
+    },
+    redis: {
+      ok: cacheCheck.status === "fulfilled" ? !!cacheCheck.value : false,
+    },
+  };
+
+  if (dbCheck.status === "rejected") {
+    dependencies.database.error = String(dbCheck.reason?.message || dbCheck.reason || "unknown");
+  }
+  if (cacheCheck.status === "rejected" || cacheCheck.value === false) {
+    dependencies.redis.error = cacheCheck.status === "rejected"
+      ? String(cacheCheck.reason?.message || cacheCheck.reason || "unknown")
+      : "redis ping failed";
+  }
+
+  const allHealthy = dependencies.database.ok && dependencies.redis.ok;
+  res.status(allHealthy ? 200 : 503).json({
+    ok: allHealthy,
+    service: "chupian-service",
+    now: new Date().toISOString(),
+    dependencies,
+  });
 };
 const weatherHandler = async (_req, res) => {
   res.json({
@@ -751,6 +1103,23 @@ app.get("/api/v1/community/discovery", asyncHandler(async (req, res) => {
   });
 }));
 
+app.get("/api/community/discovery", asyncHandler(async (req, res) => {
+  const limit = pickInt(req.query.limit, 16, { min: 1, max: 80 });
+  const type = String(req.query.type || "").trim().toLowerCase();
+  const signals = await fetchDiscoverySignals(limit);
+  const filtered = type && ["tag", "style"].includes(type)
+    ? signals.filter((signal) => signal.type === type)
+    : signals;
+  res.json({
+    signals: filtered,
+    meta: {
+      type: type || "all",
+      count: filtered.length,
+      total: signals.length,
+    },
+  });
+});
+
 app.get("/api/v1/community/me/likes", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
@@ -758,6 +1127,20 @@ app.get("/api/v1/community/me/likes", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const payload = await fetchActorFeedRows({
     table: "post_likes",
+    actorId: actor,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json(payload);
+}));
+
+app.get("/api/v1/community/me/posts", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchAuthorFeedRows({
     actorId: actor,
     limit,
     cursor,
@@ -783,7 +1166,19 @@ app.get("/api/v1/community/me/favorites", asyncHandler(async (req, res) => {
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
 
-app.post("/api/v1/posts", asyncHandler(createPostHandler));
+app.post("/api/v1/posts", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: "post:create",
+    handler: () => createPostHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
+}));
 
 app.post("/api/v1/posts/:id/like", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
@@ -823,41 +1218,31 @@ app.post("/api/v1/posts/:id/favorite", asyncHandler(async (req, res) => {
 
 app.post("/api/v1/posts/:id/comments", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
-  if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
-  const text = safeText(req.body?.text || req.body?.content || "", 500);
-  if (!text) return res.status(400).json({ error: "comment required" });
   const actor = readActorId(req, req.body || {});
-  const actorName = safeText(req.body?.author || "匿名拍友", 80);
-
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists?.id) return res.status(404).json({ error: "post not found" });
-
-  await query(
-    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-    [postId, actor, actorName, text]
-  );
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
-  return res.json({ ok: true, comment: { postId, actorName, text } });
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: `post:${postId}:comment`,
+    handler: () => createCommentHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
 }));
 app.post("/api/v1/posts/:id/comment", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
-  if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
-  const text = safeText(req.body?.text || req.body?.content || "", 500);
-  if (!text) return res.status(400).json({ error: "comment required" });
   const actor = readActorId(req, req.body || {});
-  const actorName = safeText(req.body?.author || "匿名拍友", 80);
-
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists?.id) return res.status(404).json({ error: "post not found" });
-
-  await query(
-    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-    [postId, actor, actorName, text]
-  );
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
-  return res.json({ ok: true, comment: { postId, actorName, text } });
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: `post:${postId}:comment`,
+    handler: () => createCommentHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
 }));
 
 app.post("/api/v1/media/upload", (req, res, next) => {
@@ -877,15 +1262,36 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const payload = await fetchFeedRows({ sort: "latest", cursor, limit, actorId: actor });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const q = parseSearchText(req.query.q);
+  const tag = parseSearchText(req.query.tag);
+  const payload = await fetchFeedRows({
+    sort,
+    cursor,
+    limit,
+    actorId: actor,
+    q,
+    tag,
+  });
   return res.json({
-    posts: payload.posts,
-    total: payload.total,
-    stats: { posts: payload.total, totalLikes: payload.stats?.totalPosts || 0, authors: 0 },
+    ...payload,
+    stats: payload.stats || { totalPosts: payload.total },
   });
 }));
 app.get("/api/posts/:id", asyncHandler(getPostHandler));
-app.post("/api/posts", asyncHandler(createPostHandler));
+app.post("/api/posts", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: "post:create",
+    handler: () => createPostHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
+}));
 app.post("/api/posts/:id/like", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
@@ -905,22 +1311,17 @@ app.post("/api/posts/:id/like", asyncHandler(async (req, res) => {
 }));
 app.post("/api/posts/:id/comment", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
-  if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
-  const text = safeText(req.body?.text || req.body?.content || "", 500);
-  if (!text) return res.status(400).json({ error: "comment required" });
   const actor = readActorId(req, req.body || {});
-  const actorName = safeText(req.body?.author || "匿名拍友", 80);
-
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists?.id) return res.status(404).json({ error: "post not found" });
-
-  await query(
-    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-    [postId, actor, actorName, text]
-  );
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
-  return res.json({ ok: true, comment: { postId, actorName, text } });
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: `post:${postId}:comment`,
+    handler: () => createCommentHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
 }));
 app.post("/api/posts/:id/favorite", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
@@ -941,26 +1342,61 @@ app.post("/api/posts/:id/favorite", asyncHandler(async (req, res) => {
 }));
 app.post("/api/posts/:id/comments", asyncHandler(async (req, res) => {
   const postId = Number(req.params.id);
-  if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
-  const text = safeText(req.body?.text || req.body?.content || "", 500);
-  if (!text) return res.status(400).json({ error: "comment required" });
   const actor = readActorId(req, req.body || {});
-  const actorName = safeText(req.body?.author || "匿名拍友", 80);
-
-  const [exists] = await query("SELECT id FROM posts WHERE id = ?", [postId]);
-  if (!exists?.id) return res.status(404).json({ error: "post not found" });
-
-  await query(
-    "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-    [postId, actor, actorName, text]
-  );
-  await invalidateAllPostsCaches();
-  await cacheDel(`post:detail:${postId}:*`);
-  return res.json({ ok: true, comment: { postId, actorName, text } });
+  const result = await runWithIdempotency({
+    req,
+    actor,
+    scope: `post:${postId}:comment`,
+    handler: () => createCommentHandler(req),
+  });
+  if (result.replay) {
+    res.setHeader("X-Idempotency-Replay", "1");
+  }
+  return res.json(result.payload);
 }));
 
 app.use(createErrorHandler);
 
-app.listen(Number(PORT), () => {
+await ensurePostsSchemaCompatibility();
+
+let server;
+let isShuttingDown = false;
+
+function createSafePromise(timeoutMs, promise) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(resolve, timeoutMs, false);
+    }),
+  ]);
+}
+
+async function shutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[shutdown] ${signal || "manual"} received`);
+
+  if (server) {
+    await createSafePromise(
+      6000,
+      new Promise((resolve) => {
+        server.close(() => {
+          resolve(true);
+        });
+      })
+    );
+  }
+
+  await Promise.all([
+    closeDb(),
+    closeCache(),
+  ]);
+  process.exit(0);
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+server = app.listen(Number(PORT), () => {
   console.log(`chupian service running on http://0.0.0.0:${PORT}`);
 });
