@@ -169,6 +169,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftMediaWarning, setDraftMediaWarning] = useState('');
+  const [shootingOpen, setShootingOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [state, dispatch] = useReducer(reducer, EMPTY_SHOT);
@@ -694,7 +695,7 @@ export default function NewPostScreen({ navigation, route }) {
       >
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>发布出片</Text>
-          <Text style={styles.subtitle}>先选素材，再补齐机位与拍摄参数，发布一条可复用的出片记录</Text>
+          <Text style={styles.subtitle}>记录一张照片的地点、参数和故事</Text>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
           {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
@@ -782,60 +783,71 @@ export default function NewPostScreen({ navigation, route }) {
           maxLength={24}
         />
 
-        <Text style={styles.sectionTitle}>拍摄信息</Text>
-        <PostInput
-          label="拍摄时间（可选）"
-          error={validation.errors.shotAt}
-          value={state.shotAt}
-          onChange={(value) => setField('shotAt', value)}
-          placeholder="如：2026-08-08 20:30"
-          maxLength={30}
-          help="留空会使用当前时间"
-        />
+        <FormSection
+          title="拍摄信息"
+          summary={[
+            state.shotAt ? '已记录时间' : '',
+            state.angle,
+            state.direction,
+            state.bestTime,
+          ].filter(Boolean).join(' · ') || '时间、角度、光线与时间窗口'}
+          expanded={shootingOpen}
+          onToggle={() => setShootingOpen((value) => !value)}
+        >
+          <PostInput
+            label="拍摄时间（可选）"
+            error={validation.errors.shotAt}
+            value={state.shotAt}
+            onChange={(value) => setField('shotAt', value)}
+            placeholder="如：2026-08-08 20:30"
+            maxLength={30}
+            help="留空会使用当前时间"
+          />
 
-        <PostInput
-          label="角度"
-          value={state.angle}
-          onChange={(value) => setField('angle', value)}
-          placeholder="仰拍 / 平拍 / 俯拍"
-          maxLength={70}
-          help="可从下方快速选项填入"
-        />
-        <OptionPills
-          options={SHOT_PRESETS.angle.map((value) => ({ value, label: value }))}
-          value={state.angle}
-          onChange={(value) => setField('angle', value)}
-          compact
-        />
+          <PostInput
+            label="角度"
+            value={state.angle}
+            onChange={(value) => setField('angle', value)}
+            placeholder="仰拍 / 平拍 / 俯拍"
+            maxLength={70}
+            help="可从下方快速选项填入"
+          />
+          <OptionPills
+            options={SHOT_PRESETS.angle.map((value) => ({ value, label: value }))}
+            value={state.angle}
+            onChange={(value) => setField('angle', value)}
+            compact
+          />
 
-        <PostInput
-          label="方向"
-          value={state.direction}
-          onChange={(value) => setField('direction', value)}
-          placeholder="顺光 / 逆光 / 侧逆"
-          maxLength={70}
-          help="如：逆光、顺光、侧光"
-        />
-        <OptionPills
-          options={SHOT_PRESETS.direction.map((value) => ({ value, label: value }))}
-          value={state.direction}
-          onChange={(value) => setField('direction', value)}
-          compact
-        />
+          <PostInput
+            label="方向"
+            value={state.direction}
+            onChange={(value) => setField('direction', value)}
+            placeholder="顺光 / 逆光 / 侧逆"
+            maxLength={70}
+            help="如：逆光、顺光、侧光"
+          />
+          <OptionPills
+            options={SHOT_PRESETS.direction.map((value) => ({ value, label: value }))}
+            value={state.direction}
+            onChange={(value) => setField('direction', value)}
+            compact
+          />
 
-        <PostInput
-          label="时间窗口"
-          value={state.timeWindow}
-          onChange={(value) => setField('timeWindow', value)}
-          placeholder="如：18:20-19:10"
-          maxLength={50}
-        />
-        <OptionPills
-          options={SHOT_PRESETS.bestTime}
-          value={state.bestTime}
-          onChange={setBestTime}
-          compact
-        />
+          <PostInput
+            label="时间窗口"
+            value={state.timeWindow}
+            onChange={(value) => setField('timeWindow', value)}
+            placeholder="如：18:20-19:10"
+            maxLength={50}
+          />
+          <OptionPills
+            options={SHOT_PRESETS.bestTime}
+            value={state.bestTime}
+            onChange={setBestTime}
+            compact
+          />
+        </FormSection>
 
         <FormSection
           title="镜头参数"
@@ -1117,27 +1129,24 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   formActions: {
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: 6,
+    marginBottom: 4,
     flexDirection: 'row',
-    gap: 10,
+    justifyContent: 'flex-end',
+    gap: 16,
   },
   secondaryBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    borderRadius: 999,
-    paddingVertical: 11,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
     alignItems: 'center',
-    backgroundColor: COLORS.card,
   },
   secondaryBtnDisabled: {
     opacity: 0.45,
   },
   secondaryBtnText: {
-    color: COLORS.ink,
+    color: COLORS.muted,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 12,
   },
   publishBtn: {
     borderRadius: 999,
