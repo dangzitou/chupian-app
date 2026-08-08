@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
+import { hydrateActorId } from './src/lib/actor';
 
 import { APP_ROUTES } from './src/constants/routes';
 
@@ -55,6 +57,29 @@ function ProfileStack() {
 }
 
 export default function App() {
+  const [actorReady, setActorReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    hydrateActorId().finally(() => {
+      if (alive) setActorReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!actorReady) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.bootScreen}>
+          <ActivityIndicator size="small" color="#d93657" />
+        </View>
+        <StatusBar style="dark" />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
@@ -101,3 +126,12 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  bootScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8f7f6',
+  },
+});

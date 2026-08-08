@@ -1,3 +1,6 @@
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+
 const STORAGE_KEY = 'chupian:actor-id:v1';
 let runtimeActorId = '';
 
@@ -33,6 +36,26 @@ export function getActorId() {
   runtimeActorId = readStoredActorId() || createActorId();
   storeActorId(runtimeActorId);
   return runtimeActorId;
+}
+
+export async function hydrateActorId() {
+  if (runtimeActorId) return runtimeActorId;
+
+  if (Platform.OS !== 'web') {
+    try {
+      const stored = String(await SecureStore.getItemAsync(STORAGE_KEY) || '').trim();
+      runtimeActorId = stored || createActorId();
+      if (!stored) {
+        await SecureStore.setItemAsync(STORAGE_KEY, runtimeActorId);
+      }
+      return runtimeActorId;
+    } catch (_err) {
+      runtimeActorId = createActorId();
+      return runtimeActorId;
+    }
+  }
+
+  return getActorId();
 }
 
 export function getActorName() {
