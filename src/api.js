@@ -1,6 +1,7 @@
 import { API_BASE, API_PREFIX } from './config';
 import { buildPostPayload, normalizePostShape } from './utils/postCodec';
 import { getActorId, getActorName, getActorToken, refreshActorSession } from './lib/actor';
+import { buildSessionIdempotencyKey } from './lib/idempotency';
 
 const NETWORK_TIMEOUT_MS = 12_000;
 const GET_CACHE_TTL_MS = 4000;
@@ -558,9 +559,11 @@ export const api = {
       author: (author || '').trim() || getDefaultAuthor(),
       action,
     };
+    const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('post-like', `${id}-${action}`) };
     try {
       const fresh = await request(`${API_PREFIX}/posts/${id}/like`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       if (action === 'like' || action === 'unlike') {
@@ -571,6 +574,7 @@ export const api = {
       if (!shouldFallbackWrite(err)) throw err;
       const fresh = await request(`/api/posts/${id}/like`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       if (action === 'like' || action === 'unlike') {
@@ -582,9 +586,11 @@ export const api = {
 
   async toggleFavorite(id, author, action = 'toggle') {
     const body = { author: (author || '').trim() || getDefaultAuthor(), action };
+    const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('post-favorite', `${id}-${action}`) };
     try {
       const fresh = await request(`${API_PREFIX}/posts/${id}/favorite`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       if (action === 'favorite' || action === 'unfavorite') {
@@ -596,6 +602,7 @@ export const api = {
       // optional fallback: legacy endpoint
       const res = await request(`/api/posts/${id}/favorite`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(body),
       });
       if (action === 'favorite' || action === 'unfavorite') {
