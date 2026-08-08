@@ -165,3 +165,12 @@ docker compose up -d --build
 
 - 本项目当前状态为 `App v0.1`
 - 当前仍是可上线 MVP；后续可继续补充离线缓存、通知推送、密码找回和对象存储/CDN。
+## 作者屏蔽
+
+已登录或匿名用户都可以按作者维度屏蔽公开内容：
+
+- `GET /api/v1/authors/{authorId}/block` 查询屏蔽状态
+- `POST /api/v1/authors/{authorId}/block` 使用 `action=block|unblock|toggle` 设置状态
+- `GET /api/v1/community/me/blocked` 获取当前用户的屏蔽列表
+
+屏蔽规则统一应用于发现 Feed、关注 Feed、作者页、地图点位、作品详情和评论查询；可在“我的 - 屏蔽管理”解除。

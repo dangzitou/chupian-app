@@ -495,10 +495,14 @@ function appendSearchConditions({ where, params }, queryText, topic) {
   }
 }
 
-function buildFeedBaseWhere({ q = "", tag = "" } = {}) {
+function buildFeedBaseWhere({ q = "", tag = "", actorId = "" } = {}) {
   const where = ["p.status='published'"];
   const params = [];
   appendSearchConditions({ where, params }, parseSearchText(q), parseSearchText(tag));
+  if (actorId) {
+    where.push("(p.author_id = ? OR NOT EXISTS (SELECT 1 FROM blocked_authors b WHERE b.blocker_id = ? AND b.blocked_id = p.author_id))");
+    params.push(actorId, actorId);
+  }
   return { where, params };
 }
 
@@ -652,7 +656,7 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
   const clauses = ["SELECT p.*"];
   const fromClause = " FROM posts p";
-  const { where, params } = buildFeedBaseWhere({ q, tag });
+  const { where, params } = buildFeedBaseWhere({ q, tag, actorId });
   const baseWhere = [...where];
   const baseParams = [...params];
   const whereClause = baseWhere.length ? ` WHERE ${baseWhere.join(" AND ")}` : "";
@@ -726,8 +730,12 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
     FROM posts p
     INNER JOIN ${relation} t ON t.post_id = p.id
   `;
-  const where = ["p.status='published'", `t.actor_id = ?`];
-  const params = [actorId];
+  const where = [
+    "p.status='published'",
+    `t.actor_id = ?`,
+    "NOT EXISTS (SELECT 1 FROM blocked_authors b WHERE b.blocker_id = ? AND b.blocked_id = p.author_id)",
+  ];
+  const params = [actorId, actorId];
   const baseWhere = [...where];
   const baseParams = [...params];
   const whereClause = baseWhere.join(" AND ");
@@ -768,8 +776,12 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
 
 async function fetchAuthorFeedRows({ actorId, authorId = actorId, limit, cursor, sort = "latest" }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
-  const where = ["p.status='published'", "p.author_id = ?"];
-  const params = [authorId];
+  const where = [
+    "p.status='published'",
+    "p.author_id = ?",
+    "NOT EXISTS (SELECT 1 FROM blocked_authors b WHERE b.blocker_id = ? AND b.blocked_id = p.author_id)",
+  ];
+  const params = [authorId, actorId];
   const baseWhere = [...where];
   const baseParams = [...params];
   const whereClause = baseWhere.join(" AND ");
@@ -982,6 +994,24 @@ async function ensureReportSchemaCompatibility() {
   }
 }
 
+async function ensureBlockSchemaCompatibility() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS blocked_authors (
+        blocker_id VARCHAR(64) NOT NULL,
+        blocked_id VARCHAR(64) NOT NULL,
+        blocked_name VARCHAR(80) NOT NULL DEFAULT '匿名拍友',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (blocker_id, blocked_id),
+        INDEX idx_blocked_blocker_created (blocker_id, created_at),
+        INDEX idx_blocked_target (blocked_id)
+      ) ENGINE=InnoDB
+    `);
+  } catch (err) {
+    console.warn(`[schema] ensureBlockSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
 async function insertNotification(conn, {
   recipientId,
   actorId,
@@ -1026,6 +1056,68 @@ async function getFollowState(actor, targetAuthorId) {
     isFollowing: Boolean(Number(followRow?.isFollowing || 0)),
     followers: Number(countRow?.followers || 0),
   };
+}
+
+async function getBlockState(actor, targetAuthorId) {
+  if (!actor || !targetAuthorId) return { blocked: false };
+  const rows = await query(
+    "SELECT COUNT(*) AS blocked FROM blocked_authors WHERE blocker_id = ? AND blocked_id = ?",
+    [actor, targetAuthorId]
+  );
+  return { blocked: Boolean(Number(rows?.[0]?.blocked || 0)) };
+}
+
+async function applyAuthorBlock({ actor, targetAuthorId, targetName, action = "toggle" }) {
+  const normalizedAction = String(action || "toggle");
+  const allowedActions = ["toggle", "block", "unblock"];
+  if (!allowedActions.includes(normalizedAction)) {
+    const actionErr = new Error(`invalid action: ${normalizedAction}`);
+    actionErr.status = 400;
+    throw actionErr;
+  }
+
+  if (!actor || !targetAuthorId) {
+    const err = new Error("target author required");
+    err.status = 400;
+    throw err;
+  }
+  if (actor === targetAuthorId) {
+    const err = new Error("cannot block yourself");
+    err.status = 400;
+    throw err;
+  }
+
+  const [authorExists] = await query("SELECT 1 FROM posts WHERE author_id = ? LIMIT 1", [targetAuthorId]);
+  if (!authorExists) {
+    const err = new Error("author not found");
+    err.status = 404;
+    throw err;
+  }
+
+  return tx(async (conn) => {
+    const [stateRows] = await conn.execute(
+      "SELECT COUNT(*) AS blocked FROM blocked_authors WHERE blocker_id = ? AND blocked_id = ?",
+      [actor, targetAuthorId]
+    );
+    const isBlocked = Boolean(Number(stateRows?.[0]?.blocked || 0));
+    const shouldBlock = normalizedAction === "toggle" ? !isBlocked : normalizedAction === "block";
+    const name = safeText(targetName || "匿名拍友", 80) || "匿名拍友";
+
+    if (shouldBlock && !isBlocked) {
+      await conn.execute(
+        "INSERT IGNORE INTO blocked_authors (blocker_id, blocked_id, blocked_name) VALUES (?, ?, ?)",
+        [actor, targetAuthorId, name]
+      );
+    }
+    if (!shouldBlock && isBlocked) {
+      await conn.execute(
+        "DELETE FROM blocked_authors WHERE blocker_id = ? AND blocked_id = ?",
+        [actor, targetAuthorId]
+      );
+    }
+
+    return { blocked: shouldBlock, authorId: targetAuthorId, authorName: name };
+  });
 }
 
 async function applyAuthorFollow({ actor, actorName, targetAuthorId, action = "toggle" }) {
@@ -1107,9 +1199,11 @@ async function fetchFollowingFeedRows({ actorId, limit, cursor, sort = "latest" 
   const where = [
     "p.status='published'",
     "p.author_id IN (SELECT af.followed_id FROM author_follows af WHERE af.follower_id = ?)",
+    "NOT EXISTS (SELECT 1 FROM blocked_authors b WHERE b.blocker_id = ? AND b.blocked_id = p.author_id)",
   ];
-  const params = [actorId];
+  const params = [actorId, actorId];
   const baseWhere = [...where];
+  const baseParams = [...params];
   const whereClause = baseWhere.join(" AND ");
   if (cursor) {
     where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
@@ -1135,7 +1229,7 @@ async function fetchFollowingFeedRows({ actorId, limit, cursor, sort = "latest" 
   const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
 
-  const totalRows = await query(`SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`, baseWhere);
+  const totalRows = await query(`SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`, baseParams);
   const total = Number(totalRows[0]?.c || 0);
 
   return {
@@ -1162,8 +1256,13 @@ async function getPostHandler(req, res) {
        EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
        EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited,
        EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed
-     FROM posts p WHERE p.id = ?`,
-    [actor, actor, actor, postId]
+     FROM posts p
+     WHERE p.id = ?
+       AND (p.author_id = ? OR NOT EXISTS (
+         SELECT 1 FROM blocked_authors b
+         WHERE b.blocker_id = ? AND b.blocked_id = p.author_id
+       ))`,
+    [actor, actor, actor, postId, actor, actor]
   );
   if (!rows.length) return res.status(404).json({ error: "post not found" });
 
@@ -1182,7 +1281,17 @@ async function getPostCommentsPayload(req) {
     throw err;
   }
 
-  const [exists] = await query("SELECT id, author_id, title FROM posts WHERE id = ?", [postId]);
+  const actor = readActorId(req, req.query);
+  const [exists] = await query(
+    `SELECT id, author_id, title
+     FROM posts p
+     WHERE p.id = ?
+       AND (p.author_id = ? OR NOT EXISTS (
+         SELECT 1 FROM blocked_authors b
+         WHERE b.blocker_id = ? AND b.blocked_id = p.author_id
+       ))`,
+    [postId, actor, actor]
+  );
   if (!exists?.id) {
     const err = new Error("post not found");
     err.status = 404;
@@ -1988,6 +2097,50 @@ app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
   });
 }));
 
+app.get("/api/v1/authors/:authorId/block", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  if (!targetAuthorId) return res.status(400).json({ error: "author id required" });
+  const state = await getBlockState(actor, targetAuthorId);
+  return res.json({ ok: true, authorId: targetAuthorId, blocked: state.blocked });
+}));
+
+app.post("/api/v1/authors/:authorId/block", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.body || {});
+  const targetAuthorId = String(req.params.authorId || "").trim();
+  const action = String(req.body?.action || "toggle");
+  const targetName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
+  const idempotent = await runWithIdempotency({
+    req,
+    actor,
+    scope: `author:${targetAuthorId}:block`,
+    handler: () => applyAuthorBlock({ actor, targetAuthorId, targetName, action }),
+  });
+  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+  await invalidateAllPostsCaches();
+  return res.json({ ok: true, ...idempotent.payload, action });
+}));
+
+app.get("/api/v1/community/me/blocked", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const rows = await query(
+    `SELECT blocked_id AS author_id, blocked_name AS author_name, created_at
+     FROM blocked_authors
+     WHERE blocker_id = ?
+     ORDER BY created_at DESC
+     LIMIT 80`,
+    [actor]
+  );
+  return res.json({
+    ok: true,
+    authors: rows.map((row) => ({
+      authorId: row.author_id,
+      authorName: row.author_name || "匿名拍友",
+      createdAt: row.created_at,
+    })),
+  });
+}));
+
 app.get("/api/community/me/following", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
@@ -2310,6 +2463,7 @@ await ensureFollowSchemaCompatibility();
 await ensureAuthSchemaCompatibility();
 await ensureNotificationSchemaCompatibility();
 await ensureReportSchemaCompatibility();
+await ensureBlockSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;

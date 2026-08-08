@@ -553,6 +553,33 @@ export const api = {
     }
   },
 
+  async toggleBlock(authorId, action = 'toggle', authorName = '') {
+    const target = String(authorId || '').trim();
+    if (!target) throw new Error('authorId required');
+    const encoded = encodeURIComponent(target);
+    const body = {
+      action,
+      author: String(authorName || getActorName() || '匿名拍友').slice(0, 80),
+    };
+    return request(`${API_PREFIX}/authors/${encoded}/block`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': buildSessionIdempotencyKey('author-block', `${target}-${action}`) },
+      body: JSON.stringify(body),
+      noCache: true,
+    });
+  },
+
+  async blockedAuthors() {
+    const raw = await request(`${API_PREFIX}/community/me/blocked`, { noCache: true });
+    return {
+      authors: Array.isArray(raw?.authors) ? raw.authors.map((item) => ({
+        authorId: item.authorId || item.author_id || '',
+        authorName: item.authorName || item.author_name || '匿名拍友',
+        createdAt: item.createdAt || item.created_at || new Date().toISOString(),
+      })) : [],
+    };
+  },
+
   async discovery(params = {}) {
     const query = new URLSearchParams({
       ...(params.type ? { type: String(params.type) } : {}),

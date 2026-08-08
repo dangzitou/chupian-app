@@ -324,9 +324,29 @@ export default function PostDetailScreen({ route, navigation }) {
     }
   }, [post]);
 
+  const submitBlock = useCallback(async () => {
+    if (!post?.authorId) return;
+    try {
+      await api.toggleBlock(post.authorId, 'block', post.author);
+      Alert.alert('已屏蔽创作者', 'TA 的作品将从发现、地图和详情中隐藏，可在我的 - 屏蔽管理恢复。');
+      navigation?.goBack?.();
+    } catch (err) {
+      Alert.alert('屏蔽失败', err?.cause || err?.message || '网络异常，请稍后重试');
+    }
+  }, [navigation, post]);
+
+  const onBlock = useCallback(() => {
+    if (!post?.authorId) return;
+    Alert.alert('屏蔽该创作者？', '之后不再看到 TA 的公开作品。', [
+      { text: '取消', style: 'cancel' },
+      { text: '屏蔽', style: 'destructive', onPress: submitBlock },
+    ]);
+  }, [post, submitBlock]);
+
   const onReport = useCallback(() => {
     if (!post) return;
     Alert.alert('举报这条出片', '请选择最符合的原因', [
+      { text: '屏蔽该创作者', style: 'destructive', onPress: onBlock },
       { text: '内容不实或误导', onPress: () => submitReport('misleading') },
       { text: '侵犯版权或肖像', onPress: () => submitReport('copyright') },
       { text: '不安全或违规内容', onPress: () => submitReport('unsafe') },
@@ -334,7 +354,7 @@ export default function PostDetailScreen({ route, navigation }) {
       { text: '其他', onPress: () => submitReport('other') },
       { text: '取消', style: 'cancel' },
     ]);
-  }, [post, submitReport]);
+  }, [onBlock, post, submitReport]);
 
   const onOpenMap = useCallback(() => {
     if (!post) return;
@@ -561,7 +581,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onReport, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onBlock, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onReport, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
