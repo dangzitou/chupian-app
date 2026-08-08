@@ -58,7 +58,6 @@ function shouldRetry(status, method, error) {
 
 function shouldFallback(error) {
   if (!error) return false;
-  if (error.name === 'TypeError' || error.name === 'AbortError') return true;
   if (error.status === 404 || error.status === 405 || error.status === 410) return true;
   return false;
 }
