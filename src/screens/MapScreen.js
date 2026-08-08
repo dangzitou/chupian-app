@@ -72,9 +72,16 @@ export default function MapScreen({ navigation }) {
         <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
         <link
           rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+        />
+        <link
+          rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script
+          src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+          onerror="this.onerror=null;this.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';"
+        ></script>
         <style>
           html, body, #app { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
           .map { width: 100%; height: 100%; background: #e9eef5; }
