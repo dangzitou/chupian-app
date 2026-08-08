@@ -169,8 +169,14 @@ const styles = StyleSheet.create({
   mobileShell: {
     flex: 1,
     width: '100%',
+    maxWidth: 480,
     overflow: 'hidden',
     backgroundColor: '#f8f7f6',
+    shadowColor: '#1c1c1c',
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
   },
   tabIcon: {
     width: 25,
