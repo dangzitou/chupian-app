@@ -599,7 +599,7 @@ export const api = {
     });
   },
 
-  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image') {
+  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image', sourceFile = null) {
     const form = new FormData();
     const normalizedMime = String(mime || '').toLowerCase();
     const extension = normalizedMime.includes('video')
@@ -613,12 +613,25 @@ export const api = {
             : normalizedMime.includes('png')
               ? 'png'
               : 'jpg';
-    const file = {
-      uri: fileUri,
-      name: `chupian-${Date.now()}.${extension}`,
-      type: mime,
-    };
-    form.append('file', file);
+    const fileName = `chupian-${Date.now()}.${extension}`;
+    let browserFile = sourceFile;
+    if (!browserFile && typeof window !== 'undefined' && /^(blob|data):/i.test(String(fileUri || ''))) {
+      try {
+        browserFile = await fetch(fileUri).then((response) => response.blob());
+      } catch (_err) {
+        browserFile = null;
+      }
+    }
+
+    if (browserFile && typeof browserFile === 'object' && typeof browserFile.arrayBuffer === 'function') {
+      form.append('file', browserFile, browserFile.name || fileName);
+    } else {
+      form.append('file', {
+        uri: fileUri,
+        name: fileName,
+        type: mime,
+      });
+    }
 
     try {
       return await request(`${API_PREFIX}/media/upload`, {
