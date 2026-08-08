@@ -495,10 +495,14 @@ function appendSearchConditions({ where, params }, queryText, topic) {
   }
 }
 
-function buildFeedBaseWhere({ q = "", tag = "", actorId = "" } = {}) {
+function buildFeedBaseWhere({ q = "", tag = "", actorId = "", spotId = "" } = {}) {
   const where = ["p.status='published'"];
   const params = [];
   appendSearchConditions({ where, params }, parseSearchText(q), parseSearchText(tag));
+  if (String(spotId || "").trim()) {
+    where.push("p.spot_id = ?");
+    params.push(String(spotId).trim());
+  }
   if (actorId) {
     where.push("(p.author_id = ? OR NOT EXISTS (SELECT 1 FROM blocked_authors b WHERE b.blocker_id = ? AND b.blocked_id = p.author_id))");
     params.push(actorId, actorId);
@@ -652,11 +656,11 @@ async function loadPostMeta(rows, options = {}) {
   });
 }
 
-async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", tag = "" }) {
+async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", tag = "", spotId = "" }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
   const clauses = ["SELECT p.*"];
   const fromClause = " FROM posts p";
-  const { where, params } = buildFeedBaseWhere({ q, tag, actorId });
+  const { where, params } = buildFeedBaseWhere({ q, tag, actorId, spotId });
   const baseWhere = [...where];
   const baseParams = [...params];
   const whereClause = baseWhere.length ? ` WHERE ${baseWhere.join(" AND ")}` : "";
@@ -718,8 +722,8 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   };
 }
 
-function buildFeedCacheKey({ actor, sort, limit, cursor, q, tag }) {
-  const token = [q, tag].map((value) => clampString(String(value || ""), 48).toLowerCase()).join("|");
+function buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId }) {
+  const token = [q, tag, spotId].map((value) => clampString(String(value || ""), 48).toLowerCase()).join("|");
   return `feed:${actor}:${sort}:${limit}:${cursor?.id || "0"}:${cursor?.createdAt || "0"}:${token}`;
 }
 
@@ -1889,6 +1893,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
+  const spotId = String(req.query.spotId || "").trim();
   const cacheKey = buildFeedCacheKey({
     actor,
     sort,
@@ -1896,6 +1901,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
     cursor,
     q,
     tag,
+    spotId,
   });
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
@@ -1907,6 +1913,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
     actorId: actor,
     q,
     tag,
+    spotId,
   });
   await cacheSetJson(cacheKey, payload, 20);
   return res.json(payload);

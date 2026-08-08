@@ -253,6 +253,7 @@ function buildFeedQuery(params = {}, defaults = {}) {
     limit: String(defaults.limit || 20),
     q: '',
     tag: '',
+    spotId: '',
     cursor: '',
     ...defaults,
     ...params,
@@ -260,6 +261,7 @@ function buildFeedQuery(params = {}, defaults = {}) {
 
   if (merged.q) query.set('q', String(merged.q).trim());
   if (merged.tag) query.set('tag', String(merged.tag).trim());
+  if (merged.spotId) query.set('spotId', String(merged.spotId).trim());
   if (merged.cursor) query.set('cursor', merged.cursor);
   query.set('limit', String(merged.limit || 20));
   query.set('sort', merged.sort === 'hot' ? 'hot' : 'latest');
@@ -415,6 +417,7 @@ export const api = {
     const queryString = buildFeedQuery({
       q: params.q,
       tag: params.tag,
+      spotId: params.spotId,
       cursor: params.cursor,
       limit: params.limit || 20,
       sort: params.sort,
