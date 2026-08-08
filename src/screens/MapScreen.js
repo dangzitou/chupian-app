@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { WebView } from 'react-native-webview';
+import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
 
@@ -349,7 +350,7 @@ export default function MapScreen({ navigation, route }) {
     return () => window.removeEventListener('message', handleWindowMessage);
   }, [onWebMessage]);
 
-  useEffect(() => {
+  const loadMapData = useCallback(() => {
     let alive = true;
     Promise.allSettled([
       api.spots(),
@@ -367,7 +368,9 @@ export default function MapScreen({ navigation, route }) {
     return () => {
       alive = false;
     };
-  }, [onOpenPost, onOpenCreate]);
+  }, []);
+
+  useFocusEffect(useCallback(() => loadMapData(), [loadMapData]));
 
   const openCreateWithCurrent = useCallback(() => onOpenCreate({
     id: '',
