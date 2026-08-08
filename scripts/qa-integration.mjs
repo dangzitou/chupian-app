@@ -201,6 +201,12 @@ console.log(`Backend QA target: ${BACKEND_URL}`);
       assert(res.status === 200, `expected 200, got ${res.status}`);
       assert(Array.isArray(res.json?.posts), "favorites payload missing posts");
     }, true);
+
+    await run("endpoint:GET /api/v1/community/me/following", async () => {
+      const res = await expect("/api/v1/community/me/following?limit=5");
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(Array.isArray(res.json?.posts), "following payload missing posts");
+    }, true);
   }
 
   const passed = results.filter((x) => x.pass).length;

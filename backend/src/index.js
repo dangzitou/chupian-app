@@ -915,7 +915,7 @@ async function fetchFollowingFeedRows({ actorId, limit, cursor, sort = "latest" 
      FROM posts p
      WHERE ${whereClause}
      ${order} LIMIT ?`,
-    [actorId, actorId, actorId, ...params.slice(1), max + 1]
+    [actorId, actorId, actorId, ...params, max + 1]
   );
 
   const useRows = rows.slice(0, max);
