@@ -6,6 +6,7 @@ const STORAGE_KEY = 'chupian:actor-id:v1';
 const SESSION_KEY = 'chupian:actor-session:v1';
 let runtimeActorId = '';
 let runtimeSessionToken = '';
+let refreshPromise = null;
 
 function createActorId() {
   const randomUuid = globalThis?.crypto?.randomUUID;
@@ -64,10 +65,10 @@ export function getActorToken() {
   return runtimeSessionToken;
 }
 
-export async function hydrateActorId() {
-  if (runtimeActorId && runtimeSessionToken) return runtimeActorId;
+export async function hydrateActorId(force = false) {
+  if (!force && runtimeActorId && runtimeSessionToken) return runtimeActorId;
 
-  if (Platform.OS !== 'web') {
+  if (!force && Platform.OS !== 'web') {
     try {
       const stored = String(await SecureStore.getItemAsync(STORAGE_KEY) || '').trim();
       const storedToken = String(await SecureStore.getItemAsync(SESSION_KEY) || '').trim();
@@ -79,7 +80,7 @@ export async function hydrateActorId() {
     } catch (_err) {
       // Fall through to a fresh session request.
     }
-  } else {
+  } else if (!force) {
     const stored = readStoredActorId();
     const storedToken = readStoredSession();
     if (stored && storedToken) {
@@ -111,6 +112,16 @@ export async function hydrateActorId() {
     runtimeActorId = runtimeActorId || getActorId();
     return runtimeActorId;
   }
+}
+
+export function refreshActorSession() {
+  if (!refreshPromise) {
+    runtimeSessionToken = '';
+    refreshPromise = hydrateActorId(true).finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 export function getActorName() {
