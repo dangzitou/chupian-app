@@ -26,6 +26,7 @@ const PROFILE_TABS = [
   { key: 'mePosts', label: '我的发布' },
   { key: 'meLikes', label: '我赞过' },
   { key: 'meFavorites', label: '我的收藏' },
+  { key: 'meFollowing', label: '关注动态' },
 ];
 
 function ProfileStats({ spotCount, posts, liked, saved }) {
@@ -63,6 +64,7 @@ export default function ProfileScreen({ navigation }) {
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
     if (section === 'meFavorites') return api.meFavorites(params);
+    if (section === 'meFollowing') return api.meFollowing(params);
     return api.mePosts(params);
   }, [section]);
 
@@ -100,15 +102,17 @@ export default function ProfileScreen({ navigation }) {
     mePosts: 0,
     meLikes: 0,
     meFavorites: 0,
+    meFollowing: 0,
   });
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, s] = await Promise.all([
+      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, userFollowingFeed, s] = await Promise.all([
         api.weather(),
         api.mePosts({ limit: 1, sort: 'latest' }),
         api.meLikes({ limit: 1, sort: 'latest' }),
         api.meFavorites({ limit: 1, sort: 'latest' }),
+        api.meFollowing({ limit: 1, sort: 'latest' }),
         api.spots(),
       ]);
 
@@ -120,6 +124,7 @@ export default function ProfileScreen({ navigation }) {
         mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
         meLikes: Number(userLikesFeed?.total || userLikesFeed.posts?.length || 0),
         meFavorites: Number(userFavoritesFeed?.total || userFavoritesFeed.posts?.length || 0),
+        meFollowing: Number(userFollowingFeed?.total || userFollowingFeed.posts?.length || 0),
       }));
       setStatsError(null);
     } catch (err) {
@@ -136,7 +141,9 @@ export default function ProfileScreen({ navigation }) {
         ? api.meLikes({ limit: 1, sort: 'latest' })
         : targetSection === 'meFavorites'
           ? api.meFavorites({ limit: 1, sort: 'latest' })
-          : api.mePosts({ limit: 1, sort: 'latest' }));
+          : targetSection === 'meFollowing'
+            ? api.meFollowing({ limit: 1, sort: 'latest' })
+            : api.mePosts({ limit: 1, sort: 'latest' }));
       setMeSectionStats((prev) => ({
         ...prev,
         [targetSection]: Number(payload.total || payload.posts?.length || 0),
