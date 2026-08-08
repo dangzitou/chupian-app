@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -60,9 +61,10 @@ export default function AuthorProfileScreen({ route, navigation }) {
       const result = await api.toggleFollow(authorId, next ? 'follow' : 'unfollow');
       setFollowed(Boolean(result.followed));
       setFollowers(Number(result.followers || 0));
-    } catch (_err) {
+    } catch (err) {
       setFollowed(!next);
       setFollowers((value) => Math.max(0, value + (next ? -1 : 1)));
+      Alert.alert('关注失败', err?.message || '网络异常，请稍后重试');
     } finally {
       setFollowBusy(false);
     }
@@ -73,6 +75,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
       post={item}
       compact
       showFollow={false}
+      hideCompactAuthor
       onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
       onLike={() => actions.toggleAction({
         postId: item.id,
@@ -95,30 +98,58 @@ export default function AuthorProfileScreen({ route, navigation }) {
   const header = useMemo(() => (
     <View>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
           <Text style={styles.back}>‹</Text>
         </Pressable>
         <Text style={styles.topTitle}>创作者</Text>
-        <View style={styles.topSpacer} />
+        <View style={styles.topSpacer} accessibilityElementsHidden />
       </View>
       <View style={styles.hero}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{authorName.slice(0, 2)}</Text></View>
-        <View style={styles.copy}>
-          <Text style={styles.name}>{authorName}</Text>
-          <Text style={styles.bio}>出片位置记录者</Text>
-          <Text style={styles.stats}>{followers} 位关注者 · {feed.total || 0} 条作品</Text>
+        <View style={styles.heroTop}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{authorName.slice(0, 2)}</Text></View>
+          <View style={styles.copy}>
+            <Text style={styles.name}>{authorName}</Text>
+            <Text style={styles.bio}>出片位置记录者</Text>
+          </View>
         </View>
         <Pressable style={[styles.follow, followed && styles.followed]} onPress={toggleFollow} disabled={followBusy}>
           <Text style={[styles.followText, followed && styles.followedText]}>{followBusy ? '...' : (followed ? '已关注' : '关注')}</Text>
         </Pressable>
       </View>
-      <Text style={styles.sectionTitle}>作品</Text>
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{feed.total || 0}</Text>
+          <Text style={styles.statLabel}>作品</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{followers}</Text>
+          <Text style={styles.statLabel}>关注者</Text>
+        </View>
+      </View>
+      <View style={styles.profileTabs}>
+        <Text style={styles.profileTabActive}>作品</Text>
+        <View style={styles.profileTabUnderline} />
+      </View>
     </View>
   ), [authorName, feed.total, followed, followBusy, followers, navigation, toggleFollow]);
 
   if (!authorId) {
     return <SafeAreaView style={styles.empty}><Text style={styles.error}>创作者信息不可用</Text></SafeAreaView>;
   }
+
+  const listEmpty = feed.loading ? <FeedSkeleton count={4} /> : feed.error ? (
+    <View style={styles.emptyState}>
+      <Text style={styles.error}>加载失败：{feed.error}</Text>
+      <Pressable style={styles.retry} onPress={() => feed.load({ append: false })}>
+        <Text style={styles.retryText}>重试</Text>
+      </Pressable>
+    </View>
+  ) : (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyText}>还没有公开作品</Text>
+      <Text style={styles.emptyHint}>作者发布后，作品会出现在这里</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -134,8 +165,8 @@ export default function AuthorProfileScreen({ route, navigation }) {
         refreshing={feed.refreshing}
         onEndReached={feed.onEndReached}
         onEndReachedThreshold={0.2}
-        ListEmptyComponent={feed.loading ? <FeedSkeleton count={4} /> : <Text style={styles.emptyText}>还没有公开作品</Text>}
-        ListFooterComponent={feed.loadingMore ? <ActivityIndicator color={COLORS.accent} /> : null}
+        ListEmptyComponent={listEmpty}
+        ListFooterComponent={feed.loadingMore ? <ActivityIndicator style={styles.footer} color={COLORS.accent} /> : null}
       />
     </SafeAreaView>
   );
@@ -143,26 +174,39 @@ export default function AuthorProfileScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { paddingHorizontal: 6, paddingBottom: 36 },
-  columns: { gap: 8 },
+  list: { paddingHorizontal: 7, paddingBottom: 36 },
+  columns: { gap: 8, marginBottom: 10 },
   card: { flex: 1 },
-  topBar: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { color: COLORS.ink, fontSize: 32, lineHeight: 34, paddingHorizontal: 8 },
-  topTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '700' },
+  topBar: { height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  back: { color: COLORS.ink, fontSize: 32, lineHeight: 34 },
+  topTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '800' },
   topSpacer: { width: 38 },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  hero: { paddingTop: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 58, height: 58, borderRadius: 29, backgroundColor: COLORS.accentSoft, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   copy: { flex: 1 },
   name: { color: COLORS.ink, fontSize: 18, fontWeight: '700' },
   bio: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
   stats: { color: COLORS.muted, fontSize: 11, marginTop: 4 },
-  follow: { borderRadius: 999, backgroundColor: COLORS.accent, paddingHorizontal: 14, paddingVertical: 7 },
+  follow: { marginTop: 14, borderRadius: 10, backgroundColor: COLORS.accent, paddingVertical: 10, alignItems: 'center' },
   followed: { backgroundColor: COLORS.bgDeep },
   followText: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
   followedText: { color: COLORS.muted },
-  sectionTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700', paddingVertical: 12 },
+  statsRow: { flexDirection: 'row', gap: 34, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  statItem: { minWidth: 52, alignItems: 'flex-start' },
+  statNumber: { color: COLORS.ink, fontSize: 17, fontWeight: '800' },
+  statLabel: { color: COLORS.muted, fontSize: 11, marginTop: 2 },
+  profileTabs: { height: 48, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  profileTabActive: { color: COLORS.ink, fontSize: 14, fontWeight: '800' },
+  profileTabUnderline: { position: 'absolute', bottom: 0, width: 22, height: 2, borderRadius: 2, backgroundColor: COLORS.accent },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
-  error: { color: COLORS.muted },
-  emptyText: { color: COLORS.muted, textAlign: 'center', paddingVertical: 36 },
+  error: { color: '#a34a2a', textAlign: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 20 },
+  emptyText: { color: COLORS.muted, textAlign: 'center' },
+  emptyHint: { color: COLORS.muted, fontSize: 11.5, marginTop: 6 },
+  retry: { marginTop: 12, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 999, backgroundColor: COLORS.accentBg },
+  retryText: { color: COLORS.accent, fontSize: 12, fontWeight: '700' },
+  footer: { paddingVertical: 12 },
 });
