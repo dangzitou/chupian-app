@@ -25,6 +25,8 @@ function PostCard({
   favoriteBusy = false,
 }) {
   const [expanded, setExpanded] = useState(false);
+  const cardMedia = post.media || [];
+  const mediaColumns = cardMedia.length > 1 ? Math.min(cardMedia.length, 3) : 1;
   const tags = [...(post.styles || []), ...(post.tags || [])].filter(Boolean).slice(0, 3);
   const shotBits = [
     post.angle ? `📷 ${post.angle}` : null,
@@ -35,7 +37,6 @@ function PostCard({
     post.gear?.lens || post.lens ? `镜头 ${post.gear?.lens || post.lens}` : null,
     post.gear?.focal || post.focalLength ? `焦距 ${post.gear?.focal || post.focalLength}` : null,
   ].filter(Boolean);
-  const cardMedia = post.media || [];
   const content = String(post.content || '').trim();
   const shouldCut = content.length > 96 && !expanded;
   const contentText = shouldCut ? `${content.slice(0, 96)}...` : content;
@@ -71,7 +72,7 @@ function PostCard({
         </View>
       </View>
 
-      <MediaGallery media={cardMedia} showAll columns={cardMedia?.length > 1 ? 1 : 1} />
+      <MediaGallery media={cardMedia} showAll columns={mediaColumns} />
       {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
 
       <View style={styles.body}>

@@ -6,18 +6,20 @@ import VideoSurface from './VideoSurface';
 const COL_GAP = 6;
 const CARD_WIDTH = Dimensions.get('window').width;
 
-const videoStyle = {
-  width: '100%',
-  aspectRatio: 16 / 10,
-};
+const IMAGE_RATIO = 16 / 10;
+const LIVE_CARD_COLOR = '#0d0d0d';
+
+function clampColumns(value) {
+  return Math.max(1, Math.min(3, value));
+}
 
 function MediaCover({ item }) {
   if (!item) return null;
 
   if (item.kind === 'video') {
     return (
-      <View style={[styles.mediaWrap, styles.videoWrap]}>
-        <VideoSurface uri={item.url} style={videoStyle} />
+      <View style={styles.mediaWrap}>
+        <VideoSurface uri={item.url} style={styles.videoSurface} />
         {item.duration > 0 ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
@@ -27,7 +29,6 @@ function MediaCover({ item }) {
     );
   }
 
-  // live kind is visualized as image first frame + tag
   return (
     <View>
       <Image source={{ uri: item.url }} style={styles.mediaWrap} resizeMode="cover" />
@@ -37,14 +38,19 @@ function MediaCover({ item }) {
 }
 
 export default function MediaGallery({ media = [], onPressMedia, columns = 1, showAll = true }) {
-  if (!media.length) return null;
-  const list = showAll ? media : media.slice(0, columns === 2 ? 2 : 1);
+  const normalized = Array.isArray(media) ? media : [];
+  if (!normalized.length) return null;
 
-  const width = columns > 1 ? (CARD_WIDTH - 48 - COL_GAP) / 2 : CARD_WIDTH - 32;
+  const list = showAll ? normalized : normalized.slice(0, columns > 1 ? 4 : 1);
+  const activeColumns = clampColumns(columns);
+  const visibleCols = activeColumns > 1 ? Math.min(activeColumns, list.length) : 1;
+  const width = visibleCols === 1
+    ? CARD_WIDTH - 32
+    : (CARD_WIDTH - 32 - COL_GAP * (visibleCols - 1)) / visibleCols;
 
-  const renderStyle = (item, index, isLast) => ({
-    width: columns > 1 && list.length === 2 ? width : '100%',
-    marginRight: columns > 1 && index % columns === 0 ? COL_GAP : 0,
+  const renderStyle = (index, isLast) => ({
+    width,
+    marginRight: visibleCols > 1 && index % visibleCols !== visibleCols - 1 ? COL_GAP : 0,
     marginBottom: isLast ? 0 : COL_GAP,
   });
 
@@ -53,7 +59,11 @@ export default function MediaGallery({ media = [], onPressMedia, columns = 1, sh
       {list.map((item, idx) => {
         const isLast = idx === list.length - 1;
         return (
-          <Pressable key={`${item.url}-${idx}`} style={renderStyle(item, idx, isLast)} onPress={onPressMedia}>
+          <Pressable
+            key={`${item.url}-${idx}`}
+            style={renderStyle(idx, isLast)}
+            onPress={onPressMedia}
+          >
             <MediaCover item={item} />
           </Pressable>
         );
@@ -70,14 +80,15 @@ const styles = StyleSheet.create({
   },
   mediaWrap: {
     width: '100%',
-    height: 220,
+    aspectRatio: IMAGE_RATIO,
     borderRadius: 10,
     backgroundColor: '#e8e8e8',
   },
-  videoWrap: {
-    backgroundColor: '#000',
+  videoSurface: {
+    width: '100%',
+    aspectRatio: IMAGE_RATIO,
     borderRadius: 10,
-    overflow: 'hidden',
+    backgroundColor: LIVE_CARD_COLOR,
   },
   durationBadge: {
     position: 'absolute',
