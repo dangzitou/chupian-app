@@ -9,7 +9,7 @@ try {
   NativeVideo = null;
 }
 
-export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, onError }) {
+export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, poster, onError }) {
   if (!uri) return null;
 
   if (Platform.OS === 'web') {
@@ -22,6 +22,7 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
       muted: shouldPlay,
       playsInline: true,
       preload: 'metadata',
+      poster: poster || undefined,
       onError,
       'aria-label': '出片视频',
     });
