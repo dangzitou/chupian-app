@@ -107,6 +107,28 @@ const upload = multer({
   },
 });
 
+function clampString(value, maxLen) {
+  return String(value || "").trim().slice(0, Math.max(0, Number(maxLen) || 0));
+}
+
+function escapeLike(value) {
+  return String(value || "").replace(/[\\%_]/g, "\\$&");
+}
+
+function parseSearchText(raw) {
+  const text = clampString(raw, 80);
+  if (!text) return "";
+  return text.replace(/[\r\n]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractPaginationParams(req, fallback = 20) {
+  return {
+    limit: pickInt(req.query.limit, fallback, { min: 1, max: Number(MAX_FEED_LIMIT) }),
+    sort: req.query.sort === "hot" ? "hot" : "latest",
+    cursor: parseCursor(req.query.cursor || ""),
+  };
+}
+
 function ipToActorFingerprint(req) {
   const xff = req.headers["x-forwarded-for"];
   const ip = (Array.isArray(xff) ? xff[0] : String(xff || "")).split(",")[0].trim()
@@ -147,6 +169,34 @@ function pickInt(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.
   if (!Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
+}
+
+function appendSearchConditions({ where, params }, queryText, topic) {
+  if (queryText) {
+    const token = `%${escapeLike(queryText)}%`;
+    where.push(`(
+      p.title LIKE ? ESCAPE '\\\\'
+      OR p.content LIKE ? ESCAPE '\\\\'
+      OR p.spot_name LIKE ? ESCAPE '\\\\'
+      OR p.district LIKE ? ESCAPE '\\\\'
+    )`);
+    params.push(token, token, token, token);
+  }
+
+  if (topic) {
+    where.push(`(
+      EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = p.id AND pt.tag = ?)
+      OR EXISTS (SELECT 1 FROM post_styles ps WHERE ps.post_id = p.id AND ps.style = ?)
+    )`);
+    params.push(topic, topic);
+  }
+}
+
+function buildFeedBaseWhere({ q = "", tag = "" } = {}) {
+  const where = ["p.status='published'"];
+  const params = [];
+  appendSearchConditions({ where, params }, parseSearchText(q), parseSearchText(tag));
+  return { where, params };
 }
 
 async function loadPostMeta(rows) {
@@ -262,12 +312,11 @@ async function loadPostMeta(rows) {
   });
 }
 
-async function fetchFeedRows({ sort = "latest", cursor, limit, actorId }) {
+async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", tag = "" }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
   const clauses = ["SELECT p.*"];
   const fromClause = " FROM posts p";
-  const where = ["p.status='published'"];
-  const params = [];
+  const { where, params } = buildFeedBaseWhere({ q, tag });
 
   if (cursor) {
     where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
@@ -284,18 +333,20 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId }) {
     ", EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked",
     ", EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited"
   );
-  params.unshift(actorId, actorId);
 
   const rows = await query(
     `${clauses.join("")} ${fromClause} WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
-    [...params, max + 1]
+    [actorId, actorId, ...params, max + 1]
   );
 
   const useRows = rows.slice(0, max);
   const posts = await loadPostMeta(useRows);
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
 
-  const totalRows = await query("SELECT COUNT(*) AS c FROM posts WHERE status='published'");
+  const totalRows = await query(
+    `SELECT COUNT(*) AS c FROM posts p ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`,
+    [...params]
+  );
   const total = Number(totalRows[0]?.c || 0);
   const hasMore = useRows.length === max;
 
@@ -306,6 +357,77 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId }) {
     total,
     stats: { totalPosts: total },
   };
+}
+
+function buildFeedCacheKey({ actor, sort, limit, cursor, q, tag }) {
+  const token = [q, tag].map((value) => clampString(String(value || ""), 48).toLowerCase()).join("|");
+  return `feed:${actor}:${sort}:${limit}:${cursor?.id || "0"}:${cursor?.createdAt || "0"}:${token}`;
+}
+
+async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "latest" }) {
+  const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
+  const relation = table === "post_favorites" ? "post_favorites" : "post_likes";
+  const fromClause = `
+    FROM posts p
+    INNER JOIN ${relation} t ON t.post_id = p.id
+  `;
+  const where = ["p.status='published'", `t.actor_id = ?`];
+  const params = [actorId];
+
+  if (cursor) {
+    where.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+
+  const order = sort === "hot"
+    ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
+    : " ORDER BY p.created_at DESC, p.id DESC";
+
+  const rows = await query(
+    `SELECT p.*,
+      EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked,
+      EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited
+     ${fromClause}
+     WHERE ${where.join(" AND ")} ${order} LIMIT ?`,
+    [actorId, actorId, ...params, max + 1]
+  );
+
+  const useRows = rows.slice(0, max);
+  const posts = await loadPostMeta(useRows);
+  const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
+  const totalRows = await query(`SELECT COUNT(*) AS c FROM ${fromClause} WHERE ${where.join(" AND ")}`, params);
+  const total = Number(totalRows[0]?.c || 0);
+
+  return {
+    posts,
+    nextCursor,
+    hasMore: useRows.length === max,
+    total,
+    stats: { totalPosts: total },
+  };
+}
+
+async function fetchDiscoverySignals(limit = 20) {
+  const rows = await query(
+    `SELECT name, type, cnt FROM (
+      SELECT tag AS name, 'tag' AS type, COUNT(*) AS cnt
+      FROM post_tags
+      GROUP BY tag
+      UNION ALL
+      SELECT style AS name, 'style' AS type, COUNT(*) AS cnt
+      FROM post_styles
+      GROUP BY style
+    ) AS x
+    ORDER BY cnt DESC
+    LIMIT ?`,
+    [limit]
+  );
+
+  return rows.map((r) => ({
+    name: r.name,
+    type: r.type,
+    count: Number(r.cnt || 0),
+  })).filter((r) => Boolean(r.name));
 }
 
 async function invalidateAllPostsCaches() {
@@ -570,11 +692,27 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
   const sort = req.query.sort === "hot" ? "hot" : "latest";
-  const cacheKey = `feed:${actor}:${sort}:${limit}:${req.query.cursor || ""}`;
+  const q = parseSearchText(req.query.q);
+  const tag = parseSearchText(req.query.tag);
+  const cacheKey = buildFeedCacheKey({
+    actor,
+    sort,
+    limit,
+    cursor,
+    q,
+    tag,
+  });
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
 
-  const payload = await fetchFeedRows({ sort, cursor, limit, actorId: actor });
+  const payload = await fetchFeedRows({
+    sort,
+    cursor,
+    limit,
+    actorId: actor,
+    q,
+    tag,
+  });
   await cacheSetJson(cacheKey, payload, 20);
   return res.json(payload);
 }));
@@ -583,8 +721,64 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
   const sort = req.query.sort === "hot" ? "hot" : "latest";
-  const payload = await fetchFeedRows({ sort, cursor, limit, actorId: actor });
+  const q = parseSearchText(req.query.q);
+  const tag = parseSearchText(req.query.tag);
+  const payload = await fetchFeedRows({
+    sort,
+    cursor,
+    limit,
+    actorId: actor,
+    q,
+    tag,
+  });
   return res.json(payload);
+}));
+
+app.get("/api/v1/community/discovery", asyncHandler(async (req, res) => {
+  const limit = pickInt(req.query.limit, 16, { min: 1, max: 80 });
+  const type = String(req.query.type || "").trim().toLowerCase();
+  const signals = await fetchDiscoverySignals(limit);
+  const filtered = type && ["tag", "style"].includes(type)
+    ? signals.filter((signal) => signal.type === type)
+    : signals;
+  res.json({
+    signals: filtered,
+    meta: {
+      type: type || "all",
+      count: filtered.length,
+      total: signals.length,
+    },
+  });
+}));
+
+app.get("/api/v1/community/me/likes", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchActorFeedRows({
+    table: "post_likes",
+    actorId: actor,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json(payload);
+}));
+
+app.get("/api/v1/community/me/favorites", asyncHandler(async (req, res) => {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const payload = await fetchActorFeedRows({
+    table: "post_favorites",
+    actorId: actor,
+    limit,
+    cursor,
+    sort,
+  });
+  res.json(payload);
 }));
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
