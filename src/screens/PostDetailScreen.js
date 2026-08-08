@@ -137,6 +137,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const [commentsHasMore, setCommentsHasMore] = useState(false);
   const [commentsLoadError, setCommentsLoadError] = useState(null);
   const [viewerIndex, setViewerIndex] = useState(-1);
+  const [metaOpen, setMetaOpen] = useState(false);
 
   const listRef = useRef(null);
   const commentInputRef = useRef(null);
@@ -463,6 +464,12 @@ export default function PostDetailScreen({ route, navigation }) {
     ].filter(Boolean);
     const subtitle = subtitlePieces.join(' · ') || '匿名作品';
     const commentsCount = Number(post?.commentsCount || 0);
+    const metaSummary = [
+      post?.camera,
+      post?.lens,
+      post?.focalLength || post?.focal,
+      post?.aperture,
+    ].filter(Boolean).slice(0, 3).join(' · ') || '记录相机、镜头和曝光参数';
 
     return {
       media,
@@ -470,6 +477,7 @@ export default function PostDetailScreen({ route, navigation }) {
       title,
       subtitle,
       commentsCount,
+      metaSummary,
     };
   }, [post]);
 
@@ -535,15 +543,29 @@ export default function PostDetailScreen({ route, navigation }) {
 
           {!!post.content ? <Text style={styles.bodyText}>{post.content}</Text> : null}
 
-          <ShotMetaBoard
-            source={post}
-            title="拍摄参数"
-            options={{ includeSpot: true, includeLocation: true, includeMedia: true, maxItems: 8 }}
-            compact={false}
-            fallback="暂无拍摄参数"
-            showStrip
-            showPanel
-          />
+          <View style={styles.metaSection}>
+            <Pressable
+              style={styles.metaToggle}
+              onPress={() => setMetaOpen((value) => !value)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: metaOpen }}
+            >
+              <View style={styles.metaToggleCopy}>
+                <Text style={styles.metaToggleTitle}>拍摄参数</Text>
+                <Text style={styles.metaToggleSummary} numberOfLines={1}>{postMeta.metaSummary}</Text>
+              </View>
+              <Text style={styles.metaToggleAction}>{metaOpen ? '收起' : '查看'}</Text>
+            </Pressable>
+            <ShotMetaBoard
+              source={post}
+              title={null}
+              options={{ includeSpot: true, includeLocation: true, includeMedia: true, maxItems: 8 }}
+              compact={!metaOpen}
+              fallback="暂无拍摄参数"
+              showStrip
+              showPanel={metaOpen}
+            />
+          </View>
 
           {!!postMeta.tags.length ? (
             <View style={styles.tagsWrap}>
@@ -552,20 +574,6 @@ export default function PostDetailScreen({ route, navigation }) {
               ))}
             </View>
           ) : null}
-
-          <ActionBar
-            likes={post.likes || 0}
-            favorites={post.favorites || 0}
-            comments={postMeta.commentsCount || 0}
-            liked={post.liked}
-            favorited={post.favorited}
-            likeBusy={isPostBusy(post?.id, 'liked', 'liked')}
-            favoriteBusy={isPostBusy(post?.id, 'favorited', 'favorited')}
-            onLike={onLike}
-            onFavorite={onFavorite}
-            onComment={onJumpToComment}
-            onShare={onShare}
-          />
 
           <View style={styles.statRow}>
             <Text style={styles.statText}>浏览 {post.views || 0} · 发布于 {formatRelativeTime(post.createdAt)}</Text>
@@ -581,7 +589,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onBlock, onFavorite, onFollow, onJumpToComment, onLike, onOpenAuthor, onOpenMap, onOpenMedia, onReport, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, metaOpen, onBlock, onFollow, onOpenAuthor, onOpenMap, onOpenMedia, onReport, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -685,41 +693,59 @@ export default function PostDetailScreen({ route, navigation }) {
           ListHeaderComponentStyle={styles.header}
         />
 
-        <View style={styles.commentBar}>
-          <TextInput
-            ref={commentInputRef}
-            style={styles.commentInput}
-            value={commentInput}
-            onChangeText={setCommentInput}
-            placeholder="写下你的建议、复盘或打卡心得..."
-            placeholderTextColor={COLORS.muted}
-            maxLength={500}
-            multiline
-            scrollEnabled
-            textAlignVertical="top"
-            returnKeyType="send"
-            onSubmitEditing={() => {
-              if (!commentSending) onSubmitComment();
-            }}
-          />
-          <Pressable
-            style={[
-              styles.sendBtn,
-              (commentSending || !commentInput.trim()) && styles.sendBtnDisabled,
-            ]}
-            onPress={onSubmitComment}
-            disabled={commentSending || !commentInput.trim()}
-            android_ripple={{ color: '#d98b98' }}
-          >
-            <Text style={[
-              styles.sendText,
-              (commentSending || !commentInput.trim()) && styles.sendTextDisabled,
-            ]}>
-              {commentSending ? '发送中...' : '发送'}
-            </Text>
-          </Pressable>
+        <View style={styles.bottomDock}>
+          {!!commentError ? <Text style={styles.commentErr}>评论发送失败：{commentError}</Text> : null}
+          <View style={styles.bottomActions}>
+            <ActionBar
+              likes={post.likes || 0}
+              favorites={post.favorites || 0}
+              comments={postMeta.commentsCount || 0}
+              liked={post.liked}
+              favorited={post.favorited}
+              likeBusy={isPostBusy(post?.id, 'liked', 'liked')}
+              favoriteBusy={isPostBusy(post?.id, 'favorited', 'favorited')}
+              onLike={onLike}
+              onFavorite={onFavorite}
+              onComment={onJumpToComment}
+              onShare={onShare}
+              compact
+            />
+          </View>
+          <View style={styles.commentBar}>
+            <TextInput
+              ref={commentInputRef}
+              style={styles.commentInput}
+              value={commentInput}
+              onChangeText={setCommentInput}
+              placeholder="写下你的建议、复盘或打卡心得..."
+              placeholderTextColor={COLORS.muted}
+              maxLength={500}
+              multiline
+              scrollEnabled
+              textAlignVertical="top"
+              returnKeyType="send"
+              onSubmitEditing={() => {
+                if (!commentSending) onSubmitComment();
+              }}
+            />
+            <Pressable
+              style={[
+                styles.sendBtn,
+                (commentSending || !commentInput.trim()) && styles.sendBtnDisabled,
+              ]}
+              onPress={onSubmitComment}
+              disabled={commentSending || !commentInput.trim()}
+              android_ripple={{ color: '#d98b98' }}
+            >
+              <Text style={[
+                styles.sendText,
+                (commentSending || !commentInput.trim()) && styles.sendTextDisabled,
+              ]}>
+                {commentSending ? '发送中...' : '发送'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-        {!!commentError ? <Text style={styles.commentErr}>评论发送失败：{commentError}</Text> : null}
       </KeyboardAvoidingView>
       <MediaViewer
         item={viewerIndex >= 0 ? postMeta.media[viewerIndex] : null}
@@ -802,12 +828,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   coverWrap: {
-    marginHorizontal: 12,
-    borderRadius: 16,
+    marginHorizontal: 0,
+    borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderWidth: 0,
   },
   viewerBackdrop: {
     flex: 1,
@@ -882,7 +907,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   contentWrap: {
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
     gap: 10,
   },
   authorRow: {
@@ -968,6 +995,40 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 5,
     backgroundColor: COLORS.panel,
+  },
+  metaSection: {
+    marginTop: 2,
+    gap: 6,
+  },
+  metaToggle: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 11,
+    backgroundColor: COLORS.accentBg,
+  },
+  metaToggleCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metaToggleTitle: {
+    color: COLORS.ink,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  metaToggleSummary: {
+    color: COLORS.muted,
+    fontSize: 10.8,
+    marginTop: 2,
+  },
+  metaToggleAction: {
+    color: COLORS.accent,
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   metaLine: {
     color: COLORS.ink,
@@ -1078,9 +1139,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 8,
+    borderTopWidth: 0,
+    backgroundColor: COLORS.panel,
+  },
+  bottomDock: {
     borderTopWidth: 1,
     borderTopColor: COLORS.line,
     backgroundColor: COLORS.panel,
+  },
+  bottomActions: {
+    paddingHorizontal: 8,
+    paddingTop: 4,
   },
   commentInput: {
     flex: 1,
@@ -1114,14 +1183,9 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   commentErr: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 58,
     color: '#a83f3f',
     fontSize: 11.5,
-    backgroundColor: 'rgba(255,240,240,0.95)',
-    borderRadius: 10,
+    backgroundColor: '#fff0f0',
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
