@@ -195,7 +195,10 @@ async function apiLimiter(req, res, next) {
 }
 app.use("/api", apiLimiter);
 
-app.use("/media", express.static(ASSET_DIR));
+app.use("/media", express.static(ASSET_DIR, {
+  maxAge: "1y",
+  immutable: true,
+}));
 
 const upload = multer({
   storage: multer.diskStorage({
