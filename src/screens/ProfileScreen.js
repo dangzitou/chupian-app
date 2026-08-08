@@ -8,7 +8,6 @@ import {
   Text,
   Share,
   View,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
@@ -19,6 +18,7 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { buildPostShareMessage } from '../utils/share';
+import { getActorName } from '../lib/actor';
 
 const PAGE_SIZE = 8;
 
@@ -52,6 +52,7 @@ function ProfileStats({ spotCount, posts, authors, likes }) {
 }
 
 export default function ProfileScreen({ navigation }) {
+  const actorName = useMemo(() => getActorName(), []);
   const [weather, setWeather] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -211,13 +212,12 @@ export default function ProfileScreen({ navigation }) {
   const ListHeader = useMemo(() => (
     <View>
       <View style={styles.heroCard}>
-        <Image
-          source={{ uri: 'https://picsum.photos/seed/chupian-avatar/240/240' }}
-          style={styles.avatar}
-        />
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{actorName.slice(-2)}</Text>
+        </View>
         <View style={styles.heroMeta}>
-          <Text style={styles.name}>出片地图</Text>
-          <Text style={styles.bio}>广州拍照机位 · 问题复盘 · 打卡地图</Text>
+          <Text style={styles.name}>{actorName}</Text>
+          <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
       </View>
 
@@ -260,7 +260,7 @@ export default function ProfileScreen({ navigation }) {
         ))}
       </ScrollView>
     </View>
-  ), [authors, likes, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather]);
+  ), [actorName, authors, likes, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -324,7 +324,10 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: COLORS.bgDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   heroMeta: { flex: 1 },
   name: { fontSize: 20, color: COLORS.ink, fontWeight: '700' },
   bio: { color: COLORS.muted, marginTop: 3, fontSize: 12.8 },
