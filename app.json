@@ -7,9 +7,22 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "用于在地图上显示你附近的出片位置",
+        "NSCameraUsageDescription": "用于拍摄并发布出片素材",
+        "NSPhotoLibraryUsageDescription": "用于选择照片、视频和实况素材",
+        "NSPhotoLibraryAddUsageDescription": "用于保存编辑后的出片素材"
+      }
     },
     "android": {
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
