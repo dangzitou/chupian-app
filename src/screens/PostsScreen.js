@@ -157,8 +157,7 @@ export default function PostsScreen({ navigation }) {
     onRefresh,
     onEndReached,
     patchById,
-    stats,
-    setSort,
+  setSort,
     setQ,
     setTag,
     setBusyForPost,
@@ -275,15 +274,6 @@ export default function PostsScreen({ navigation }) {
     }
   }, []);
 
-  const openCreatePost = useCallback(() => {
-    const parent = navigation.getParent && navigation.getParent();
-    if (parent) {
-      parent.navigate(APP_ROUTES.CREATE);
-      return;
-    }
-    navigation.navigate('NewPost');
-  }, [navigation]);
-
   const isMasonry = feedLayout === 'masonry';
   const renderCard = useCallback(({ item }) => (
     <PostCard
@@ -319,32 +309,8 @@ export default function PostsScreen({ navigation }) {
               {feedLayout === 'masonry' ? '☷ 列表' : '▦ 网格'}
             </Text>
           </Pressable>
-          <Pressable style={styles.newBtn} onPress={openCreatePost}>
-            <Text style={styles.newBtnText}>＋ 发布</Text>
-          </Pressable>
         </View>
       </View>
-      <View style={styles.layoutChips}>
-        {LAYOUT_OPTIONS.map((item) => {
-          const active = feedLayout === item.key;
-          return (
-            <Pressable
-              key={item.key}
-              style={[styles.layoutChip, active && styles.layoutChipActive]}
-              onPress={() => setFeedLayout(item.key)}
-            >
-              <Text style={[styles.layoutChipText, active && styles.layoutChipTextActive]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <DiscoveryStatsBar
-        stats={stats}
-        onOpenMap={() => navigation.navigate(APP_ROUTES.MAP)}
-      />
-      {isMasonry ? <Text style={styles.layoutHint}>左滑切图，点击卡片看完整参数</Text> : null}
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       <SortTabs value={sort} onChange={applySort} />
       <SignalStrip
@@ -355,7 +321,7 @@ export default function PostsScreen({ navigation }) {
       />
       {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, isMasonry, navigation, searchInput, signals, signalsError, signalsLoading, sort, stats]);
+  ), [activeTag, applySearch, applySort, applyTagFilter, isMasonry, searchInput, signals, signalsError, signalsLoading, sort]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
