@@ -29,11 +29,17 @@ import { getActorName } from '../lib/actor';
 const COMMENT_PAGE_SIZE = 12;
 
 function CommentBubble({ comment }) {
+  const author = comment.author || '匿名拍友';
   return (
     <View style={styles.commentItem}>
-      <Text style={styles.commentAuthor}>{comment.author || '匿名拍友'}</Text>
-      <Text style={styles.commentText}>{comment.text}</Text>
-      <Text style={styles.commentTime}>{formatRelativeTime(comment.createdAt)}</Text>
+      <View style={styles.commentAvatar}>
+        <Text style={styles.commentAvatarText}>{author.slice(0, 1)}</Text>
+      </View>
+      <View style={styles.commentBody}>
+        <Text style={styles.commentAuthor}>{author}</Text>
+        <Text style={styles.commentText}>{comment.text}</Text>
+        <Text style={styles.commentTime}>{formatRelativeTime(comment.createdAt)}</Text>
+      </View>
     </View>
   );
 }
@@ -785,9 +791,28 @@ const styles = StyleSheet.create({
   },
   commentItem: {
     marginHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
     paddingVertical: 10,
+  },
+  commentAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accentBg,
+  },
+  commentAvatarText: {
+    color: COLORS.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  commentBody: {
+    flex: 1,
     gap: 4,
   },
   commentAuthor: {
