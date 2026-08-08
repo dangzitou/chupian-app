@@ -456,13 +456,18 @@ export default function NewPostScreen({ navigation, route }) {
   }, [applyExifDefaults]);
 
   const addLivePhoto = useCallback(async () => {
+    if (Platform.OS !== 'ios') {
+      Alert.alert('暂不支持', '实况照片目前仅支持 iPhone，请用相册添加静态图片或视频。');
+      return;
+    }
     const ok = await requestGalleryPermission();
     if (!ok) return;
 
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: Platform.OS === 'ios' ? ['livePhotos'] : ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['livePhotos'],
       quality: 1,
       allowsMultipleSelection: false,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
     });
     if (res.canceled || !res.assets?.length) return;
 
@@ -718,7 +723,7 @@ export default function NewPostScreen({ navigation, route }) {
           </View>
 
           <Text style={styles.sectionTitle}>素材</Text>
-          <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '先选 1-9 个素材，再补齐机位与拍摄参数；视频最大 40s'}</Text>
+          <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '先选 1-9 个素材，再补齐机位与拍摄参数；视频最大 40s，实况仅支持 iPhone'}</Text>
           <View style={styles.mediaActions}>
             <Pressable style={styles.mediaBtn} onPress={pickFromLibrary}>
               <Text style={styles.mediaBtnText}>从相册</Text>
@@ -726,8 +731,13 @@ export default function NewPostScreen({ navigation, route }) {
             <Pressable style={styles.mediaBtn} onPress={shootWithCamera}>
               <Text style={styles.mediaBtnText}>拍摄</Text>
             </Pressable>
-            <Pressable style={styles.mediaBtn} onPress={addLivePhoto}>
-              <Text style={styles.mediaBtnText}>实况</Text>
+            <Pressable
+              style={[styles.mediaBtn, Platform.OS !== 'ios' && styles.mediaBtnDisabled]}
+              onPress={addLivePhoto}
+              disabled={Platform.OS !== 'ios'}
+              accessibilityLabel="添加实况照片，仅支持 iPhone"
+            >
+              <Text style={styles.mediaBtnText}>{Platform.OS === 'ios' ? '实况' : '实况 · iOS'}</Text>
             </Pressable>
             <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/{MAX_MEDIA_COUNT}</Text></View>
             {mediaList.length >= MAX_MEDIA_COUNT ? <Text style={styles.mediaCountWarn}>已达上限</Text> : null}
@@ -1091,6 +1101,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     backgroundColor: COLORS.card,
+  },
+  mediaBtnDisabled: {
+    opacity: 0.48,
   },
   mediaBtnText: {
     color: COLORS.ink,
