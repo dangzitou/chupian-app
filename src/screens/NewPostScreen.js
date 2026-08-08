@@ -164,6 +164,16 @@ export default function NewPostScreen({ navigation, route }) {
   const idempotencyKeyRef = useRef('');
   const draftTimer = useRef(null);
   const hasHydratedDraftRef = useRef(false);
+  const mediaIdempotencyRef = useRef(new Map());
+
+  const getMediaUploadKey = useCallback((item, part) => {
+    const seed = `${part}:${item?.uri || ''}`;
+    const existing = mediaIdempotencyRef.current.get(seed);
+    if (existing) return existing;
+    const next = buildSessionIdempotencyKey('media-upload', seed);
+    mediaIdempotencyRef.current.set(seed, next);
+    return next;
+  }, []);
 
   const selectedSpot = useMemo(
     () => spots.find((item) => String(item.id) === String(state.spotId)) || null,
@@ -508,6 +518,7 @@ export default function NewPostScreen({ navigation, route }) {
             item.mime || 'image/jpeg',
             item.kind === MEDIA_KINDS.LIVE ? MEDIA_KINDS.IMAGE : item.kind,
             item.file,
+            getMediaUploadKey(item, 'still'),
           );
           const stillRecord = (stillRes.media || [])[0] || {};
           let mediaRecord = stillRecord;
@@ -517,6 +528,7 @@ export default function NewPostScreen({ navigation, route }) {
               item.pairedVideo.mime || 'video/quicktime',
               MEDIA_KINDS.VIDEO,
               item.pairedVideo.file,
+              getMediaUploadKey(item.pairedVideo, 'paired'),
             );
             const videoRecord = (videoRes.media || [])[0] || {};
             mediaRecord = {
@@ -572,6 +584,7 @@ export default function NewPostScreen({ navigation, route }) {
       }
       await clearDraft();
       await api.createPost(payload, idempotencyKeyRef.current);
+      mediaIdempotencyRef.current.clear();
       Alert.alert('发布成功', '作品已发送审核，预计短时间内上架');
       dispatch({ type: 'reset' });
       setMediaList([]);
@@ -590,7 +603,7 @@ export default function NewPostScreen({ navigation, route }) {
     } finally {
       setSubmitting(false);
     }
-  }, [api, clearDraft, coverIndex, dispatch, mediaList, navigation, selectedSpot, state, validation]);
+  }, [api, clearDraft, coverIndex, dispatch, getMediaUploadKey, mediaList, navigation, selectedSpot, state, validation]);
 
   const onSaveDraft = useCallback(() => {
     saveDraft()

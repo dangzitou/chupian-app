@@ -599,7 +599,7 @@ export const api = {
     });
   },
 
-  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image', sourceFile = null) {
+  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image', sourceFile = null, idempotencyKey = '') {
     const form = new FormData();
     const normalizedMime = String(mime || '').toLowerCase();
     const extension = normalizedMime.includes('video')
@@ -633,9 +633,12 @@ export const api = {
       });
     }
 
+    const headers = idempotencyKey
+      ? { 'Idempotency-Key': String(idempotencyKey).trim() }
+      : {};
     return request(`${API_PREFIX}/media/upload`, {
       method: 'POST',
-      headers: {},
+      headers,
       body: form,
     });
   },
