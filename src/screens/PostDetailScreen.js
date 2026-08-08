@@ -219,6 +219,24 @@ export default function PostDetailScreen({ route, navigation }) {
     }
   }, [post]);
 
+  const onOpenMap = useCallback(() => {
+    if (!post) return;
+    const lat = Number(post.latitude);
+    const lng = Number(post.longitude);
+    const params = Number.isFinite(lat) && Number.isFinite(lng)
+      ? { focusLocation: { lat, lng, label: post.spotName || '出片位置' } }
+      : {};
+    const parent = navigation?.getParent?.();
+    if (parent) {
+      parent.navigate(APP_ROUTES.MAP, {
+        screen: 'Map',
+        params,
+      });
+      return;
+    }
+    navigation?.navigate?.(APP_ROUTES.MAP, params);
+  }, [navigation, post]);
+
   const onSubmitComment = useCallback(async () => {
     const text = String(commentInput || '').trim();
     if (!text || !post || commentSending) return;
@@ -343,7 +361,10 @@ export default function PostDetailScreen({ route, navigation }) {
             </Pressable>
           </View>
           <Text style={styles.title}>{postMeta.title}</Text>
-          <Text style={styles.subtitle}>{postMeta.subtitle}</Text>
+          <Pressable style={styles.locationLink} onPress={onOpenMap}>
+            <Text style={styles.subtitle}>📍 {postMeta.subtitle}</Text>
+            <Text style={styles.locationAction}>地图</Text>
+          </Pressable>
 
           {!!post.content ? <Text style={styles.bodyText}>{post.content}</Text> : null}
 
@@ -393,7 +414,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onShare, post, postMeta, loading, scrollToTop]);
+  }, [isPostBusy, onFavorite, onFollow, onJumpToComment, onLike, onOpenMap, onShare, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -656,6 +677,18 @@ const styles = StyleSheet.create({
   subtitle: {
     color: COLORS.muted,
     fontSize: 12.5,
+  },
+  locationLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  locationAction: {
+    color: COLORS.accent,
+    fontSize: 12,
+    fontWeight: '700',
   },
   bodyText: {
     fontSize: 14.5,

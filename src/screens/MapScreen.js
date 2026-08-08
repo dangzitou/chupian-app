@@ -31,11 +31,18 @@ const sanitize = (value) => String(value || '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-export default function MapScreen({ navigation }) {
+export default function MapScreen({ navigation, route }) {
   const [error, setError] = useState(false);
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(DEFAULT_CENTER);
+  const focusLocation = useMemo(() => {
+    const raw = route?.params?.focusLocation;
+    const lat = Number(raw?.lat);
+    const lng = Number(raw?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng, label: String(raw?.label || '出片位置') };
+  }, [route?.params?.focusLocation]);
 
   const mapHtml = useMemo(() => {
     const safeSpots = Array.isArray(spots) ? spots.filter((item) => {
@@ -65,6 +72,7 @@ export default function MapScreen({ navigation }) {
     })) : [];
 
     const spotsPayload = JSON.stringify([...safeSpots, ...safePosts]);
+    const initialLocation = focusLocation || DEFAULT_CENTER;
 
     return `<!doctype html>
     <html>
@@ -131,9 +139,10 @@ export default function MapScreen({ navigation }) {
         </div>
         <script>
           (function () {
-            const fallbackLat = ${DEFAULT_CENTER.lat};
-            const fallbackLng = ${DEFAULT_CENTER.lng};
-            const fallbackName = '${DEFAULT_CENTER.label}';
+            const fallbackLat = ${initialLocation.lat};
+            const fallbackLng = ${initialLocation.lng};
+            const fallbackName = '${sanitize(initialLocation.label)}';
+            const hasFocusLocation = ${focusLocation ? 'true' : 'false'};
             const markers = ${spotsPayload};
             const emit = (payload) => {
               const message = JSON.stringify(payload || {});
@@ -229,6 +238,8 @@ export default function MapScreen({ navigation }) {
                     id: String(target.id),
                     name: target.name,
                     district: target.district,
+                    lat: target.lat,
+                    lng: target.lng,
                   },
                 });
               };
@@ -250,7 +261,7 @@ export default function MapScreen({ navigation }) {
               });
             }
 
-            if (!('geolocation' in navigator)) {
+            if (hasFocusLocation || !('geolocation' in navigator)) {
               return render(fallbackLat, fallbackLng, fallbackName);
             }
 
@@ -273,7 +284,7 @@ export default function MapScreen({ navigation }) {
         </script>
       </body>
     </html>`;
-  }, [posts, spots]);
+  }, [focusLocation, posts, spots]);
 
   const onOpenCreate = useCallback((spot) => {
     if (!navigation || !APP_ROUTES || !APP_ROUTES.CREATE) return;
