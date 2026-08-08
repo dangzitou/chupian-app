@@ -395,7 +395,7 @@ async function fetchActorFeedRows({ table, actorId, limit, cursor, sort = "lates
   const useRows = rows.slice(0, max);
   const posts = await loadPostMeta(useRows);
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
-  const totalRows = await query(`SELECT COUNT(*) AS c FROM ${fromClause} WHERE ${where.join(" AND ")}`, params);
+  const totalRows = await query(`SELECT COUNT(*) AS c ${fromClause} WHERE ${where.join(" AND ")}`, params);
   const total = Number(totalRows[0]?.c || 0);
 
   return {
