@@ -18,6 +18,7 @@ import NewPostScreen from './src/screens/NewPostScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import AuthorProfileScreen from './src/screens/AuthorProfileScreen';
 import AuthScreen from './src/screens/AuthScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -116,6 +117,7 @@ function ProfileStack() {
       <Stack.Screen name="ProfileHome" component={ProfileScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
       <Stack.Screen name="Auth" component={AuthScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
     </Stack.Navigator>
   );
 }

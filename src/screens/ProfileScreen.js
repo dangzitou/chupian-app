@@ -67,6 +67,7 @@ export default function ProfileScreen({ navigation }) {
   const [section, setSection] = useState('mePosts');
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState('');
+  const [notificationUnread, setNotificationUnread] = useState(0);
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -114,18 +115,20 @@ export default function ProfileScreen({ navigation }) {
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, userFollowingFeed, s] = await Promise.all([
+      const [w, userPostsFeed, userLikesFeed, userFavoritesFeed, userFollowingFeed, s, notificationPayload] = await Promise.all([
         api.weather(),
         api.mePosts({ limit: 1, sort: 'latest' }),
         api.meLikes({ limit: 1, sort: 'latest' }),
         api.meFavorites({ limit: 1, sort: 'latest' }),
         api.meFollowing({ limit: 1, sort: 'latest' }),
         api.spots(),
+        api.notifications({ limit: 1 }),
       ]);
 
       setWeather(w);
       setTotalPosts(Number(userPostsFeed?.total || 0));
       setSpotCount((s.spots || []).length);
+      setNotificationUnread(Number(notificationPayload?.unread || 0));
       setMeSectionStats((prev) => ({
         ...prev,
         mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
@@ -183,9 +186,18 @@ export default function ProfileScreen({ navigation }) {
     navigation?.navigate?.(APP_ROUTES.MAP);
   }, [navigation]);
 
+  const onOpenNotifications = useCallback(() => {
+    navigation.navigate('Notifications');
+  }, [navigation]);
+
   useFocusEffect(useCallback(() => {
     setActorName(getActorName());
     setAuthenticated(isAuthenticated());
+    api.notifications({ limit: 1 })
+      .then((payload) => setNotificationUnread(Number(payload?.unread || 0)))
+      .catch(() => {
+        // Keep the last unread count when the message center is unavailable.
+      });
   }, []));
 
   const onAuthAction = useCallback(() => {
@@ -305,9 +317,19 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>我的拍摄档案 · 机位收藏 · 出片记录</Text>
         </View>
-        <Pressable style={styles.profileAction} onPress={onAuthAction}>
-          <Text style={styles.profileActionText}>{authenticated ? '退出' : '登录 / 注册'}</Text>
-        </Pressable>
+        <View style={styles.heroActions}>
+          <Pressable style={styles.notifyAction} onPress={onOpenNotifications} accessibilityRole="button">
+            <Text style={styles.notifyText}>消息</Text>
+            {notificationUnread > 0 ? (
+              <View style={styles.notifyBadge}>
+                <Text style={styles.notifyBadgeText}>{notificationUnread > 99 ? '99+' : notificationUnread}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+          <Pressable style={styles.profileAction} onPress={onAuthAction}>
+            <Text style={styles.profileActionText}>{authenticated ? '退出' : '登录 / 注册'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ProfileStats
@@ -361,7 +383,7 @@ export default function ProfileScreen({ navigation }) {
         ))}
       </ScrollView>
     </View>
-  ), [actorName, authenticated, meSectionStats, onAuthAction, onOpenMap, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -432,6 +454,22 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   heroMeta: { flex: 1 },
+  heroActions: { alignItems: 'flex-end', gap: 6 },
+  notifyAction: { position: 'relative', paddingHorizontal: 8, paddingVertical: 5 },
+  notifyText: { color: COLORS.ink, fontSize: 11.5, fontWeight: '700' },
+  notifyBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  notifyBadgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
   profileAction: {
     borderWidth: 1,
     borderColor: COLORS.line,

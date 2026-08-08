@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS author_follows (
   INDEX idx_af_followed (followed_id)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  recipient_id VARCHAR(64) NOT NULL,
+  actor_id VARCHAR(64) NOT NULL,
+  actor_name VARCHAR(80) NOT NULL DEFAULT '匿名拍友',
+  type ENUM('like', 'favorite', 'comment', 'follow') NOT NULL,
+  post_id BIGINT UNSIGNED DEFAULT NULL,
+  post_title VARCHAR(200) NOT NULL DEFAULT '',
+  content VARCHAR(300) NOT NULL DEFAULT '',
+  is_read TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notifications_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE SET NULL,
+  INDEX idx_notifications_recipient_created (recipient_id, created_at, id),
+  INDEX idx_notifications_recipient_read (recipient_id, is_read, created_at, id)
+) ENGINE=InnoDB;
+
 ALTER TABLE posts
   ADD INDEX IF NOT EXISTS idx_posts_status_created_id (status, created_at, id),
   ADD INDEX IF NOT EXISTS idx_posts_status_hot (status, stats_likes, created_at, id),
