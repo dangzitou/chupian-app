@@ -28,25 +28,29 @@ const PROFILE_TABS = [
   { key: 'meFollowing', label: '关注动态' },
 ];
 
-function ProfileStats({ spotCount, posts, liked, saved }) {
+function ProfileStats({ spotCount, posts, liked, saved, onSelectSection, onOpenMap }) {
+  const items = [
+    { key: 'mePosts', value: posts, label: '发布', onPress: () => onSelectSection?.('mePosts') },
+    { key: 'spots', value: spotCount, label: '点位', onPress: onOpenMap },
+    { key: 'meLikes', value: liked, label: '赞过', onPress: () => onSelectSection?.('meLikes') },
+    { key: 'meFavorites', value: saved, label: '收藏', onPress: () => onSelectSection?.('meFavorites') },
+  ];
+
   return (
     <View style={styles.statsRow}>
-      <View style={styles.statCard}>
-        <Text style={styles.statNum}>{posts}</Text>
-        <Text style={styles.statLabel}>发布</Text>
-      </View>
-      <View style={styles.statCard}>
-        <Text style={styles.statNum}>{spotCount}</Text>
-        <Text style={styles.statLabel}>点位</Text>
-      </View>
-      <View style={styles.statCard}>
-        <Text style={styles.statNum}>{liked}</Text>
-        <Text style={styles.statLabel}>赞过</Text>
-      </View>
-      <View style={styles.statCard}>
-        <Text style={styles.statNum}>{saved}</Text>
-        <Text style={styles.statLabel}>收藏</Text>
-      </View>
+      {items.map((item) => (
+        <Pressable
+          key={item.key}
+          style={styles.statCard}
+          onPress={item.onPress}
+          disabled={!item.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.label}${item.value}个`}
+        >
+          <Text style={styles.statNum}>{item.value}</Text>
+          <Text style={styles.statLabel}>{item.label}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -166,6 +170,15 @@ export default function ProfileScreen({ navigation }) {
     setSection(key);
   }, [section]);
 
+  const onOpenMap = useCallback(() => {
+    const parent = navigation?.getParent?.();
+    if (parent) {
+      parent.navigate(APP_ROUTES.MAP);
+      return;
+    }
+    navigation?.navigate?.(APP_ROUTES.MAP);
+  }, [navigation]);
+
   const onLike = useCallback((postId) => toggleAction({
     postId,
     metricField: 'likes',
@@ -248,6 +261,8 @@ export default function ProfileScreen({ navigation }) {
         posts={totalPosts}
         liked={meSectionStats.meLikes}
         saved={meSectionStats.meFavorites}
+        onSelectSection={onSwitchSection}
+        onOpenMap={onOpenMap}
       />
 
       {weather?.ok && (
@@ -292,7 +307,7 @@ export default function ProfileScreen({ navigation }) {
         ))}
       </ScrollView>
     </View>
-  ), [actorName, meSectionStats, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, meSectionStats, onOpenMap, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
