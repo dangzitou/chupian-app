@@ -66,21 +66,21 @@ export default function SpotDetailScreen({ navigation, route }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [spotsResult, postsResult] = await Promise.allSettled([
-        api.spots(),
+      const [spotResult, postsResult] = await Promise.allSettled([
+        api.spot(String(spotId)),
         api.feed({ spotId: String(spotId), limit: 12, sort: 'latest' }),
       ]);
       if (!alive) return;
-      if (spotsResult.status === 'fulfilled') {
-        const s = (spotsResult.value.spots || []).find((x) => String(x.id) === String(spotId));
-        if (s) {
+      if (spotResult.status === 'fulfilled') {
+        const s = spotResult.value;
+        if (s && String(s.id) === String(spotId)) {
           setSpot(s);
           setCoverError(false);
         } else {
           setError('点位不存在或已下线');
         }
       } else {
-        setError(spotsResult.reason?.message || '点位加载失败');
+        setError(spotResult.reason?.message || '点位加载失败');
       }
       if (postsResult.status === 'fulfilled') {
         setPosts(postsResult.value.posts || []);
