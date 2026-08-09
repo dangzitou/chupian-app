@@ -734,6 +734,29 @@ export default function NewPostScreen({ navigation, route }) {
     );
   }, [clearDraft]);
 
+  const closeEditor = useCallback(() => {
+    const leave = () => {
+      if (navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
+        return;
+      }
+      const parent = navigation.getParent && navigation.getParent();
+      if (parent) parent.navigate(APP_ROUTES.DISCOVERY);
+    };
+    if (!hasDraftPayload) {
+      leave();
+      return;
+    }
+    Alert.alert(
+      '退出发布？',
+      '草稿会保留，之后可以继续编辑。',
+      [
+        { text: '继续编辑', style: 'cancel' },
+        { text: '退出', style: 'destructive', onPress: leave },
+      ],
+    );
+  }, [hasDraftPayload, navigation]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
@@ -742,8 +765,20 @@ export default function NewPostScreen({ navigation, route }) {
         style={styles.flex}
       >
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>发布出片</Text>
-          <Text style={styles.subtitle}>先发出来，拍摄参数和攻略之后再补也可以</Text>
+          <View style={styles.titleRow}>
+            <View style={styles.titleCopy}>
+              <Text style={styles.title}>发布出片</Text>
+              <Text style={styles.subtitle}>先发出来，拍摄参数和攻略之后再补也可以</Text>
+            </View>
+            <Pressable
+              style={styles.closeBtn}
+              onPress={closeEditor}
+              accessibilityRole="button"
+              accessibilityLabel="关闭发布编辑器"
+            >
+              <Text style={styles.closeText}>关闭</Text>
+            </Pressable>
+          </View>
           <View style={styles.rewardHint}>
             <View style={styles.rewardHintHeader}>
               <Text style={styles.rewardHintTitle}>发布即可得 +5 贡献值</Text>
@@ -1096,8 +1131,12 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.bg },
   body: { padding: 16, paddingBottom: 96 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  titleCopy: { flex: 1 },
   title: { fontSize: 24, color: COLORS.ink, fontWeight: '700' },
   subtitle: { color: COLORS.muted, marginTop: 3, marginBottom: 12, fontSize: 12.5 },
+  closeBtn: { paddingHorizontal: 4, paddingVertical: 6 },
+  closeText: { color: COLORS.muted, fontSize: 12.5, fontWeight: '700' },
   rewardHint: {
     marginBottom: 6,
     paddingHorizontal: 12,
