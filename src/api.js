@@ -145,6 +145,102 @@ function refreshSessionOnce() {
   return sessionRefreshPromise;
 }
 
+function uploadFormDataWithProgress(path, {
+  method,
+  body,
+  headers,
+  timeout,
+  onProgress,
+}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+    let timedOut = false;
+    let timer = null;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      callback(value);
+    };
+
+    const networkError = (message, cause) => new ApiError(message, {
+      status: 0,
+      path,
+      method,
+      cause,
+    });
+
+    try {
+      xhr.open(method, `${API_BASE}${path}`, true);
+      Object.entries(headers || {}).forEach(([key, value]) => {
+        if (value != null) xhr.setRequestHeader(key, String(value));
+      });
+      if (xhr.upload) {
+        xhr.upload.onprogress = (event) => {
+          try {
+            onProgress?.({
+              loaded: Number(event.loaded || 0),
+              total: event.lengthComputable ? Number(event.total || 0) : 0,
+            });
+          } catch (_err) {
+            // Progress rendering must never interrupt an upload.
+          }
+        };
+      }
+      xhr.onload = () => {
+        let data = {};
+        let isJson = false;
+        const text = xhr.responseText || '';
+        if (text) {
+          try {
+            data = JSON.parse(text);
+            isJson = true;
+          } catch (_err) {
+            data = { error: text };
+          }
+        }
+        setNetworkOnline(true);
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const fallbackMessage = data?.error || `HTTP ${xhr.status}`;
+          const message = isJson && data?.message ? data.message : fallbackMessage;
+          finish(reject, new ApiError(`接口异常：${path} (${xhr.status})`, {
+            status: xhr.status,
+            path,
+            method,
+            payload: data,
+            cause: message,
+          }));
+          return;
+        }
+        finish(resolve, data);
+      };
+      xhr.onerror = () => {
+        setNetworkOnline(false);
+        finish(reject, networkError('网络连接异常，请检查网络设置'));
+      };
+      xhr.onabort = () => {
+        if (timedOut) return;
+        setNetworkOnline(false);
+        finish(reject, networkError('网络连接异常，请检查网络设置'));
+      };
+      timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          xhr.abort();
+        } catch (_err) {
+          // The timeout error below is still authoritative.
+        }
+        finish(reject, networkError('请求超时，请稍后重试'));
+      }, timeout);
+      xhr.send(body);
+    } catch (err) {
+      setNetworkOnline(false);
+      finish(reject, networkError('网络连接异常，请检查网络设置', err));
+    }
+  });
+}
+
 async function doRequest(path, options = {}) {
   const {
     method: customMethod = 'GET',
@@ -154,6 +250,7 @@ async function doRequest(path, options = {}) {
     noDedup: _noDedup,
     cacheTtl: _cacheTtl,
     retryUnsafe: _retryUnsafe,
+    onUploadProgress: uploadProgressCallback,
     ...forwardOptions
   } = options;
   const method = String(customMethod).toUpperCase();
@@ -167,6 +264,16 @@ async function doRequest(path, options = {}) {
     ...(actorToken ? { 'x-actor-token': actorToken } : {}),
     ...(options.headers || {}),
   };
+
+  if (isFormData && typeof uploadProgressCallback === 'function' && typeof XMLHttpRequest !== 'undefined') {
+    return uploadFormDataWithProgress(path, {
+      method,
+      body: requestBody,
+      headers: finalHeaders,
+      timeout,
+      onProgress: uploadProgressCallback,
+    });
+  }
 
   const controller = new AbortController();
   let timedOut = false;
@@ -1000,7 +1107,7 @@ export const api = {
     });
   },
 
-  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image', sourceFile = null, idempotencyKey = '') {
+  async uploadMedia(fileUri, mime = 'image/jpeg', kind = 'image', sourceFile = null, idempotencyKey = '', onProgress) {
     const form = new FormData();
     const normalizedMime = String(mime || '').toLowerCase();
     const extension = normalizedMime.includes('video')
@@ -1042,6 +1149,7 @@ export const api = {
       headers,
       body: form,
       timeout: 180_000,
+      onUploadProgress: onProgress,
       // The upload route is idempotent by key; only retry writes with that guarantee.
       retryUnsafe: Boolean(idempotencyKey),
     });
