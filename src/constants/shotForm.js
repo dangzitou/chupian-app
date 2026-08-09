@@ -1,6 +1,6 @@
 export const SHOT_PRESETS = {
-  angle: ['仰拍', '平拍', '俯拍', '低机位', '顶视角', '鱼眼'],
-  direction: ['正拍', '逆光', '顺光', '侧逆', '45°', '室内补光'],
+  angle: ['仰拍', '平拍', '俯拍', '低机位', '高机位', '顶视角'],
+  direction: ['正面光', '逆光', '顺光', '侧光', '侧逆光', '室内补光'],
   bestTime: [
     { value: 'day', label: '白天' },
     { value: 'golden', label: '黄金时刻' },
@@ -21,7 +21,7 @@ export const EMPTY_SHOT = {
   angle: '',
   direction: '',
   timeWindow: '',
-  bestTime: 'day',
+  bestTime: '',
   camera: '',
   lens: '',
   focal: '',
