@@ -436,10 +436,21 @@ export const api = {
     );
   },
 
-  async spots() {
+  async spots({ latitude, longitude, radiusKm = 50, limit = 80 } = {}) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    const query = hasLocation
+      ? `?${new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        radius: String(Math.min(Math.max(Number(radiusKm) || 50, 1), 50)),
+        limit: String(Math.min(Math.max(Number(limit) || 80, 1), 80)),
+      }).toString()}`
+      : '';
     return safeRequestWithFallback(
-      `${API_PREFIX}/spots`,
-      '/api/spots',
+      `${API_PREFIX}/spots${query}`,
+      `/api/spots${query}`,
       { cacheTtl: 30_000 },
     );
   },
