@@ -325,6 +325,29 @@ export default function PostsScreen({ navigation }) {
     });
   }, [activeTag, load, q, sort, setSort]);
 
+  const hasActiveFilters = sort !== 'latest' || Boolean(activeTag) || feedLayout !== 'masonry';
+  const resetFilters = useCallback(() => {
+    const nextSort = 'latest';
+    const nextTag = '';
+    const dataChanged = sort !== nextSort || activeTag !== nextTag;
+
+    setFeedLayout('masonry');
+    setActiveTag(nextTag);
+    setTag(nextTag);
+    setSort(nextSort);
+    setFiltersOpen(false);
+
+    if (dataChanged) {
+      load({
+        append: false,
+        cursor: null,
+        nextSort,
+        nextQ: q,
+        nextTag,
+      });
+    }
+  }, [activeTag, load, q, setSort, setTag, sort]);
+
   const onLike = useCallback((postId) => toggleAction({
     postId,
     metricField: 'likes',
@@ -410,13 +433,14 @@ export default function PostsScreen({ navigation }) {
           <Text style={styles.title}>发现</Text>
         </View>
         <Pressable
-          style={[styles.layoutBtn, filtersOpen && styles.layoutBtnActive]}
+          style={[styles.layoutBtn, (filtersOpen || hasActiveFilters) && styles.layoutBtnActive]}
           onPress={() => setFiltersOpen((value) => !value)}
           accessibilityRole="button"
           accessibilityState={{ expanded: filtersOpen }}
+          accessibilityLabel={hasActiveFilters ? '打开已生效的筛选' : '打开筛选'}
         >
-          <Text style={[styles.layoutBtnText, filtersOpen && styles.layoutBtnTextActive]}>
-            {filtersOpen ? '收起' : '筛选'}
+          <Text style={[styles.layoutBtnText, (filtersOpen || hasActiveFilters) && styles.layoutBtnTextActive]}>
+            {filtersOpen ? '收起' : hasActiveFilters ? '已筛选' : '筛选'}
           </Text>
         </Pressable>
       </View>
@@ -453,14 +477,25 @@ export default function PostsScreen({ navigation }) {
               <View style={styles.filterHandle} />
               <View style={styles.filterSheetHeader}>
                 <Text style={styles.filterSheetTitle}>筛选发现</Text>
-                <Pressable
-                  style={styles.filterDone}
-                  onPress={() => setFiltersOpen(false)}
-                  accessibilityRole="button"
-                  accessibilityLabel="完成筛选"
-                >
-                  <Text style={styles.filterDoneText}>完成</Text>
-                </Pressable>
+                <View style={styles.filterSheetActions}>
+                  <Pressable
+                    style={[styles.filterReset, !hasActiveFilters && styles.filterResetDisabled]}
+                    onPress={resetFilters}
+                    disabled={!hasActiveFilters}
+                    accessibilityRole="button"
+                    accessibilityLabel="重置筛选"
+                  >
+                    <Text style={styles.filterResetText}>重置</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.filterDone}
+                    onPress={() => setFiltersOpen(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="完成筛选"
+                  >
+                    <Text style={styles.filterDoneText}>完成</Text>
+                  </Pressable>
+                </View>
               </View>
               <View style={styles.filterPanel}>
                 <View style={styles.filterTools}>
@@ -492,7 +527,7 @@ export default function PostsScreen({ navigation }) {
         </Modal>
       ) : null}
     </View>
-  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openTab, resetFilters, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -590,6 +625,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   filterSheetTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '800' },
+  filterSheetActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  filterReset: { paddingHorizontal: 8, paddingVertical: 6 },
+  filterResetDisabled: { opacity: 0.35 },
+  filterResetText: { color: COLORS.muted, fontSize: 13, fontWeight: '700' },
   filterDone: { paddingHorizontal: 8, paddingVertical: 6 },
   filterDoneText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
   filterTools: {
