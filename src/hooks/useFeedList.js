@@ -44,6 +44,7 @@ export function useFeedList(fetcher, options = {}) {
   const busyIdsRef = useRef(new Set());
   const requestSeqRef = useRef(0);
   const loadingMoreRef = useRef(false);
+  const loadingMoreRequestSeqRef = useRef(0);
   const cacheKeyRef = useRef(`${actorScope}:${cacheKey}`);
   const cacheHydratedRef = useRef(false);
   const cacheCommitSeqRef = useRef(0);
@@ -104,7 +105,10 @@ export function useFeedList(fetcher, options = {}) {
       });
     }
 
-    if (append) loadingMoreRef.current = true;
+    if (append) {
+      loadingMoreRef.current = true;
+      loadingMoreRequestSeqRef.current = requestSeq;
+    }
     ensureLoadingState(append);
 
     try {
@@ -157,8 +161,9 @@ export function useFeedList(fetcher, options = {}) {
       // An old page request must not unlock a newer request started after a
       // tab switch or refresh. The ref is the synchronous guard for
       // FlatList's repeated onEndReached calls.
-      if (append && requestSeq === requestSeqRef.current) {
+      if (append && loadingMoreRequestSeqRef.current === requestSeq) {
         loadingMoreRef.current = false;
+        loadingMoreRequestSeqRef.current = 0;
       }
       if (requestSeq !== requestSeqRef.current) return;
       setLoading(false);
@@ -208,6 +213,7 @@ export function useFeedList(fetcher, options = {}) {
   const clearFeed = useCallback(() => {
     requestSeqRef.current += 1;
     loadingMoreRef.current = false;
+    loadingMoreRequestSeqRef.current = 0;
     setPosts([]);
     setLoading(true);
     setRefreshing(false);
