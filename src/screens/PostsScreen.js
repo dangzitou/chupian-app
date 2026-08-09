@@ -183,6 +183,7 @@ export default function PostsScreen({ navigation }) {
     onRefresh,
     onEndReached,
     patchById,
+    clearFeed,
     setSort,
     setQ,
     setTag,
@@ -207,13 +208,14 @@ export default function PostsScreen({ navigation }) {
 
   const switchFeedMode = useCallback((nextMode) => {
     if (nextMode === feedMode) return;
+    clearFeed();
     setFeedMode(nextMode);
     setActiveTag('');
     setSearchInput('');
     setQ('');
     setTag('');
     setSort('latest');
-  }, [feedMode, setQ, setSort, setTag]);
+  }, [clearFeed, feedMode, setQ, setSort, setTag]);
 
   const getPostById = useCallback(
     (postId) => posts.find((item) => String(item.id) === String(postId)),

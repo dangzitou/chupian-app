@@ -142,7 +142,12 @@ export function useFeedList(fetcher, options = {}) {
   const isPostBusy = useCallback((postId) => busyIdsRef.current.has(String(postId)), []);
 
   const clearFeed = useCallback(() => {
+    requestSeqRef.current += 1;
+    loadingMoreRef.current = false;
     setPosts([]);
+    setLoading(true);
+    setRefreshing(false);
+    setLoadingMore(false);
     setNextCursor(null);
     setHasMore(true);
     setError(null);
