@@ -3,18 +3,24 @@ import { StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { toShotParamPairs } from '../utils/postCodec';
 
-function normalizeRows(post) {
+function normalizeRows(post, maxRows) {
   const pairs = toShotParamPairs(post);
   const rows = pairs.map(([name, value]) => ({
     name,
     value: String(value || '').trim(),
   })).filter((item) => item.value);
   if (!rows.length) return null;
-  return rows.slice(0, 8);
+  const limit = Number(maxRows);
+  return Number.isFinite(limit) && limit > 0 ? rows.slice(0, limit) : rows;
 }
 
-export default function ShotMetaPanel({ post, compact = false, fallback = '博主未填写拍摄参数。' }) {
-  const rows = normalizeRows(post);
+export default function ShotMetaPanel({
+  post,
+  compact = false,
+  maxRows = 0,
+  fallback = '博主未填写拍摄参数。',
+}) {
+  const rows = normalizeRows(post, maxRows);
 
   if (!rows) {
     if (!fallback) return null;
