@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
 import RemoteImage from '../components/RemoteImage';
+import { getCurrentLocation } from '../utils/location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NEUTRAL_CENTER = {
@@ -76,7 +77,7 @@ export default function MapScreen({ navigation, route }) {
   }, [route?.params?.focusLocation]);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || focusLocation || typeof navigator === 'undefined') return undefined;
+    if (focusLocation) return undefined;
     let alive = true;
     const resolveNetworkLocation = () => {
       api.resolveLocation()
@@ -92,26 +93,15 @@ export default function MapScreen({ navigation, route }) {
         });
     };
     setLocationStatus('locating');
-    if (!navigator.geolocation) {
-      resolveNetworkLocation();
-      return () => { alive = false; };
-    }
-    navigator.geolocation.getCurrentPosition((position) => {
-      if (!alive) return;
-      const nextLocation = normalizeLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        label: '我的位置',
-      });
-      if (nextLocation) {
+    getCurrentLocation()
+      .then((nextLocation) => {
+        if (!alive) return;
         setWebLocation(nextLocation);
         setLocationStatus('ready');
-      } else {
-        setLocationStatus('error');
-      }
-    }, () => {
-      if (alive) resolveNetworkLocation();
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+      })
+      .catch(() => {
+        if (alive) resolveNetworkLocation();
+      });
     return () => { alive = false; };
   }, [focusLocation, locationAttempt]);
 
