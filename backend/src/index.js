@@ -1058,6 +1058,7 @@ async function ensureNotificationSchemaCompatibility() {
         recipient_id VARCHAR(64) NOT NULL,
         actor_id VARCHAR(64) NOT NULL,
         actor_name VARCHAR(80) NOT NULL DEFAULT '匿名拍友',
+        actor_avatar VARCHAR(500) NOT NULL DEFAULT '',
         type ENUM('like', 'favorite', 'comment', 'follow') NOT NULL,
         post_id BIGINT UNSIGNED DEFAULT NULL,
         post_title VARCHAR(200) NOT NULL DEFAULT '',
@@ -1069,8 +1070,27 @@ async function ensureNotificationSchemaCompatibility() {
         INDEX idx_notifications_recipient_read (recipient_id, is_read, created_at, id)
       ) ENGINE=InnoDB
     `);
+    const [avatarColumns] = await query("SHOW COLUMNS FROM notifications LIKE 'actor_avatar'");
+    if (!avatarColumns.length) {
+      await query(
+        "ALTER TABLE notifications ADD COLUMN actor_avatar VARCHAR(500) NOT NULL DEFAULT '' AFTER actor_name"
+      );
+    }
   } catch (err) {
     console.warn(`[schema] ensureNotificationSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
+async function ensureCommentSchemaCompatibility() {
+  try {
+    const [avatarColumns] = await query("SHOW COLUMNS FROM post_comments LIKE 'actor_avatar'");
+    if (!avatarColumns.length) {
+      await query(
+        "ALTER TABLE post_comments ADD COLUMN actor_avatar VARCHAR(500) NOT NULL DEFAULT '' AFTER actor_name"
+      );
+    }
+  } catch (err) {
+    console.warn(`[schema] ensureCommentSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
   }
 }
 
@@ -1170,6 +1190,7 @@ async function insertNotification(conn, {
   recipientId,
   actorId,
   actorName,
+  actorAvatar = '',
   type,
   postId = null,
   postTitle = '',
@@ -1178,12 +1199,13 @@ async function insertNotification(conn, {
   if (!recipientId || !actorId || String(recipientId) === String(actorId)) return;
   await conn.execute(
     `INSERT INTO notifications
-      (recipient_id, actor_id, actor_name, type, post_id, post_title, content)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (recipient_id, actor_id, actor_name, actor_avatar, type, post_id, post_title, content)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       String(recipientId),
       String(actorId),
       safeText(actorName || '匿名拍友', 80),
+      safeText(actorAvatar || '', 500),
       type,
       postId || null,
       safeText(postTitle || '', 200),
@@ -1274,7 +1296,7 @@ async function applyAuthorBlock({ actor, targetAuthorId, targetName, action = "t
   });
 }
 
-async function applyAuthorFollow({ actor, actorName, targetAuthorId, action = "toggle" }) {
+async function applyAuthorFollow({ actor, actorName, actorAvatar = '', targetAuthorId, action = "toggle" }) {
   const normalizedAction = String(action || "toggle");
   const allowedActions = ["toggle", "follow", "unfollow"];
   if (!allowedActions.includes(normalizedAction)) {
@@ -1319,6 +1341,7 @@ async function applyAuthorFollow({ actor, actorName, targetAuthorId, action = "t
           recipientId: targetAuthorId,
           actorId: actor,
           actorName,
+          actorAvatar,
           type: "follow",
           content: "关注了你",
         });
@@ -1473,7 +1496,7 @@ async function getPostCommentsPayload(req) {
   const limit = pickInt(req.query.limit, 12, { min: 1, max: Number(MAX_FEED_LIMIT) });
   const [rows, countRows] = await Promise.all([
     query(
-      `SELECT id, actor_name AS author, content, created_at
+      `SELECT id, actor_name AS author, actor_avatar AS avatar, content, created_at
        FROM post_comments
        WHERE post_id = ? ${cursor ? "AND (created_at < ? OR (created_at = ? AND id < ?))" : ""}
        ORDER BY created_at DESC, id DESC
@@ -1491,6 +1514,7 @@ async function getPostCommentsPayload(req) {
     comments: useRows.map((row) => ({
       id: row.id,
       author: row.author,
+      avatar: row.avatar || '',
       text: row.content,
       createdAt: row.created_at,
     })),
@@ -1819,7 +1843,7 @@ async function updatePostHandler(req) {
   return { ok: true, post: normalized, reward };
 }
 
-async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
+async function applyActionOnPost({ postId, action, actor, actorName, actorAvatar = '', kind }) {
   const isLike = kind === "like";
   const actionTable = isLike ? "post_likes" : "post_favorites";
   const countColumn = isLike ? "stats_likes" : "stats_favorites";
@@ -1863,6 +1887,7 @@ async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
           recipientId: post.author_id,
           actorId: actor,
           actorName,
+          actorAvatar,
           type: isLike ? "like" : "favorite",
           postId,
           postTitle: post.title,
@@ -1913,6 +1938,7 @@ async function createCommentHandler(req) {
 
   const actor = readActorId(req, req.body || {});
   const author = safeText(req.body?.author || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const [exists] = await query("SELECT id, author_id, title FROM posts WHERE id = ?", [postId]);
   if (!exists?.id) {
     const err = new Error("post not found");
@@ -1922,13 +1948,14 @@ async function createCommentHandler(req) {
 
   const result = await tx(async (conn) => {
     const [insertResult] = await conn.execute(
-      "INSERT INTO post_comments (post_id, actor_id, actor_name, content) VALUES (?, ?, ?, ?)",
-      [postId, actor, author, text]
+      "INSERT INTO post_comments (post_id, actor_id, actor_name, actor_avatar, content) VALUES (?, ?, ?, ?, ?)",
+      [postId, actor, author, actorAvatar, text]
     );
     await insertNotification(conn, {
       recipientId: exists.author_id,
       actorId: actor,
       actorName: author,
+      actorAvatar,
       type: "comment",
       postId,
       postTitle: exists.title,
@@ -1947,6 +1974,7 @@ async function createCommentHandler(req) {
       id: insertedId || null,
       postId,
       actorName: author,
+      avatar: actorAvatar,
       text,
       createdAt: insertedComment?.created_at || new Date().toISOString(),
     },
@@ -2228,25 +2256,32 @@ app.patch("/api/v1/auth/me", asyncHandler(async (req, res) => {
         "UPDATE posts SET author_name = ?, author_bio = ?, author_avatar = ? WHERE author_id = ?",
         [displayName, bio, avatar, actorId]
       );
+      await conn.execute(
+        "UPDATE post_comments SET actor_name = ?, actor_avatar = ? WHERE actor_id = ?",
+        [displayName, avatar, actorId]
+      );
+      await conn.execute(
+        "UPDATE notifications SET actor_name = ?, actor_avatar = ? WHERE actor_id = ?",
+        [displayName, avatar, actorId]
+      );
     } else {
       await conn.execute(
         "UPDATE posts SET author_name = ?, author_bio = ? WHERE author_id = ?",
         [displayName, bio, actorId]
       );
+      await conn.execute(
+        "UPDATE post_comments SET actor_name = ? WHERE actor_id = ?",
+        [displayName, actorId]
+      );
+      await conn.execute(
+        "UPDATE notifications SET actor_name = ? WHERE actor_id = ?",
+        [displayName, actorId]
+      );
     }
-    await conn.execute(
-      "UPDATE post_comments SET actor_name = ? WHERE actor_id = ?",
-      [displayName, actorId]
-    );
     await conn.execute(
       "UPDATE author_follows SET actor_name = ? WHERE follower_id = ?",
       [displayName, actorId]
     );
-    await conn.execute(
-      "UPDATE notifications SET actor_name = ? WHERE actor_id = ?",
-      [displayName, actorId]
-    );
-
     const [rows] = await conn.execute(
       "SELECT id, username, display_name, bio, avatar_url FROM users WHERE id = ? LIMIT 1",
       [userId]
@@ -2596,7 +2631,7 @@ app.get("/api/v1/notifications", asyncHandler(async (req, res) => {
   }
   const [rows, unreadRows] = await Promise.all([
     query(
-      `SELECT n.id, n.type, n.actor_id, n.actor_name, n.post_id, n.post_title,
+      `SELECT n.id, n.type, n.actor_id, n.actor_name, n.actor_avatar, n.post_id, n.post_title,
               n.content, n.is_read, n.created_at
        FROM notifications n
        WHERE ${where.join(" AND ")}
@@ -2614,6 +2649,7 @@ app.get("/api/v1/notifications", asyncHandler(async (req, res) => {
       type: row.type,
       actorId: row.actor_id,
       actorName: row.actor_name,
+      avatar: row.actor_avatar || '',
       postId: row.post_id,
       postTitle: row.post_title,
       content: row.content,
@@ -2669,6 +2705,7 @@ app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
   const targetAuthorId = String(req.params.authorId || "").trim();
   const action = String(req.body?.action || "toggle");
   const actorName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const idempotent = await runWithIdempotency({
     req,
     actor,
@@ -2676,6 +2713,7 @@ app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
     handler: () => applyAuthorFollow({
       actor,
       actorName,
+      actorAvatar,
       targetAuthorId,
       action,
     }),
@@ -2759,9 +2797,11 @@ app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res
   const targetAuthorId = String(req.params.authorId || "").trim();
   const action = String(req.body?.action || "toggle");
   const actorName = safeText(req.body?.author || req.body?.authorName || req.body?.name || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const state = await applyAuthorFollow({
     actor,
     actorName,
+    actorAvatar,
     targetAuthorId,
     action,
   });
@@ -2839,6 +2879,7 @@ app.post("/api/v1/posts/:id/like", asyncHandler(async (req, res) => {
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const action = String(req.body?.action || "toggle");
   const idempotent = await runWithIdempotency({
     req,
@@ -2849,6 +2890,7 @@ app.post("/api/v1/posts/:id/like", asyncHandler(async (req, res) => {
       action,
       actor,
       actorName,
+      actorAvatar,
       kind: "like",
     }),
   });
@@ -2863,6 +2905,7 @@ app.post("/api/v1/posts/:id/favorite", asyncHandler(async (req, res) => {
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const action = String(req.body?.action || "toggle");
   const idempotent = await runWithIdempotency({
     req,
@@ -2873,6 +2916,7 @@ app.post("/api/v1/posts/:id/favorite", asyncHandler(async (req, res) => {
       action,
       actor,
       actorName,
+      actorAvatar,
       kind: "favorite",
     }),
   });
@@ -3001,12 +3045,14 @@ app.post("/api/posts/:id/like", asyncHandler(async (req, res) => {
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const action = String(req.body?.action || "toggle");
   const result = await applyActionOnPost({
     postId,
     action,
     actor,
     actorName,
+    actorAvatar,
     kind: "like",
   });
   await invalidatePostCaches(postId);
@@ -3031,12 +3077,14 @@ app.post("/api/posts/:id/favorite", asyncHandler(async (req, res) => {
   if (!Number.isInteger(postId) || postId <= 0) return res.status(400).json({ error: "invalid post id" });
   const actor = readActorId(req, req.body || {});
   const actorName = safeText(req.body?.author || "匿名拍友", 80);
+  const actorAvatar = safeText(req.body?.avatar || "", 500);
   const action = String(req.body?.action || "toggle");
   const result = await applyActionOnPost({
     postId,
     action,
     actor,
     actorName,
+    actorAvatar,
     kind: "favorite",
   });
   await invalidatePostCaches(postId);
@@ -3064,6 +3112,7 @@ await ensureMapSchemaCompatibility();
 await ensureFollowSchemaCompatibility();
 await ensureAuthSchemaCompatibility();
 await ensureNotificationSchemaCompatibility();
+await ensureCommentSchemaCompatibility();
 await ensureReportSchemaCompatibility();
 await ensureBlockSchemaCompatibility();
 await ensureCreatorRewardSchemaCompatibility();
