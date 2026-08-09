@@ -188,6 +188,14 @@ export default function NotificationsScreen({ navigation }) {
       {error && items.length ? (
         <View style={styles.inlineError}>
           <Text style={styles.error}>{error}</Text>
+          <Pressable
+            style={styles.inlineRetry}
+            onPress={() => load()}
+            accessibilityRole="button"
+            accessibilityLabel="重新加载通知"
+          >
+            <Text style={styles.inlineRetryText}>重试</Text>
+          </Pressable>
         </View>
       ) : null}
       <FlatList
@@ -270,11 +278,16 @@ const styles = StyleSheet.create({
   inlineError: {
     marginHorizontal: 16,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: '#fff4f1',
   },
+  inlineRetry: { paddingHorizontal: 6, paddingVertical: 3 },
+  inlineRetryText: { color: COLORS.accent, fontSize: 11.5, fontWeight: '800' },
   mark: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   markText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
   itemBody: { flex: 1, minWidth: 0 },
