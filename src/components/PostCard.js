@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
@@ -65,6 +65,17 @@ function PostCard({
   const contentText = shouldCut ? `${content.slice(0, 96)}...` : content;
   const created = formatRelativeTime(post.createdAt);
 
+  const handlePress = useCallback(() => onPress?.(post), [onPress, post]);
+  const handleAuthorPress = useCallback(() => {
+    (onAuthorPress || onPress)?.(post);
+  }, [onAuthorPress, onPress, post]);
+  const handleLike = useCallback(() => onLike?.(post.id), [onLike, post.id]);
+  const handleFavorite = useCallback(() => onFavorite?.(post.id), [onFavorite, post.id]);
+  const handleComment = useCallback(() => onComment?.(post.id), [onComment, post.id]);
+  const handleShare = useCallback(() => onShare?.(post), [onShare, post]);
+  const handleFollow = useCallback(() => onFollow?.(post.id), [onFollow, post.id]);
+  const handleManage = useCallback(() => onManage?.(post.id), [onManage, post.id]);
+
   const locationText = [post.spotName || '未知地点', post.district].filter(Boolean).join(' · ') || '匿名作品';
   const subtitle = useMemo(() => {
     const totalComments = Number(post.commentsCount || (post.comments?.length || 0));
@@ -103,7 +114,7 @@ function PostCard({
           ) : null}
         </View>
         <View style={styles.compactBody}>
-          <Pressable onPress={onPress}>
+          <Pressable onPress={handlePress}>
           <Text style={styles.titleCompact} numberOfLines={2}>{post.title || '出片记录'}</Text>
           </Pressable>
           <View style={styles.compactMetaLine}>
@@ -114,7 +125,7 @@ function PostCard({
           </View>
           <View style={styles.compactFooter}>
             {hideCompactAuthor ? <View style={styles.compactAuthorSpacer} /> : (
-              <Pressable style={styles.compactAuthor} onPress={onAuthorPress || onPress}>
+              <Pressable style={styles.compactAuthor} onPress={handleAuthorPress}>
                 <View style={styles.avatarCompact}>
                   <AuthorAvatar name={post.author} />
                 </View>
@@ -130,15 +141,15 @@ function PostCard({
               favorited={post.favorited}
               likeBusy={likeBusy}
               favoriteBusy={favoriteBusy}
-              onLike={onLike}
-              onFavorite={onFavorite}
-              onComment={onComment}
+              onLike={handleLike}
+              onFavorite={handleFavorite}
+              onComment={handleComment}
               onShare={null}
             />
             {onManage ? (
               <Pressable
                 style={styles.manageBtn}
-                onPress={onManage}
+                onPress={handleManage}
                 disabled={manageBusy}
                 accessibilityRole="button"
                 accessibilityLabel="管理这条出片记录"
@@ -163,7 +174,7 @@ function PostCard({
       }}
     >
       <View style={[styles.header, compact && styles.headerCompact]}>
-        <Pressable style={styles.authorTap} onPress={onAuthorPress || onPress}>
+        <Pressable style={styles.authorTap} onPress={handleAuthorPress}>
           <View style={[styles.avatar, compact && styles.avatarCompact]}>
             <AuthorAvatar name={post.author} />
           </View>
@@ -180,7 +191,7 @@ function PostCard({
             <Pressable
               style={[styles.followBtn, isFollowing && styles.followBtnActive]}
               disabled={!onFollow || followBusy || !followable}
-              onPress={() => onFollow?.(post.authorId)}
+              onPress={handleFollow}
             >
               <Text style={[styles.followText, isFollowing && styles.followTextActive]}>{followLabel}</Text>
             </Pressable>
@@ -191,7 +202,7 @@ function PostCard({
       <View style={styles.mediaTapWrap}>
         <MediaGallery
           media={cardMedia}
-          onPressImage={onPress}
+          onPressImage={handlePress}
           showAll={!compact}
           columns={compact ? 1 : mediaColumns}
           containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
@@ -200,7 +211,7 @@ function PostCard({
       </View>
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
-        <Pressable onPress={onPress}>
+        <Pressable onPress={handlePress}>
           <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
             {post.title || '无标题'}
           </Text>
@@ -250,10 +261,10 @@ function PostCard({
           favorited={post.favorited}
           likeBusy={likeBusy}
           favoriteBusy={favoriteBusy}
-          onLike={onLike}
-          onFavorite={onFavorite}
-          onComment={onComment}
-          onShare={onShare}
+          onLike={handleLike}
+          onFavorite={handleFavorite}
+          onComment={handleComment}
+          onShare={handleShare}
           compact={compact}
         />
       </View>
