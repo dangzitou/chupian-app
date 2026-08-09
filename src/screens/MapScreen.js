@@ -2,6 +2,7 @@ import React, { createElement, useCallback, useEffect, useMemo, useRef, useState
 import {
   ActivityIndicator,
   Image,
+  Linking,
   Pressable,
   Platform,
   StyleSheet,
@@ -760,6 +761,10 @@ export default function MapScreen({ navigation, route }) {
     setMapRevision((value) => value + 1);
   }, [focusLocation]);
 
+  const openAppSettings = useCallback(() => {
+    Linking.openSettings().catch(() => {});
+  }, []);
+
   const openCreateWithCurrent = useCallback(() => {
     setLocationChooserOpen(true);
     setMapPickMode(false);
@@ -957,6 +962,11 @@ export default function MapScreen({ navigation, route }) {
           <Pressable style={styles.retryBtn} onPress={retryLocation} accessibilityRole="button">
             <Text style={styles.retryText}>重新定位</Text>
           </Pressable>
+          {Platform.OS !== 'web' ? (
+            <Pressable style={[styles.retryBtn, styles.settingsBtn]} onPress={openAppSettings} accessibilityRole="button">
+              <Text style={styles.settingsText}>打开系统设置</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       {error ? (
@@ -1170,6 +1180,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   retryText: { color: COLORS.onAccent, fontSize: 12.5, fontWeight: '700' },
+  settingsBtn: { backgroundColor: 'rgba(25,25,25,0.08)' },
+  settingsText: { color: COLORS.ink, fontSize: 12.5, fontWeight: '700' },
   webFrame: {
     width: '100%',
     height: '100%',
