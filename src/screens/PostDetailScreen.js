@@ -79,6 +79,7 @@ function clampZoom(value) {
 
 function MediaViewer({ item, index, count, onClose, onStep }) {
   const [loadError, setLoadError] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const zoom = useRef(new Animated.Value(1)).current;
   const panX = useRef(new Animated.Value(0)).current;
   const panY = useRef(new Animated.Value(0)).current;
@@ -86,6 +87,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
   const gestureRef = useRef({ mode: 'idle', distance: 0, baseScale: 1 });
   useEffect(() => {
     setLoadError(false);
+    setMediaLoading(Boolean(item?.url || item?.cover) && !isPlayableMedia(item));
     currentScaleRef.current = 1;
     gestureRef.current = { mode: 'idle', distance: 0, baseScale: 1 };
     zoom.setValue(1);
@@ -164,7 +166,10 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
               <Text style={styles.viewerError}>素材加载失败</Text>
               <Pressable
                 style={styles.viewerRetry}
-                onPress={() => setLoadError(false)}
+                onPress={() => {
+                  setLoadError(false);
+                  setMediaLoading(Boolean(item?.url || item?.cover) && !isPlayableMedia(item));
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="重试加载素材"
               >
@@ -193,12 +198,22 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
                   ],
                 }]}
                 resizeMode="contain"
-                onError={() => setLoadError(true)}
+                onLoadStart={() => setMediaLoading(true)}
+                onLoad={() => setMediaLoading(false)}
+                onError={() => {
+                  setMediaLoading(false);
+                  setLoadError(true);
+                }}
               />
             ) : (
               <Text style={styles.viewerError}>素材地址已失效</Text>
             )
           )}
+          {mediaLoading ? (
+            <View style={styles.viewerLoading} pointerEvents="none">
+              <ActivityIndicator size="large" color="rgba(255,255,255,0.88)" />
+            </View>
+          ) : null}
         </View>
         <View style={styles.viewerControls}>
           <Pressable
@@ -1245,6 +1260,7 @@ const styles = StyleSheet.create({
   viewerStage: {
     flex: 1,
     width: '100%',
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,
@@ -1252,6 +1268,12 @@ const styles = StyleSheet.create({
   viewerImage: {
     width: '100%',
     height: '100%',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   viewerVideo: {
     width: '100%',
