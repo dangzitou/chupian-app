@@ -927,6 +927,7 @@ async function fetchDiscoverySignals(limit = 20) {
 async function invalidateAllPostsCaches() {
   await cacheDel("post:detail:*");
   await cacheDel("feed:*");
+  await cacheDel("following:*");
   await cacheDel("map:v1:*");
   await cacheDel("discovery:signals:*");
 }
@@ -1383,6 +1384,23 @@ async function fetchFollowingFeedRows({ actorId, limit, cursor, sort = "latest" 
     total,
     stats: { totalPosts: total },
   };
+}
+
+function buildFollowingFeedCacheKey({ actor, sort, limit, cursor }) {
+  return `following:${actor}:${sort}:${limit}:${cursor?.id || "0"}:${cursor?.createdAt || "0"}`;
+}
+
+async function followingFeedHandler(req, res) {
+  const actor = readActorId(req, req.query);
+  const cursor = parseCursor(req.query.cursor || "");
+  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
+  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const cacheKey = buildFollowingFeedCacheKey({ actor, sort, limit, cursor });
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+  const payload = await fetchFollowingFeedRows({ actorId: actor, limit, cursor, sort });
+  await cacheSetJson(cacheKey, payload, 15);
+  return res.json(payload);
 }
 
 async function getPostHandler(req, res) {
@@ -2477,19 +2495,7 @@ app.get("/api/v1/community/me/favorites", asyncHandler(async (req, res) => {
   });
   res.json(payload);
 }));
-app.get("/api/v1/community/me/following", asyncHandler(async (req, res) => {
-  const actor = readActorId(req, req.query);
-  const cursor = parseCursor(req.query.cursor || "");
-  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const sort = req.query.sort === "hot" ? "hot" : "latest";
-  const payload = await fetchFollowingFeedRows({
-    actorId: actor,
-    limit,
-    cursor,
-    sort,
-  });
-  res.json(payload);
-}));
+app.get("/api/v1/community/me/following", asyncHandler(followingFeedHandler));
 
 app.get("/api/v1/notifications", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
@@ -2586,12 +2592,13 @@ app.post("/api/v1/authors/:authorId/follow", asyncHandler(async (req, res) => {
       targetAuthorId,
       action,
     }),
-  });
-  if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
-  const state = idempotent.payload;
-  res.json({
-    ok: true,
-    authorId: targetAuthorId,
+    });
+    if (idempotent.replay) res.setHeader("X-Idempotency-Replay", "1");
+    const state = idempotent.payload;
+    await cacheDel(`following:${actor}:*`);
+    res.json({
+      ok: true,
+      authorId: targetAuthorId,
     followed: state.following,
     following: state.following,
     followers: state.followers,
@@ -2643,19 +2650,7 @@ app.get("/api/v1/community/me/blocked", asyncHandler(async (req, res) => {
   });
 }));
 
-app.get("/api/community/me/following", asyncHandler(async (req, res) => {
-  const actor = readActorId(req, req.query);
-  const cursor = parseCursor(req.query.cursor || "");
-  const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const sort = req.query.sort === "hot" ? "hot" : "latest";
-  const payload = await fetchFollowingFeedRows({
-    actorId: actor,
-    limit,
-    cursor,
-    sort,
-  });
-  res.json(payload);
-}));
+app.get("/api/community/me/following", asyncHandler(followingFeedHandler));
 
 app.get("/api/community/authors/:authorId/follow", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
@@ -2683,6 +2678,7 @@ app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res
     targetAuthorId,
     action,
   });
+  await cacheDel(`following:${actor}:*`);
   res.json({
     ok: true,
     authorId: targetAuthorId,
