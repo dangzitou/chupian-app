@@ -105,7 +105,7 @@ function PostCard({
         </View>
         <View style={styles.compactBody}>
           <Pressable onPress={onPress}>
-            <Text style={styles.titleCompact} numberOfLines={2}>{post.title || '无标题'}</Text>
+          <Text style={styles.titleCompact} numberOfLines={2}>{post.title || '出片记录'}</Text>
           </Pressable>
           <View style={styles.compactMetaLine}>
             <Text style={styles.compactLocation} numberOfLines={1}>{locationText}</Text>
