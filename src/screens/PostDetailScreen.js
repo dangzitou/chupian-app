@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Alert,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -64,25 +64,86 @@ function isPlayableMedia(item) {
     || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
 }
 
+function getTouchDistance(touches = []) {
+  const first = touches[0];
+  const second = touches[1];
+  if (!first || !second) return 0;
+  const dx = Number(first.pageX || 0) - Number(second.pageX || 0);
+  const dy = Number(first.pageY || 0) - Number(second.pageY || 0);
+  return Math.sqrt((dx * dx) + (dy * dy));
+}
+
+function clampZoom(value) {
+  return Math.min(3.5, Math.max(1, Number(value) || 1));
+}
+
 function MediaViewer({ item, index, count, onClose, onStep }) {
   const [loadError, setLoadError] = useState(false);
+  const zoom = useRef(new Animated.Value(1)).current;
+  const panX = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const currentScaleRef = useRef(1);
+  const gestureRef = useRef({ mode: 'idle', distance: 0, baseScale: 1 });
   useEffect(() => {
     setLoadError(false);
-  }, [item?.kind, item?.url, item?.cover]);
+    currentScaleRef.current = 1;
+    gestureRef.current = { mode: 'idle', distance: 0, baseScale: 1 };
+    zoom.setValue(1);
+    panX.setValue(0);
+    panY.setValue(0);
+  }, [item?.kind, item?.url, item?.cover, panX, panY, zoom]);
 
   const playable = isPlayableMedia(item);
   const imageUri = item?.kind === 'live' ? (item.cover || item.url) : item?.url;
+  const imageZoomable = !playable && Boolean(imageUri);
   const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gestureState) => (
-      !playable
-      && Math.abs(gestureState.dx) > 14
-      && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+    onStartShouldSetPanResponder: (event) => (
+      imageZoomable && event.nativeEvent.touches.length >= 2
     ),
+    onMoveShouldSetPanResponder: (event, gestureState) => {
+      if (imageZoomable && event.nativeEvent.touches.length >= 2) return true;
+      if (imageZoomable && currentScaleRef.current > 1) return true;
+      return Math.abs(gestureState.dx) > 14
+        && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+    },
+    onPanResponderGrant: (event) => {
+      const touches = event.nativeEvent.touches || [];
+      const distance = getTouchDistance(touches);
+      gestureRef.current = {
+        mode: imageZoomable && touches.length >= 2 ? 'pinch' : (currentScaleRef.current > 1 ? 'pan' : 'swipe'),
+        distance,
+        baseScale: currentScaleRef.current,
+      };
+    },
+    onPanResponderMove: (event, gestureState) => {
+      const touches = event.nativeEvent.touches || [];
+      if (imageZoomable && touches.length >= 2) {
+        const startDistance = gestureRef.current.distance;
+        const distance = getTouchDistance(touches);
+        if (startDistance > 0 && distance > 0) {
+          const nextScale = clampZoom(gestureRef.current.baseScale * (distance / startDistance));
+          currentScaleRef.current = nextScale;
+          zoom.setValue(nextScale);
+          if (nextScale <= 1.01) {
+            panX.setValue(0);
+            panY.setValue(0);
+          }
+          gestureRef.current.mode = 'pinch';
+        }
+        return;
+      }
+      if (imageZoomable && currentScaleRef.current > 1) {
+        gestureRef.current.mode = 'pan';
+        panX.setValue(gestureState.dx);
+        panY.setValue(gestureState.dy);
+      }
+    },
     onPanResponderRelease: (_event, gestureState) => {
+      if (imageZoomable && currentScaleRef.current > 1) return;
       if (Math.abs(gestureState.dx) < 42) return;
       onStep(gestureState.dx < 0 ? 1 : -1);
     },
-  }), [onStep, playable]);
+  }), [imageZoomable, onStep, panX, panY, zoom]);
 
   if (!item) return null;
 
@@ -122,9 +183,15 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
             />
           ) : (
             imageUri ? (
-              <Image
+              <Animated.Image
                 source={{ uri: imageUri }}
-                style={styles.viewerImage}
+                style={[styles.viewerImage, {
+                  transform: [
+                    { translateX: panX },
+                    { translateY: panY },
+                    { scale: zoom },
+                  ],
+                }]}
                 resizeMode="contain"
                 onError={() => setLoadError(true)}
               />
