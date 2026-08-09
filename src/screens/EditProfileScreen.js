@@ -145,7 +145,7 @@ export default function EditProfileScreen({ navigation }) {
             maxLength={160}
             multiline
             textAlignVertical="top"
-            placeholder="例如：广州夜景、街头和城市边缘"
+            placeholder="例如：夜景、街头和城市边缘"
             placeholderTextColor={COLORS.muted}
             editable={!loading && !saving}
           />
