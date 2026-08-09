@@ -2230,20 +2230,59 @@ app.post("/api/v1/auth/logout", asyncHandler(async (_req, res) => {
   return res.json({ ok: true });
 }));
 
-async function spotsHandler(_req, res) {
-  const cacheKey = "spots:list:v2";
+async function spotsHandler(req, res) {
+  const latitude = pickFloat(req.query.lat, null, { min: -90, max: 90 });
+  const longitude = pickFloat(req.query.lng, null, { min: -180, max: 180 });
+  const hasLocation = latitude !== null && longitude !== null;
+  const radiusKm = pickFloat(req.query.radius, 50, { min: 1, max: 50 });
+  const limit = pickInt(req.query.limit, 80, { min: 1, max: 80 });
+  const cacheKey = hasLocation
+    ? `spots:list:v3:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm.toFixed(1)}:${limit}`
+    : "spots:list:v2";
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
 
-  const spots = await query("SELECT * FROM spots ORDER BY name");
+  const candidateLimit = Math.min(Math.max(limit * 4, limit), 320);
+  const spotRows = hasLocation
+    ? await query(
+      `SELECT * FROM spots
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+         AND latitude BETWEEN ? AND ?
+         AND longitude BETWEEN ? AND ?
+       ORDER BY POW(latitude - ?, 2) + POW(longitude - ?, 2), id
+       LIMIT ?`,
+      [
+        Math.max(-90, latitude - radiusKm / 110.574),
+        Math.min(90, latitude + radiusKm / 110.574),
+        Math.max(-180, longitude - radiusKm / (111.320 * Math.max(Math.abs(Math.cos((latitude * Math.PI) / 180)), 0.15))),
+        Math.min(180, longitude + radiusKm / (111.320 * Math.max(Math.abs(Math.cos((latitude * Math.PI) / 180)), 0.15))),
+        latitude,
+        longitude,
+        candidateLimit,
+      ],
+    )
+    : await query("SELECT * FROM spots ORDER BY name");
+  const normalizedSpots = spotRows.map((s) => ({
+    ...s,
+    lat: Number(s.latitude),
+    lng: Number(s.longitude),
+    tags: safeJsonList(s.tags),
+    styles: safeJsonList(s.styles),
+  }));
+  const spots = hasLocation
+    ? normalizedSpots
+      .map((spot) => ({
+        ...spot,
+        distanceKm: mapDistanceKm(latitude, longitude, spot.lat, spot.lng),
+      }))
+      .filter((spot) => Number.isFinite(spot.distanceKm) && spot.distanceKm <= radiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, limit)
+      .map((spot) => ({ ...spot, distanceKm: Number(spot.distanceKm.toFixed(1)) }))
+    : normalizedSpots;
   const payload = {
-    spots: spots.map((s) => ({
-      ...s,
-      lat: Number(s.latitude),
-      lng: Number(s.longitude),
-      tags: safeJsonList(s.tags),
-      styles: safeJsonList(s.styles),
-    })),
+    spots,
+    ...(hasLocation ? { center: { lat: latitude, lng: longitude }, radiusKm } : {}),
   };
   await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
   return res.json(payload);
