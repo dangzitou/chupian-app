@@ -178,6 +178,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [publishError, setPublishError] = useState('');
+  const [draftStatus, setDraftStatus] = useState('idle');
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -245,9 +246,17 @@ export default function NewPostScreen({ navigation, route }) {
   const saveDraft = useCallback(async () => {
     const payload = toDraftPayload();
     if (!payload.state?.title && !payload.state?.content && !payload.mediaList.length) {
+      setDraftStatus('idle');
       return;
     }
-    await draftStorage.write(payload);
+    setDraftStatus('saving');
+    try {
+      await draftStorage.write(payload);
+      setDraftStatus('saved');
+    } catch (err) {
+      setDraftStatus('error');
+      throw err;
+    }
   }, [toDraftPayload]);
 
 
@@ -320,7 +329,12 @@ export default function NewPostScreen({ navigation, route }) {
   }, [applyDraft]);
 
   useEffect(() => {
-    if (!hasHydratedDraftRef.current) return;
+    if (!hasHydratedDraftRef.current || !hasDraftPayload) {
+      setDraftStatus('idle');
+      return undefined;
+    }
+
+    setDraftStatus('pending');
 
     if (draftTimer.current) {
       clearTimeout(draftTimer.current);
@@ -787,6 +801,7 @@ export default function NewPostScreen({ navigation, route }) {
           onPress: async () => {
             await clearDraft();
             setDraftLoaded(false);
+            setDraftStatus('idle');
           },
         },
       ],
@@ -823,6 +838,16 @@ export default function NewPostScreen({ navigation, route }) {
       ],
     );
   }, [hasDraftPayload, navigation, saveDraft]);
+
+  const draftStatusText = draftStatus === 'saving'
+    ? '正在保存草稿…'
+    : draftStatus === 'saved'
+      ? '草稿已自动保存'
+      : draftStatus === 'pending'
+        ? '修改将自动保存'
+        : draftStatus === 'error'
+          ? '草稿保存失败，请点击“保存草稿”重试'
+          : '';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -890,6 +915,14 @@ export default function NewPostScreen({ navigation, route }) {
           {!!publishError ? <Text style={styles.publishError} accessibilityLiveRegion="polite">{publishError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
           {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
+          {draftStatusText ? (
+            <Text
+              style={[styles.draftStatus, draftStatus === 'error' && styles.draftStatusError]}
+              accessibilityLiveRegion="polite"
+            >
+              {draftStatusText}
+            </Text>
+          ) : null}
 
           {(draftLoaded || hasDraftPayload) ? (
             <View style={styles.formActions}>
@@ -1439,6 +1472,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  draftStatus: {
+    color: COLORS.muted,
+    marginTop: 6,
+    fontSize: 11.5,
+    lineHeight: 17,
+  },
+  draftStatusError: { color: '#a34a2a' },
   previewWrap: {
     marginTop: 10,
   },
