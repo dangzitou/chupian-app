@@ -22,6 +22,8 @@ export default function AuthorProfileScreen({ route, navigation }) {
   const [followed, setFollowed] = useState(false);
   const [followers, setFollowers] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
+  const [followError, setFollowError] = useState('');
+  const [followLoadAttempt, setFollowLoadAttempt] = useState(0);
 
   const fetcher = useCallback((params) => api.authorPosts(authorId, params), [authorId]);
   const feed = useFeedList(fetcher, { limit: 12, sort: 'latest' });
@@ -41,11 +43,15 @@ export default function AuthorProfileScreen({ route, navigation }) {
     let alive = true;
     api.getAuthorFollow(authorId).then((state) => {
       if (!alive) return;
+      setFollowError('');
       setFollowed(Boolean(state.followed));
       setFollowers(Number(state.followers || 0));
-    }).catch(() => {});
+    }).catch((err) => {
+      if (!alive) return;
+      setFollowError(err?.message || '关注状态加载失败');
+    });
     return () => { alive = false; };
-  }, [authorId]);
+  }, [authorId, followLoadAttempt]);
 
   useEffect(() => {
     if (authorId) feed.load({ append: false });
@@ -55,6 +61,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
     if (!authorId || followBusy) return;
     const next = !followed;
     setFollowBusy(true);
+    setFollowError('');
     setFollowed(next);
     setFollowers((value) => Math.max(0, value + (next ? 1 : -1)));
     try {
@@ -64,6 +71,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
     } catch (err) {
       setFollowed(!next);
       setFollowers((value) => Math.max(0, value + (next ? -1 : 1)));
+      setFollowError(err?.message || '关注操作失败');
       Alert.alert('关注失败', err?.message || '网络异常，请稍后重试');
     } finally {
       setFollowBusy(false);
@@ -115,6 +123,19 @@ export default function AuthorProfileScreen({ route, navigation }) {
         <Pressable style={[styles.follow, followed && styles.followed]} onPress={toggleFollow} disabled={followBusy}>
           <Text style={[styles.followText, followed && styles.followedText]}>{followBusy ? '...' : (followed ? '已关注' : '关注')}</Text>
         </Pressable>
+        {followError ? (
+          <Pressable
+            style={styles.followErrorButton}
+            onPress={() => {
+              setFollowError('');
+              setFollowLoadAttempt((value) => value + 1);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="重试加载关注状态"
+          >
+            <Text style={styles.followError}>{followError} · 重试</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
@@ -194,6 +215,8 @@ const styles = StyleSheet.create({
   followed: { backgroundColor: COLORS.bgDeep },
   followText: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
   followedText: { color: COLORS.muted },
+  followErrorButton: { marginTop: 7, alignSelf: 'center' },
+  followError: { color: '#a34a2a', fontSize: 11, textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: 34, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.line },
   statItem: { minWidth: 52, alignItems: 'flex-start' },
   statNumber: { color: COLORS.ink, fontSize: 17, fontWeight: '800' },
