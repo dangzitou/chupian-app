@@ -981,7 +981,7 @@ export default function NewPostScreen({ navigation, route }) {
           error={validation.errors.title}
           value={state.title}
           onChange={(value) => setField('title', value)}
-          placeholder="例如：海珠夜景｜广州塔"
+          placeholder="例如：江边晚风｜蓝调时刻"
           maxLength={90}
         />
 
@@ -1012,7 +1012,7 @@ export default function NewPostScreen({ navigation, route }) {
             error={validation.errors.spotName}
             value={state.spotName}
             onChange={(value) => setField('spotName', value)}
-            placeholder="如：海珠区江湾路"
+            placeholder="如：河畔步道、旧厂房或公园入口"
             maxLength={80}
           />
           <PostInput
@@ -1020,7 +1020,7 @@ export default function NewPostScreen({ navigation, route }) {
             error={validation.errors.district}
             value={state.district}
             onChange={(value) => setField('district', value)}
-            placeholder="如：海珠区"
+            placeholder="如：所在区 / 县"
             maxLength={24}
           />
         </FormSection>
