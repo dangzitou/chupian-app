@@ -124,7 +124,11 @@ export default function ProfileScreen({ navigation }) {
     clearFeed,
     setBusyForPost,
     isPostBusy,
-  } = useFeedList(loadSectionPayload, { limit: PAGE_SIZE, sort: 'latest' });
+  } = useFeedList(loadSectionPayload, {
+    limit: PAGE_SIZE,
+    sort: 'latest',
+    cacheKey: `profile:${section}`,
+  });
 
   const getPostById = useCallback(
     (postId) => posts.find((item) => String(item.id) === String(postId)),

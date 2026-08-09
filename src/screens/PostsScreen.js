@@ -190,7 +190,11 @@ export default function PostsScreen({ navigation }) {
     setTag,
     setBusyForPost,
     isPostBusy,
-  } = useFeedList(feedFetcher, { limit: PAGE_SIZE, sort: 'latest' });
+  } = useFeedList(feedFetcher, {
+    limit: PAGE_SIZE,
+    sort: 'latest',
+    cacheKey: `discovery:${feedMode}`,
+  });
 
   refreshOnFocusRef.current = () => {
     load({
