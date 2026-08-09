@@ -149,10 +149,16 @@ export default function SpotDetailScreen({ navigation, route }) {
                 longitude: spot.longitude ?? spot.lng ?? '',
               };
               if (parent) {
-                parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
+                parent.navigate(APP_ROUTES.CREATE, {
+                  screen: 'NewPost',
+                  params: { prefillSpot },
+                });
                 return;
               }
-              navigation.navigate(APP_ROUTES.CREATE, { prefillSpot });
+              navigation.navigate(APP_ROUTES.CREATE, {
+                screen: 'NewPost',
+                params: { prefillSpot },
+              });
             }}
           >
             <Text style={styles.navBtnText}>＋ 去发布这个点</Text>
