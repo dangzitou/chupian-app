@@ -1,4 +1,5 @@
 import { Platform, Share } from 'react-native';
+import { PUBLIC_WEB_ORIGIN } from '../config';
 
 export function buildPostShareMessage(post = {}) {
   const title = String(post?.title || '无标题').trim();
@@ -11,9 +12,7 @@ export function buildPostShareMessage(post = {}) {
 export function buildPostShareUrl(post = {}) {
   const id = String(post?.id || '').trim();
   if (!id) return '';
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/post/${encodeURIComponent(id)}`;
-  }
+  if (PUBLIC_WEB_ORIGIN) return `${PUBLIC_WEB_ORIGIN}/post/${encodeURIComponent(id)}`;
   return `chupian://post/${encodeURIComponent(id)}`;
 }
 

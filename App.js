@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { hydrateActorId } from './src/lib/actor';
 
 import { APP_ROUTES } from './src/constants/routes';
+import { PUBLIC_WEB_ORIGIN } from './src/config';
 
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
@@ -28,7 +29,7 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const linking = {
-  prefixes: ['chupian://'],
+  prefixes: ['chupian://', PUBLIC_WEB_ORIGIN].filter(Boolean),
   config: {
     screens: {
       [APP_ROUTES.MAP]: 'map',
