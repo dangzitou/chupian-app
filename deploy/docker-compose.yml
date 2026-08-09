@@ -22,7 +22,9 @@ services:
     image: redis:7-alpine
     container_name: chupian-redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 8s
@@ -102,3 +104,4 @@ services:
 volumes:
   mysql_data:
   backend_uploads:
+  redis_data:
