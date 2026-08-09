@@ -2,6 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const MEMORY_DRAFT_STORE = new Map();
+const STORAGE_QUEUES = new Map();
+
+function enqueueStorageOperation(key, operation) {
+  const previous = STORAGE_QUEUES.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(operation);
+  STORAGE_QUEUES.set(key, next);
+  return next.finally(() => {
+    if (STORAGE_QUEUES.get(key) === next) STORAGE_QUEUES.delete(key);
+  });
+}
 
 function resolveStorageKey(namespace) {
   return String(namespace || 'chupian-draft').trim() || 'chupian-draft';
@@ -70,49 +80,59 @@ export function createDraftStorage(namespace = 'chupian-draft') {
 
   return {
     async read() {
-      if (isWebStorageAvailable()) {
-        const webValue = await localStorageRead(key);
-        if (webValue) return webValue;
-      }
-      if (Platform.OS !== 'web') {
-        try {
-          const raw = await AsyncStorage.getItem(key);
-          if (raw) return JSON.parse(raw);
-        } catch (_err) {
-          // Fall back to the in-memory store if native storage is unavailable.
+      return enqueueStorageOperation(key, async () => {
+        if (isWebStorageAvailable()) {
+          const webValue = await localStorageRead(key);
+          if (webValue) return webValue;
         }
-      }
-      return memoryRead(key);
+        if (Platform.OS !== 'web') {
+          try {
+            const raw = await AsyncStorage.getItem(key);
+            if (raw) return JSON.parse(raw);
+          } catch (_err) {
+            // Fall back to the in-memory store if native storage is unavailable.
+          }
+        }
+        return memoryRead(key);
+      });
     },
     async write(payload) {
-      if (isWebStorageAvailable()) {
-        const ok = await localStorageWrite(key, payload);
-        if (ok) return true;
-      }
-      if (Platform.OS !== 'web') {
-        try {
-          await AsyncStorage.setItem(key, JSON.stringify(payload));
-          return true;
-        } catch (_err) {
-          // Fall back to the in-memory store if native storage is unavailable.
+      return enqueueStorageOperation(key, async () => {
+        if (isWebStorageAvailable()) {
+          const ok = await localStorageWrite(key, payload);
+          if (ok) {
+            memoryRemove(key);
+            return true;
+          }
         }
-      }
-      return memoryWrite(key, payload);
+        if (Platform.OS !== 'web') {
+          try {
+            await AsyncStorage.setItem(key, JSON.stringify(payload));
+            memoryRemove(key);
+            return true;
+          } catch (_err) {
+            // Fall back to the in-memory store if native storage is unavailable.
+          }
+        }
+        return memoryWrite(key, payload);
+      });
     },
     async remove() {
-      if (isWebStorageAvailable()) {
-        const ok = await localStorageRemove(key);
-        if (ok) return true;
-      }
-      if (Platform.OS !== 'web') {
-        try {
-          await AsyncStorage.removeItem(key);
-          return true;
-        } catch (_err) {
-          // Fall back to the in-memory store if native storage is unavailable.
+      return enqueueStorageOperation(key, async () => {
+        let removed = false;
+        if (isWebStorageAvailable()) {
+          removed = await localStorageRemove(key) || removed;
         }
-      }
-      return memoryRemove(key);
+        if (Platform.OS !== 'web') {
+          try {
+            await AsyncStorage.removeItem(key);
+            removed = true;
+          } catch (_err) {
+            // Fall back to clearing the in-memory store if native storage is unavailable.
+          }
+        }
+        return memoryRemove(key) || removed;
+      });
     },
   };
 }
