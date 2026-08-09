@@ -520,7 +520,7 @@ export default function PostsScreen({ navigation }) {
 
   const handleComment = useCallback((postId) => {
     if (!postId) return;
-    navigation.navigate('PostDetail', { postId: String(postId) });
+    navigation.navigate('PostDetail', { postId: String(postId), focusComment: true });
   }, [navigation]);
 
   const openTab = useCallback((routeName) => {

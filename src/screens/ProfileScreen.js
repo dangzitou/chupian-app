@@ -401,7 +401,7 @@ export default function ProfileScreen({ navigation }) {
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
       onFollow={() => onFollow(item.id)}
-      onComment={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id } })}
+      onComment={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, focusComment: true } })}
       onShare={() => onShare(item)}
       onManage={section === 'mePosts' ? () => onDeletePost(item.id) : undefined}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}

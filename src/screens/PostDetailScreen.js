@@ -340,7 +340,7 @@ function EditChoiceField({ label, value, onChange, options }) {
 }
 
 export default function PostDetailScreen({ route, navigation }) {
-  const { postId } = route?.params || {};
+  const { postId, focusComment } = route?.params || {};
   const commentDraftStorage = useMemo(
     () => createDraftStorage(`chupian-comment-draft:${postId || 'unknown'}`),
     [postId],
@@ -371,6 +371,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const commentIdempotencyRef = useRef('');
   const commentSeedRef = useRef('');
   const commentDraftLoadedRef = useRef(false);
+  const focusCommentHandledRef = useRef(false);
   const commentsLoadingRef = useRef(false);
   const commentsCursorRef = useRef(null);
   const postRequestSeqRef = useRef(0);
@@ -608,6 +609,19 @@ export default function PostDetailScreen({ route, navigation }) {
       scrollToBottom();
     }, 80);
   }, [scrollToBottom]);
+
+  useEffect(() => {
+    focusCommentHandledRef.current = false;
+  }, [postId]);
+
+  useEffect(() => {
+    if (!focusComment || focusCommentHandledRef.current || !post?.id || loading) return undefined;
+    focusCommentHandledRef.current = true;
+    const timer = setTimeout(() => {
+      onJumpToComment();
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [focusComment, loading, onJumpToComment, post?.id]);
 
   const onShare = useCallback(async () => {
     if (!post) return;
