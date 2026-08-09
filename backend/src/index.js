@@ -2766,7 +2766,8 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
-  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId: "" });
+  const spotId = String(req.query.spotId || "").trim();
+  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId });
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
   const payload = await fetchFeedRows({
@@ -2776,6 +2777,7 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
     actorId: actor,
     q,
     tag,
+    spotId,
   });
   await cacheSetJson(cacheKey, payload, 20);
   return res.json(payload);
@@ -3289,7 +3291,8 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
-  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId: "" });
+  const spotId = String(req.query.spotId || "").trim();
+  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId });
   const cached = await cacheGetJson(cacheKey);
   if (cached) {
     return res.json({
@@ -3304,6 +3307,7 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
     actorId: actor,
     q,
     tag,
+    spotId,
   });
   await cacheSetJson(cacheKey, payload, 20);
   return res.json({

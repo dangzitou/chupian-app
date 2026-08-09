@@ -39,12 +39,15 @@ export default function SpotDetailScreen({ navigation, route }) {
     setBusyVersion((value) => value + 1);
   }, []);
   const isBusyExternal = useCallback((postId) => busyPostsRef.current.has(String(postId)), []);
+  const handlePostActionError = useCallback((actionError) => {
+    Alert.alert('操作失败', actionError?.message || '网络异常，请稍后重试。');
+  }, []);
   const postActions = usePostListActions({
     getPostById,
     patchById,
     setBusyForPost,
     isBusyExternal,
-    onError: () => {},
+    onError: handlePostActionError,
   });
 
   const shareSpotPost = useCallback(async (post) => {
