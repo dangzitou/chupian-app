@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
+import { api } from '../api';
 
 function getOnlineState() {
   if (typeof navigator === 'undefined' || typeof navigator.onLine !== 'boolean') return true;
@@ -11,19 +12,21 @@ export default function NetworkStatusBanner() {
   const [online, setOnline] = useState(true);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const unsubscribe = api.subscribeNetworkStatus(setOnline);
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return unsubscribe;
 
     const update = () => setOnline(getOnlineState());
     update();
     window.addEventListener('online', update);
     window.addEventListener('offline', update);
     return () => {
+      unsubscribe();
       window.removeEventListener('online', update);
       window.removeEventListener('offline', update);
     };
   }, []);
 
-  if (Platform.OS !== 'web' || online) return null;
+  if (online) return null;
 
   return (
     <View
