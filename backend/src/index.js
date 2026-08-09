@@ -839,14 +839,48 @@ async function loadPostMeta(rows, options = {}) {
   });
 }
 
+function buildFeedSummaryCacheKey({ actor, q = "", tag = "", spotId = "" }) {
+  const token = [q, tag, spotId]
+    .map((value) => clampString(String(value || ""), 48).toLowerCase())
+    .join("|");
+  return `feed:summary:${actor || "guest"}:${token}`;
+}
+
+async function fetchFeedSummary({ actorId, q = "", tag = "", spotId = "" }) {
+  const cacheKey = buildFeedSummaryCacheKey({ actor: actorId, q, tag, spotId });
+  return readThroughCache(cacheKey, 45, async () => {
+    const { where, params } = buildFeedBaseWhere({ q, tag, actorId, spotId });
+    const whereClause = where.join(" AND ");
+    const [totalRows, statsRows] = await Promise.all([
+      query(`SELECT COUNT(*) AS c FROM posts p WHERE ${whereClause}`, [...params]),
+      query(
+        `SELECT
+          COUNT(*) AS total_posts,
+          COUNT(DISTINCT p.author_id) AS authors,
+          COALESCE(SUM(p.stats_likes), 0) AS total_likes
+         FROM posts p
+         WHERE ${whereClause}`,
+        [...params],
+      ),
+    ]);
+    const total = Number(totalRows[0]?.c || 0);
+    const statsRow = statsRows[0] || {};
+    return {
+      total,
+      stats: {
+        totalPosts: total,
+        authors: Number(statsRow.authors || 0),
+        totalLikes: Number(statsRow.total_likes || 0),
+      },
+    };
+  });
+}
+
 async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", tag = "", spotId = "" }) {
   const max = Math.min(limit || 20, Number(MAX_FEED_LIMIT));
   const clauses = ["SELECT p.*"];
   const fromClause = " FROM posts p";
   const { where, params } = buildFeedBaseWhere({ q, tag, actorId, spotId });
-  const baseWhere = [...where];
-  const baseParams = [...params];
-  const whereClause = baseWhere.length ? ` WHERE ${baseWhere.join(" AND ")}` : "";
 
   const order = sort === "hot"
     ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
@@ -871,34 +905,15 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
   const useRows = rows.slice(0, max);
   const posts = await loadPostMeta(useRows, { includeComments: false, actor: actorId });
   const nextCursor = useRows.length === max ? makeCursor(useRows.at(-1).createdAt, useRows.at(-1).id) : null;
-
-  const totalRows = await query(
-    `SELECT COUNT(*) AS c FROM posts p${whereClause}`,
-    [...baseParams]
-  );
-  const total = Number(totalRows[0]?.c || 0);
+  const summary = await fetchFeedSummary({ actorId, q, tag, spotId });
   const hasMore = useRows.length === max;
-
-  const statsRows = await query(
-    `SELECT
-      COUNT(*) AS total_posts,
-      COUNT(DISTINCT p.author_id) AS authors,
-      COALESCE(SUM(p.stats_likes), 0) AS total_likes
-     FROM posts p${whereClause}`,
-    [...baseParams]
-  );
-  const statsRow = statsRows[0] || {};
 
   return {
     posts,
     nextCursor,
     hasMore,
-    total,
-    stats: {
-      totalPosts: total,
-      authors: Number(statsRow.authors || 0),
-      totalLikes: Number(statsRow.total_likes || 0),
-    },
+    total: summary.total,
+    stats: summary.stats,
   };
 }
 
