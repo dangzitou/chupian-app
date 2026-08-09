@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
+import { api } from '../api';
 
 const NAV_ITEMS = new Set([
   APP_ROUTES.MAP,
@@ -43,6 +44,33 @@ function PlusIcon() {
     <View style={styles.plusIcon}>
       <View style={styles.plusHorizontal} />
       <View style={styles.plusVertical} />
+    </View>
+  );
+}
+
+function NotificationBadge() {
+  const [unread, setUnread] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      const payload = await api.notifications({ limit: 1 });
+      setUnread(Math.max(0, Number(payload?.unread || 0)));
+    } catch (_err) {
+      // Notifications are non-blocking; keep the tab bar stable if unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  if (!unread) return null;
+
+  return (
+    <View style={styles.badge} accessible accessibilityLabel={`${unread} 条未读通知`}>
+      <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
     </View>
   );
 }
@@ -100,6 +128,7 @@ export default function AppTabBar({ state, descriptors, navigation }) {
               </View>
               <Text style={[styles.label, { color }, focused && styles.labelActive]}>{label}</Text>
               {focused ? <View style={styles.activeDot} /> : <View style={styles.activeDotPlaceholder} />}
+              {route.name === APP_ROUTES.PROFILE ? <NotificationBadge /> : null}
             </Pressable>
           );
         })}
@@ -125,6 +154,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   item: {
+    position: 'relative',
     flex: 1,
     minHeight: 53,
     alignItems: 'center',
@@ -178,6 +208,26 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     marginTop: 2,
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: '25%',
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: COLORS.accent,
+    borderWidth: 2,
+    borderColor: '#fffdfb',
+  },
+  badgeText: {
+    color: COLORS.white,
+    fontSize: 8.5,
+    fontWeight: '800',
+    lineHeight: 11,
   },
   mapIcon: {
     width: 20,
