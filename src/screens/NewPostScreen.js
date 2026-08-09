@@ -228,6 +228,7 @@ export default function NewPostScreen({ navigation, route }) {
     mediaList,
     coverIndex,
     publishIdempotencyKey: idempotencyKeyRef.current || '',
+    mediaIdempotencyKeys: Array.from(mediaIdempotencyRef.current.entries()),
   }), [coverIndex, mediaList, state]);
 
   const applyDraft = useCallback((draft = EMPTY_DRAFT_STATE) => {
@@ -236,6 +237,15 @@ export default function NewPostScreen({ navigation, route }) {
     const nextMedia = storedMedia.filter(isUsableDraftMedia);
     const nextCover = Number.isInteger(draft.coverIndex) ? draft.coverIndex : -1;
     idempotencyKeyRef.current = String(draft.publishIdempotencyKey || '').trim();
+    mediaIdempotencyRef.current.clear();
+    const storedIdempotencyKeys = Array.isArray(draft.mediaIdempotencyKeys)
+      ? draft.mediaIdempotencyKeys
+      : [];
+    storedIdempotencyKeys.slice(0, MAX_MEDIA_COUNT * 2).forEach(([seed, key]) => {
+      const safeSeed = String(seed || '').trim();
+      const safeKey = String(key || '').trim();
+      if (safeSeed && safeKey) mediaIdempotencyRef.current.set(safeSeed, safeKey);
+    });
 
     dispatch({ type: 'reset' });
     dispatch({
@@ -316,6 +326,7 @@ export default function NewPostScreen({ navigation, route }) {
     dispatch({ type: 'reset' });
     setMediaList([]);
     setCoverIndex(-1);
+    mediaIdempotencyRef.current.clear();
     idempotencyKeyRef.current = '';
   }, []);
 
@@ -788,6 +799,9 @@ export default function NewPostScreen({ navigation, route }) {
           return result;
         }, 2);
 
+      // Persist upload keys before the post write so a process restart can safely retry.
+      await saveDraft();
+
       const payload = {
         title: state.title.trim(),
         content: state.content.trim(),
@@ -845,6 +859,11 @@ export default function NewPostScreen({ navigation, route }) {
         navigation.goBack();
       }
     } catch (err) {
+      try {
+        await saveDraft();
+      } catch (_saveErr) {
+        // Preserve the original publish error when storage is unavailable.
+      }
       setPublishError('发布失败，草稿和已完成的上传状态已保留。检查网络后再次点击即可继续。');
     } finally {
       setSubmitting(false);
