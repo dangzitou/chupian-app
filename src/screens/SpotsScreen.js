@@ -66,6 +66,8 @@ export default function SpotsScreen({ navigation }) {
       id: String(spot.id || ''),
       name: spot.name || '',
       district: spot.district || '',
+      latitude: spot.latitude ?? spot.lat ?? '',
+      longitude: spot.longitude ?? spot.lng ?? '',
     };
     if (parent) {
       parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
