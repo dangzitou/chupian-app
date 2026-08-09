@@ -672,6 +672,23 @@ export default function NewPostScreen({ navigation, route }) {
     });
   }, []);
 
+  const moveMedia = useCallback((fromIndex, toIndex) => {
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from === to) return;
+    setMediaList((prev) => {
+      if (from < 0 || to < 0 || from >= prev.length || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+    setCoverIndex((prev) => {
+      if (prev === from) return to;
+      if (prev === to) return from;
+      return prev;
+    });
+  }, []);
+
   const validation = useMemo(() => validatePostDraft(state, mediaList), [mediaList, state]);
 
   const rewardPreview = useMemo(() => {
@@ -1203,6 +1220,7 @@ export default function NewPostScreen({ navigation, route }) {
           <MediaBuilder
             mediaList={mediaList}
             onRemove={removeMedia}
+            onMove={moveMedia}
             coverIndex={coverIndex}
             onSetCover={setCover}
           />
