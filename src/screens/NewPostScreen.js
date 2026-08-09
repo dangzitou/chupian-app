@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -123,11 +124,18 @@ function hasGranted(status) {
   return status.granted || status.status === 'granted';
 }
 
+function openAppSettings() {
+  Linking.openSettings().catch(() => {});
+}
+
 function requestGalleryPermission() {
   if (Platform.OS === 'web') return true;
   return ImagePicker.requestMediaLibraryPermissionsAsync().then((media) => {
     if (hasGranted(media)) return true;
-    Alert.alert('无权限', '请先授权相册权限');
+    Alert.alert('需要相册权限', '请在系统设置中允许访问照片，才能添加出片素材。', [
+      { text: '稍后', style: 'cancel' },
+      { text: '打开设置', onPress: openAppSettings },
+    ]);
     return false;
   });
 }
@@ -136,7 +144,10 @@ function requestCameraPermission() {
   if (Platform.OS === 'web') return true;
   return ImagePicker.requestCameraPermissionsAsync().then((camera) => {
     if (hasGranted(camera)) return true;
-    Alert.alert('无权限', '请先授权相机权限');
+    Alert.alert('需要相机权限', '请在系统设置中允许使用相机，才能直接拍摄素材。', [
+      { text: '稍后', style: 'cancel' },
+      { text: '打开设置', onPress: openAppSettings },
+    ]);
     return false;
   });
 }
