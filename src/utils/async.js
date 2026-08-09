@@ -14,6 +14,10 @@ export async function mapWithConcurrency(items, worker, concurrency = 2) {
     }
   };
 
-  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  const workerResults = await Promise.allSettled(
+    Array.from({ length: workerCount }, runWorker),
+  );
+  const failedWorker = workerResults.find((result) => result.status === 'rejected');
+  if (failedWorker) throw failedWorker.reason;
   return results;
 }
