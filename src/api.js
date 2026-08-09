@@ -865,6 +865,7 @@ export const api = {
         retryUnsafe: true,
       });
       clearNetworkCaches({ authorId: target });
+      emitNotificationRefresh();
       return result;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -875,6 +876,7 @@ export const api = {
         retryUnsafe: true,
       });
       clearNetworkCaches({ authorId: target });
+      emitNotificationRefresh();
       return result;
     }
   },
@@ -1084,6 +1086,7 @@ export const api = {
       if (action === 'like' || action === 'unlike') {
         clearNetworkCaches({ postId: id });
       }
+      emitNotificationRefresh();
       return fresh;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -1096,6 +1099,7 @@ export const api = {
       if (action === 'like' || action === 'unlike') {
         clearNetworkCaches({ postId: id });
       }
+      emitNotificationRefresh();
       return fresh;
     }
   },
@@ -1117,6 +1121,7 @@ export const api = {
       if (action === 'favorite' || action === 'unfavorite') {
         clearNetworkCaches({ postId: id });
       }
+      emitNotificationRefresh();
       return fresh;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -1130,6 +1135,7 @@ export const api = {
       if (action === 'favorite' || action === 'unfavorite') {
         clearNetworkCaches({ postId: id });
       }
+      emitNotificationRefresh();
       return { ...res, favorited: Boolean((res && res.favorited) || false) };
     }
   },
@@ -1150,6 +1156,7 @@ export const api = {
         retryUnsafe: Boolean(idempotencyKey),
       });
       clearNetworkCaches({ postId: id });
+      emitNotificationRefresh();
       return fresh;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -1160,6 +1167,7 @@ export const api = {
         retryUnsafe: Boolean(idempotencyKey),
       });
       clearNetworkCaches({ postId: id });
+      emitNotificationRefresh();
       return fresh;
     }
   },
