@@ -202,6 +202,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const [commentInput, setCommentInput] = useState('');
   const [commentSending, setCommentSending] = useState(false);
   const [commentError, setCommentError] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsCursor, setCommentsCursor] = useState(null);
@@ -246,6 +247,7 @@ export default function PostDetailScreen({ route, navigation }) {
     getPostById,
     patchById,
     busyKey: (id, stateField) => `${String(id)}:${String(stateField || '')}`,
+    onError: () => setActionError('网络不稳定，操作未完成，请重试'),
   });
 
   const loadComments = useCallback(async ({ append = false } = {}) => {
@@ -834,7 +836,17 @@ export default function PostDetailScreen({ route, navigation }) {
           ListHeaderComponentStyle={styles.header}
         />
 
-        <View style={[styles.bottomDock, { paddingBottom: Math.max(8, insets.bottom || 0) }]}>
+        <View style={[styles.bottomDock, { paddingBottom: Math.max(8, insets.bottom || 0) }]}> 
+          {!!actionError ? (
+            <Pressable
+              style={styles.actionError}
+              onPress={() => setActionError('')}
+              accessibilityRole="button"
+              accessibilityLabel="关闭操作失败提示"
+            >
+              <Text style={styles.actionErrorText}>{actionError} · 点击关闭</Text>
+            </Pressable>
+          ) : null}
           {!!commentError ? <Text style={styles.commentErr}>评论发送失败：{commentError}</Text> : null}
           <View style={styles.bottomActions}>
             <ActionBar
@@ -1470,6 +1482,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff0f0',
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  actionError: {
+    marginBottom: 6,
+    borderRadius: 8,
+    backgroundColor: '#fff0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  actionErrorText: {
+    color: '#a83f3f',
+    fontSize: 11.5,
   },
   commentFooter: {
     marginTop: 6,
