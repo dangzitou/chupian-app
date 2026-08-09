@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { COLORS } from '../config';
 import VideoSurface from './VideoSurface';
 
@@ -38,15 +38,25 @@ function MediaFallback({ kind, ratio = IMAGE_RATIO, title, hint }) {
 
 function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
   const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(item?.url || item?.cover || item?.thumbnail));
   const handleError = useCallback(() => {
     setFailed(true);
+    setLoading(false);
     onMediaError?.();
   }, [onMediaError]);
+  const handleLoadStart = useCallback(() => setLoading(true), []);
+  const handleLoad = useCallback(() => setLoading(false), []);
   useEffect(() => {
     setFailed(false);
-  }, [item?.kind, item?.url, item?.cover, retryVersion]);
+    setLoading(Boolean(item?.url || item?.cover || item?.thumbnail));
+  }, [item?.kind, item?.url, item?.cover, item?.thumbnail, retryVersion]);
   const mediaStyle = [styles.mediaWrap, { aspectRatio: ratio }];
   const videoStyle = [styles.videoSurface, { aspectRatio: ratio }];
+  const loadingOverlay = loading ? (
+    <View style={styles.loadingOverlay} pointerEvents="none">
+      <ActivityIndicator size="small" color={COLORS.accent} />
+    </View>
+  ) : null;
 
   if (!item) return null;
   if (failed) return <MediaFallback kind={item.kind} ratio={ratio} />;
@@ -64,8 +74,11 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
             source={{ uri: posterUri }}
             style={styles.posterImage}
             resizeMode="cover"
+            onLoadStart={handleLoadStart}
+            onLoad={handleLoad}
             onError={handleError}
           />
+          {loadingOverlay}
           <View style={styles.posterShade} pointerEvents="none" />
           {item.duration > 0 ? (
             <View style={styles.durationBadge}>
@@ -121,7 +134,15 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
 
   return (
     <View>
-      <Image source={{ uri: imageUri }} style={mediaStyle} resizeMode="cover" onError={handleError} />
+      <Image
+        source={{ uri: imageUri }}
+        style={mediaStyle}
+        resizeMode="cover"
+        onLoadStart={handleLoadStart}
+        onLoad={handleLoad}
+        onError={handleError}
+      />
+      {loadingOverlay}
       {item.kind === 'live' ? <Text style={styles.liveMark}>{item.cover ? '实况 · 动态' : '实况'}</Text> : null}
     </View>
   );
@@ -275,6 +296,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: 10,
     backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   mediaFallback: {
     alignItems: 'center',
