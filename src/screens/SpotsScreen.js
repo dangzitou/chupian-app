@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator, Image,
+  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
 import CATEGORIES from '../data/categories';
 import { APP_ROUTES } from '../constants/routes';
+import RemoteImage from '../components/RemoteImage';
 
 function formatDistance(value) {
   const distance = Number(value);
@@ -198,7 +199,12 @@ export default function SpotsScreen({ navigation }) {
             style={styles.card}
             onPress={() => navigation.navigate('SpotDetail', { spotId: item.id, name: item.name })}
           >
-            <Image source={{ uri: item.cover }} style={styles.cover} />
+            <RemoteImage
+              uri={item.cover}
+              style={styles.cover}
+              fallback="暂无封面"
+              accessibilityLabel={`${item.name || '出片点位'}封面`}
+            />
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               <Text style={styles.cardSub}>
