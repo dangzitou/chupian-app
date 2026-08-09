@@ -1,4 +1,4 @@
-import { POST_FIELD_LIMIT } from '../config';
+import { POST_FIELD_LIMIT, TIME_LABELS } from '../config';
 
 export function splitTags(raw) {
   if (!raw) return [];
@@ -34,7 +34,7 @@ export function toShotParamPairs(post) {
     ['地点', post.spotName || post.locationName || ''],
     ['拍摄时间', shotTime],
     ['时间窗口', post.timeWindow || post.shotTime || ''],
-    ['时段', post.bestTime || ''],
+    ['时段', TIME_LABELS[post.bestTime] || post.bestTime || ''],
     ['相机', post.gear?.camera || post.camera || ''],
     ['镜头', post.gear?.lens || post.lens || ''],
     ['焦距', post.gear?.focal || post.focal || post.focalLength || ''],
