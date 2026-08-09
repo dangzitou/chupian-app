@@ -21,6 +21,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api } from '../api';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
+import Avatar from '../components/Avatar';
 import { usePostListActions } from '../hooks/usePostListActions';
 import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
@@ -37,9 +38,7 @@ function CommentBubble({ comment }) {
   const author = comment.author || '匿名拍友';
   return (
     <View style={styles.commentItem}>
-      <View style={styles.commentAvatar}>
-        <Text style={styles.commentAvatarText}>{author.slice(0, 1)}</Text>
-      </View>
+      <Avatar name={author} uri={comment.avatar} size={28} />
       <View style={styles.commentBody}>
         <Text style={styles.commentAuthor}>{author}</Text>
         <Text style={styles.commentText}>{comment.text}</Text>
@@ -54,6 +53,7 @@ function normalizeComment(raw = {}, fallbackAuthor) {
   return {
     id: source.id || source.commentId || source._id || `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     author: source.author || source.actorName || fallbackAuthor || '匿名拍友',
+    avatar: source.avatar || source.authorAvatar || source.avatarUrl || '',
     text: source.text || source.content || '',
     createdAt: source.createdAt || source.created_at || new Date().toISOString(),
   };
@@ -1528,19 +1528,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
     paddingVertical: 10,
-  },
-  commentAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.accentBg,
-  },
-  commentAvatarText: {
-    color: COLORS.accent,
-    fontSize: 12,
-    fontWeight: '800',
   },
   commentBody: {
     flex: 1,
