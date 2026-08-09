@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 import { COLORS } from '../config';
 
 const BAR_COLOR = '#ece5de';
@@ -27,10 +27,31 @@ function SkeletonItem() {
 }
 
 export default function FeedSkeleton({ count = 3 }) {
+  const opacity = useRef(new Animated.Value(0.58)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.9,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.58,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [opacity]);
+
   return (
-    <View>
+    <Animated.View style={{ opacity }} accessibilityLabel="正在加载出片">
       {Array.from({ length: count }).map((_, idx) => <SkeletonItem key={idx} />)}
-    </View>
+    </Animated.View>
   );
 }
 
