@@ -179,6 +179,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [publishError, setPublishError] = useState('');
+  const [mediaPickerError, setMediaPickerError] = useState('');
   const [draftStatus, setDraftStatus] = useState('idle');
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
@@ -445,118 +446,129 @@ export default function NewPostScreen({ navigation, route }) {
   }, [state]);
 
   const pickFromLibrary = useCallback(async () => {
-    const ok = await requestGalleryPermission();
-    if (!ok) {
-      return;
-    }
+    setMediaPickerError('');
+    try {
+      const ok = await requestGalleryPermission();
+      if (!ok) return;
 
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 1,
-      exif: true,
-      allowsMultipleSelection: true,
-      selectionLimit: 9,
-    });
-
-    if (res.canceled || !res.assets?.length) return;
-    applyExifDefaults(res.assets[0]?.exif);
-    const candidates = res.assets
-      .map((asset) => buildMediaPayload(asset))
-      .filter(Boolean)
-      .filter((item) => {
-        if (item.kind === MEDIA_KINDS.VIDEO && item.duration > MAX_VIDEO_SECONDS) {
-          return false;
-        }
-        return true;
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 1,
+        exif: true,
+        allowsMultipleSelection: true,
+        selectionLimit: 9,
       });
-    const skippedVideos = res.assets.length - candidates.length;
-    setMediaList((prev) => {
-      if (prev.length >= MAX_MEDIA_COUNT) {
-        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
-        return prev;
+
+      if (res.canceled || !res.assets?.length) return;
+      applyExifDefaults(res.assets[0]?.exif);
+      const candidates = res.assets
+        .map((asset) => buildMediaPayload(asset))
+        .filter(Boolean)
+        .filter((item) => {
+          if (item.kind === MEDIA_KINDS.VIDEO && item.duration > MAX_VIDEO_SECONDS) {
+            return false;
+          }
+          return true;
+        });
+      const skippedVideos = res.assets.length - candidates.length;
+      setMediaList((prev) => {
+        if (prev.length >= MAX_MEDIA_COUNT) {
+          Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
+          return prev;
+        }
+        const existingSet = new Set(prev.map((item) => item.uri));
+        const next = [...prev];
+        for (const item of candidates) {
+          if (!item.uri || existingSet.has(item.uri)) continue;
+          if (next.length >= MAX_MEDIA_COUNT) break;
+          next.push(item);
+          existingSet.add(item.uri);
+        }
+        return next;
+      });
+      if (skippedVideos > 0) {
+        Alert.alert('提示', `检测到 ${skippedVideos} 个视频超过 ${MAX_VIDEO_SECONDS}s，已自动忽略`);
       }
-      const existingSet = new Set(prev.map((item) => item.uri));
-      const next = [...prev];
-      for (const item of candidates) {
-        if (!item.uri || existingSet.has(item.uri)) continue;
-        if (next.length >= MAX_MEDIA_COUNT) break;
-        next.push(item);
-        existingSet.add(item.uri);
-      }
-      return next;
-    });
-    if (skippedVideos > 0) {
-      Alert.alert('提示', `检测到 ${skippedVideos} 个视频超过 ${MAX_VIDEO_SECONDS}s，已自动忽略`);
+    } catch (_err) {
+      setMediaPickerError('相册暂时无法打开，请重试；已填写的内容和草稿不会丢失。');
     }
   }, [applyExifDefaults]);
 
   const shootWithCamera = useCallback(async () => {
-    const ok = await requestCameraPermission();
-    if (!ok) {
-      return;
-    }
+    setMediaPickerError('');
+    try {
+      const ok = await requestCameraPermission();
+      if (!ok) return;
 
-    const res = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 1,
-      exif: true,
-      videoMaxDuration: 40,
-    });
-    if (res.canceled || !res.assets?.length) return;
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 1,
+        exif: true,
+        videoMaxDuration: 40,
+      });
+      if (res.canceled || !res.assets?.length) return;
 
-    const asset = res.assets[0];
-    applyExifDefaults(asset.exif);
-    const normalized = buildMediaPayload(asset);
-    if (!normalized) return;
-    if (normalized.kind === MEDIA_KINDS.VIDEO && normalized.duration > MAX_VIDEO_SECONDS) {
-      Alert.alert('提示', `视频时长超过 ${MAX_VIDEO_SECONDS}s，不支持发布`);
-      return;
-    }
-
-    setMediaList((prev) => {
-      const existingSet = new Set(prev.map((item) => item.uri));
-      if (normalized.uri && existingSet.has(normalized.uri)) {
-        Alert.alert('提示', '这张素材已经添加过了');
-        return prev;
+      const asset = res.assets[0];
+      applyExifDefaults(asset.exif);
+      const normalized = buildMediaPayload(asset);
+      if (!normalized) return;
+      if (normalized.kind === MEDIA_KINDS.VIDEO && normalized.duration > MAX_VIDEO_SECONDS) {
+        Alert.alert('提示', `视频时长超过 ${MAX_VIDEO_SECONDS}s，不支持发布`);
+        return;
       }
-      if (prev.length >= MAX_MEDIA_COUNT) {
-        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
-        return prev;
-      }
-      return [...prev, normalized].slice(0, MAX_MEDIA_COUNT);
-    });
+
+      setMediaList((prev) => {
+        const existingSet = new Set(prev.map((item) => item.uri));
+        if (normalized.uri && existingSet.has(normalized.uri)) {
+          Alert.alert('提示', '这张素材已经添加过了');
+          return prev;
+        }
+        if (prev.length >= MAX_MEDIA_COUNT) {
+          Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
+          return prev;
+        }
+        return [...prev, normalized].slice(0, MAX_MEDIA_COUNT);
+      });
+    } catch (_err) {
+      setMediaPickerError('相机暂时无法打开，请检查权限后重试；已填写的内容和草稿不会丢失。');
+    }
   }, [applyExifDefaults]);
 
   const addLivePhoto = useCallback(async () => {
-    if (Platform.OS !== 'ios') {
-      Alert.alert('暂不支持', '实况照片目前仅支持 iPhone，请用相册添加静态图片或视频。');
-      return;
-    }
-    const ok = await requestGalleryPermission();
-    if (!ok) return;
-
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['livePhotos'],
-      quality: 1,
-      allowsMultipleSelection: false,
-      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-    });
-    if (res.canceled || !res.assets?.length) return;
-
-    const normalized = buildMediaPayload(res.assets[0]);
-    if (!normalized || normalized.kind !== MEDIA_KINDS.LIVE) {
-      Alert.alert('不是实况照片', '请在相册中选择一张 Live Photo 后重试');
-      return;
-    }
-
-    setMediaList((prev) => {
-      if (prev.length >= MAX_MEDIA_COUNT) {
-        Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
-        return prev;
+    setMediaPickerError('');
+    try {
+      if (Platform.OS !== 'ios') {
+        Alert.alert('暂不支持', '实况照片目前仅支持 iPhone，请用相册添加静态图片或视频。');
+        return;
       }
-      if (prev.some((item) => item.uri === normalized.uri)) return prev;
-      return [...prev, normalized];
-    });
+      const ok = await requestGalleryPermission();
+      if (!ok) return;
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['livePhotos'],
+        quality: 1,
+        allowsMultipleSelection: false,
+        preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
+      });
+      if (res.canceled || !res.assets?.length) return;
+
+      const normalized = buildMediaPayload(res.assets[0]);
+      if (!normalized || normalized.kind !== MEDIA_KINDS.LIVE) {
+        Alert.alert('不是实况照片', '请在相册中选择一张 Live Photo 后重试');
+        return;
+      }
+
+      setMediaList((prev) => {
+        if (prev.length >= MAX_MEDIA_COUNT) {
+          Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
+          return prev;
+        }
+        if (prev.some((item) => item.uri === normalized.uri)) return prev;
+        return [...prev, normalized];
+      });
+    } catch (_err) {
+      setMediaPickerError('实况照片暂时无法读取，请重新选择；已填写的内容和草稿不会丢失。');
+    }
   }, []);
 
   const setCover = useCallback((index) => {
@@ -1006,6 +1018,15 @@ export default function NewPostScreen({ navigation, route }) {
             <View style={styles.mediaCount}><Text style={styles.mediaCountText}>{mediaList.length}/{MAX_MEDIA_COUNT}</Text></View>
             {mediaList.length >= MAX_MEDIA_COUNT ? <Text style={styles.mediaCountWarn}>已达上限</Text> : null}
           </View>
+          {mediaPickerError ? (
+            <Pressable
+              onPress={() => setMediaPickerError('')}
+              accessibilityRole="button"
+              accessibilityLabel="关闭素材选择错误提示"
+            >
+              <Text style={styles.mediaError}>{mediaPickerError} · 点击关闭</Text>
+            </Pressable>
+          ) : null}
 
           <MediaBuilder
             mediaList={mediaList}
