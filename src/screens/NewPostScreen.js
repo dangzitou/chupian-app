@@ -36,6 +36,11 @@ const MAX_VIDEO_SECONDS = 40;
 const DRAFT_DEBOUNCE_MS = 900;
 const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
 
+function getMediaUploadSize(item) {
+  const size = Number(item?.size || item?.fileSize || item?.file?.size || 0);
+  return Number.isFinite(size) && size > 0 ? size : 0;
+}
+
 const EMPTY_DRAFT_STATE = {
   state: EMPTY_SHOT,
   coverIndex: -1,
@@ -666,44 +671,96 @@ export default function NewPostScreen({ navigation, route }) {
           ? [mediaList[coverIndex], ...mediaList.slice(0, coverIndex), ...mediaList.slice(coverIndex + 1)]
           : mediaList)
         : [];
-      const uploadTotal = orderedMediaList.reduce((total, item) => (
-        total + (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri ? 2 : 1)
-      ), 0);
-      setUploadProgress({ completed: 0, total: uploadTotal, phase: 'uploading' });
-      const markUploadComplete = () => {
+      const partProgress = new Map();
+      orderedMediaList.forEach((item, index) => {
+        const isRemoteLive = item.kind === MEDIA_KINDS.LIVE && item.uri.startsWith('http');
+        if (isRemoteLive) return;
+        partProgress.set(`${index}:still`, { loaded: 0, total: getMediaUploadSize(item) });
+        if (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri) {
+          partProgress.set(`${index}:paired`, { loaded: 0, total: getMediaUploadSize(item.pairedVideo) });
+        }
+      });
+      const uploadTotal = partProgress.size;
+      const hasKnownUploadSizes = partProgress.size > 0
+        && [...partProgress.values()].every((item) => item.total > 0);
+      setUploadProgress({
+        completed: 0,
+        total: uploadTotal,
+        bytesUploaded: 0,
+        totalBytes: [...partProgress.values()].reduce((sum, item) => sum + item.total, 0),
+        byteProgressReady: hasKnownUploadSizes,
+        phase: 'uploading',
+      });
+      const completedParts = new Set();
+      let lastProgressAt = 0;
+      const syncByteProgress = (force = false) => {
+        const now = Date.now();
+        if (!force && now - lastProgressAt < 100) return;
+        lastProgressAt = now;
+        let bytesUploaded = 0;
+        let totalBytes = 0;
+        let byteProgressReady = partProgress.size > 0;
+        for (const item of partProgress.values()) {
+          bytesUploaded += item.loaded;
+          totalBytes += item.total;
+          if (item.total <= 0) byteProgressReady = false;
+        }
         setUploadProgress((current) => current
-          ? { ...current, completed: Math.min(current.total, current.completed + 1) }
+          ? { ...current, bytesUploaded, totalBytes, byteProgressReady }
           : current);
       };
-      const uploaded = await mapWithConcurrency(orderedMediaList, async (item) => {
+      const reportPartProgress = (partKey) => (progress = {}) => {
+        const current = partProgress.get(partKey) || { loaded: 0, total: 0 };
+        const loaded = Math.max(current.loaded, Number(progress.loaded) || 0);
+        const total = Number(progress.total) > 0 ? Number(progress.total) : current.total;
+        partProgress.set(partKey, { loaded, total });
+        syncByteProgress();
+      };
+      const markUploadComplete = (partKey) => {
+        if (completedParts.has(partKey)) return;
+        completedParts.add(partKey);
+        const current = partProgress.get(partKey) || { loaded: 0, total: 0 };
+        partProgress.set(partKey, { loaded: Math.max(current.loaded, current.total), total: current.total });
+        syncByteProgress(true);
+        setUploadProgress((currentProgress) => currentProgress
+          ? {
+            ...currentProgress,
+            completed: Math.min(currentProgress.total, currentProgress.completed + 1),
+          }
+          : currentProgress);
+      };
+      const uploaded = await mapWithConcurrency(orderedMediaList, async (item, index) => {
           if (item.kind === MEDIA_KINDS.LIVE && item.uri.startsWith('http')) {
             const result = {
               kind: item.kind,
               url: item.uri,
               duration: item.duration || 0,
             };
-            markUploadComplete();
             return result;
           }
+          const stillPartKey = `${index}:still`;
           const stillRes = await api.uploadMedia(
             item.uri,
             item.mime || 'image/jpeg',
             item.kind === MEDIA_KINDS.LIVE ? MEDIA_KINDS.IMAGE : item.kind,
             item.file,
             getMediaUploadKey(item, 'still'),
+            reportPartProgress(stillPartKey),
           );
-          markUploadComplete();
+          markUploadComplete(stillPartKey);
           const stillRecord = (stillRes.media || [])[0] || {};
           let mediaRecord = stillRecord;
           if (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri) {
+            const pairedPartKey = `${index}:paired`;
             const videoRes = await api.uploadMedia(
               item.pairedVideo.uri,
               item.pairedVideo.mime || 'video/quicktime',
               MEDIA_KINDS.VIDEO,
               item.pairedVideo.file,
               getMediaUploadKey(item.pairedVideo, 'paired'),
+              reportPartProgress(pairedPartKey),
             );
-            markUploadComplete();
+            markUploadComplete(pairedPartKey);
             const videoRecord = (videoRes.media || [])[0] || {};
             mediaRecord = {
               ...videoRecord,
@@ -900,9 +957,11 @@ export default function NewPostScreen({ navigation, route }) {
         : draftStatus === 'error'
           ? '草稿保存失败，请点击“保存草稿”重试'
           : '';
-  const uploadPercent = uploadProgress?.total
-    ? Math.round(Math.min(1, Math.max(0, Number(uploadProgress.completed || 0) / Number(uploadProgress.total))) * 100)
-    : 0;
+  const uploadPercent = uploadProgress?.byteProgressReady && uploadProgress.totalBytes > 0
+    ? Math.round(Math.min(1, Math.max(0, Number(uploadProgress.bytesUploaded || 0) / Number(uploadProgress.totalBytes))) * 100)
+    : uploadProgress?.total
+      ? Math.round(Math.min(1, Math.max(0, Number(uploadProgress.completed || 0) / Number(uploadProgress.total))) * 100)
+      : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1306,7 +1365,9 @@ export default function NewPostScreen({ navigation, route }) {
               <Text style={styles.uploadProgress}>
                 {uploadProgress.phase === 'publishing'
                   ? '素材已上传，正在发布作品'
-                  : `正在上传素材 ${uploadProgress.completed}/${uploadProgress.total}`}
+                  : uploadProgress.byteProgressReady
+                    ? `正在上传素材 ${uploadPercent}%`
+                    : `正在处理素材 ${uploadProgress.completed}/${uploadProgress.total}`}
               </Text>
             </View>
           ) : null}
