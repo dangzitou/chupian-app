@@ -2193,30 +2193,86 @@ function authResponse(row, now = Math.floor(Date.now() / 1000)) {
 async function transferAnonymousActor(conn, fromActorId, user) {
   if (!fromActorId) return;
   const targetActorId = actorHash(user.id);
+  const actorName = safeText(user.display_name || "匿名拍友", 80);
+  const actorAvatar = safeText(user.avatar_url || "", 500);
+
+  // Merge duplicate reactions before changing the actor key. This keeps account
+  // creation safe when the anonymous session and the account touched the same post.
   await conn.execute(
-    "UPDATE posts SET author_id = ?, author_name = ? WHERE author_id = ?",
-    [targetActorId, user.display_name, fromActorId]
+    `DELETE source
+     FROM post_likes source
+     INNER JOIN post_likes target
+       ON target.post_id = source.post_id AND target.actor_id = ?
+     WHERE source.actor_id = ?`,
+    [targetActorId, fromActorId]
+  );
+  await conn.execute(
+    `DELETE source
+     FROM post_favorites source
+     INNER JOIN post_favorites target
+       ON target.post_id = source.post_id AND target.actor_id = ?
+     WHERE source.actor_id = ?`,
+    [targetActorId, fromActorId]
+  );
+  await conn.execute(
+    `DELETE source
+     FROM author_follows source
+     INNER JOIN author_follows target
+       ON target.followed_id = source.followed_id AND target.follower_id = ?
+     WHERE source.follower_id = ?`,
+    [targetActorId, fromActorId]
+  );
+  await conn.execute(
+    `DELETE source
+     FROM author_follows source
+     INNER JOIN author_follows target
+       ON target.follower_id = source.follower_id AND target.followed_id = ?
+     WHERE source.followed_id = ?`,
+    [targetActorId, fromActorId]
+  );
+
+  await conn.execute(
+    "UPDATE posts SET author_id = ?, author_name = ?, author_avatar = ? WHERE author_id = ?",
+    [targetActorId, actorName, actorAvatar, fromActorId]
   );
   await conn.execute(
     "UPDATE post_likes SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
-    [targetActorId, user.display_name, fromActorId]
+    [targetActorId, actorName, fromActorId]
   );
   await conn.execute(
     "UPDATE post_favorites SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
-    [targetActorId, user.display_name, fromActorId]
+    [targetActorId, actorName, fromActorId]
   );
   await conn.execute(
-    "UPDATE post_comments SET actor_id = ?, actor_name = ? WHERE actor_id = ?",
-    [targetActorId, user.display_name, fromActorId]
+    "UPDATE post_comments SET actor_id = ?, actor_name = ?, actor_avatar = ? WHERE actor_id = ?",
+    [targetActorId, actorName, actorAvatar, fromActorId]
   );
   await conn.execute(
     "UPDATE author_follows SET follower_id = ?, actor_name = ? WHERE follower_id = ?",
-    [targetActorId, user.display_name, fromActorId]
+    [targetActorId, actorName, fromActorId]
   );
   await conn.execute(
     "UPDATE author_follows SET followed_id = ? WHERE followed_id = ?",
     [targetActorId, fromActorId]
   );
+  await conn.execute(
+    "UPDATE notifications SET actor_id = ?, actor_name = ?, actor_avatar = ? WHERE actor_id = ?",
+    [targetActorId, actorName, actorAvatar, fromActorId]
+  );
+
+  // Preserve creator progress when an anonymous contributor creates an account.
+  await conn.execute(
+    `INSERT INTO creator_rewards (actor_id, points, published_count, guide_count)
+     SELECT ?, points, published_count, guide_count
+     FROM creator_rewards
+     WHERE actor_id = ?
+     ON DUPLICATE KEY UPDATE
+       points = points + VALUES(points),
+       published_count = published_count + VALUES(published_count),
+       guide_count = guide_count + VALUES(guide_count)`,
+    [targetActorId, fromActorId]
+  );
+  await conn.execute("DELETE FROM creator_rewards WHERE actor_id = ?", [fromActorId]);
 }
 
 app.post("/api/v1/auth/anonymous", asyncHandler(async (_req, res) => {
