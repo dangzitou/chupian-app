@@ -88,10 +88,16 @@ export default function SpotsScreen({ navigation }) {
       longitude: spot.longitude ?? spot.lng ?? '',
     };
     if (parent) {
-      parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
+      parent.navigate(APP_ROUTES.CREATE, {
+        screen: 'NewPost',
+        params: { prefillSpot },
+      });
       return;
     }
-    navigation.navigate(APP_ROUTES.CREATE, { prefillSpot });
+    navigation.navigate(APP_ROUTES.CREATE, {
+      screen: 'NewPost',
+      params: { prefillSpot },
+    });
   }, [navigation]);
 
   const cats = [{ id: 'all', name: '全部' }, ...CATEGORIES];
