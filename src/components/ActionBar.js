@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { formatCount } from '../utils/format';
@@ -51,6 +51,16 @@ export default function ActionBar({
   favoriteBusy = false,
   compact = false,
 }) {
+  const [shareBusy, setShareBusy] = useState(false);
+  const handleShare = useCallback(async () => {
+    if (!onShare || shareBusy) return;
+    setShareBusy(true);
+    try {
+      await onShare();
+    } finally {
+      setShareBusy(false);
+    }
+  }, [onShare, shareBusy]);
   const actionItems = [
     {
       key: 'like',
@@ -113,15 +123,24 @@ export default function ActionBar({
 
       {onShare ? (
         <Pressable
-          style={[styles.item, compact && styles.itemCompact]}
-          onPress={onShare}
+          style={({ pressed }) => [
+            styles.item,
+            compact && styles.itemCompact,
+            shareBusy && styles.itemDisabled,
+            pressed && !shareBusy && styles.itemPressed,
+          ]}
+          onPress={handleShare}
+          disabled={shareBusy}
           accessibilityRole="button"
-          accessibilityLabel="分享这条出片记录"
+          accessibilityLabel={shareBusy ? '正在分享这条出片记录' : '分享这条出片记录'}
+          accessibilityState={{ disabled: shareBusy }}
+          accessibilityHint={shareBusy ? '分享面板正在打开' : undefined}
+          accessibilityLiveRegion={shareBusy ? 'polite' : 'none'}
           hitSlop={8}
           pressRetentionOffset={{ top: 8, right: 8, bottom: 8, left: 8 }}
           android_ripple={{ color: COLORS.accentSoft, borderless: true }}
         >
-          <ActionGlyph type="share" compact={compact} />
+          <ActionGlyph type="share" busy={shareBusy} compact={compact} />
           <Text style={[styles.text, compact && styles.textCompact]}>分享</Text>
         </Pressable>
       ) : null}
