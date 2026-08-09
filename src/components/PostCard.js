@@ -261,7 +261,20 @@ function PostCard({
   );
 }
 
-export default memo(PostCard);
+function arePostCardPropsEqual(previous, next) {
+  return previous.post === next.post
+    && previous.compact === next.compact
+    && previous.showFollow === next.showFollow
+    && previous.hideCompactAuthor === next.hideCompactAuthor
+    && previous.likeBusy === next.likeBusy
+    && previous.favoriteBusy === next.favoriteBusy
+    && previous.followBusy === next.followBusy
+    && previous.manageBusy === next.manageBusy
+    && previous.style === next.style
+    && Boolean(previous.onManage) === Boolean(next.onManage);
+}
+
+export default memo(PostCard, arePostCardPropsEqual);
 
 const styles = StyleSheet.create({
   card: {
