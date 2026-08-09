@@ -8,6 +8,7 @@ import { COLORS, TIME_LABELS } from '../config';
 import CATEGORIES from '../data/categories';
 import { APP_ROUTES } from '../constants/routes';
 import RemoteImage from '../components/RemoteImage';
+import { getCurrentLocation } from '../utils/location';
 
 function formatDistance(value) {
   const distance = Number(value);
@@ -62,15 +63,16 @@ export default function SpotsScreen({ navigation }) {
     let alive = true;
     setLocationLoading(true);
     setLocationError('');
-    api.resolveLocation()
+    getCurrentLocation()
+      .catch(() => api.resolveLocation().then((payload) => payload?.location || null))
       .then((payload) => {
         if (!alive) return;
-        const lat = Number(payload?.location?.lat);
-        const lng = Number(payload?.location?.lng);
+        const lat = Number(payload?.lat);
+        const lng = Number(payload?.lng);
         setLocation(
           Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
         );
-        setLocationLabel(String(payload?.location?.label || '').trim());
+        setLocationLabel(String(payload?.label || '').trim());
       })
       .catch(() => {
         if (alive) {
