@@ -853,9 +853,6 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
     : " ORDER BY p.created_at DESC, p.id DESC";
 
   clauses.push(
-    ", (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = p.id) AS likes_count",
-    ", (SELECT COUNT(*) FROM post_favorites f WHERE f.post_id = p.id) AS favorites_count",
-    ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comments_count",
     ", EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked",
     ", EXISTS (SELECT 1 FROM post_favorites f WHERE f.post_id = p.id AND f.actor_id = ?) AS favorited",
     ", EXISTS (SELECT 1 FROM author_follows af WHERE af.follower_id = ? AND af.followed_id = p.author_id) AS followed"
