@@ -408,6 +408,7 @@ function normalizeNotificationsResponse(raw = {}) {
       type: item.type || 'comment',
       actorId: item.actorId || item.actor_id || '',
       actorName: item.actorName || item.actor_name || '匿名拍友',
+      avatar: item.avatar || item.actorAvatar || item.avatar_url || '',
       postId: item.postId || item.post_id || null,
       postTitle: item.postTitle || item.post_title || '',
       content: item.content || '',
