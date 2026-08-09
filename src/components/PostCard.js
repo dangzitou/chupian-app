@@ -12,8 +12,14 @@ function AuthorAvatar({ name, uri, size }) {
   return <Avatar name={name} uri={uri} size={size} />;
 }
 
-function TagPill({ children }) {
-  return <Text style={styles.tagPill}>{children}</Text>;
+function TagPill({ children, onPress }) {
+  const content = <Text style={styles.tagPill}>{children}</Text>;
+  if (!onPress) return content;
+  return (
+    <Pressable onPress={onPress} style={styles.tagPressable} accessibilityRole="button">
+      {content}
+    </Pressable>
+  );
 }
 
 function PostCard({
@@ -26,6 +32,7 @@ function PostCard({
   onShare,
   onManage,
   onFollow,
+  onTagPress,
   showFollow = true,
   hideCompactAuthor = false,
   likeBusy = false,
@@ -78,6 +85,7 @@ function PostCard({
   const handleShare = useCallback(() => onShare?.(post), [onShare, post]);
   const handleFollow = useCallback(() => onFollow?.(post.id), [onFollow, post.id]);
   const handleManage = useCallback(() => onManage?.(post.id), [onManage, post.id]);
+  const handleTagPress = useCallback((tag) => onTagPress?.(tag), [onTagPress]);
 
   const locationText = [post.spotName || '未知地点', post.district].filter(Boolean).join(' · ') || '匿名作品';
   const subtitle = useMemo(() => {
@@ -237,9 +245,9 @@ function PostCard({
 
         {tags.length > 0 ? (
           <View style={styles.tagsWrap}>
-            {tags.map((tag) => (
-              <Text style={styles.tagPill} key={tag}>#{tag}</Text>
-            ))}
+          {tags.map((tag) => (
+              <TagPill key={tag} onPress={onTagPress ? () => handleTagPress(tag) : undefined}>#{tag}</TagPill>
+          ))}
           </View>
         ) : null}
 
@@ -290,7 +298,8 @@ function arePostCardPropsEqual(previous, next) {
     && previous.onComment === next.onComment
     && previous.onShare === next.onShare
     && previous.onManage === next.onManage
-    && previous.onFollow === next.onFollow;
+    && previous.onFollow === next.onFollow
+    && previous.onTagPress === next.onTagPress;
 }
 
 export default memo(PostCard, arePostCardPropsEqual);
@@ -378,6 +387,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
+  },
+  tagPressable: {
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   tagRow: {
     flexDirection: 'row',
