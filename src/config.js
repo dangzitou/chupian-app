@@ -22,6 +22,20 @@ const resolveApiBase = () => {
 export const API_BASE = resolveApiBase();
 export const API_PREFIX = '/api/v1';
 
+const resolvePublicWebOrigin = () => {
+  const configured =
+    (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_WEB_ORIGIN) ||
+    (typeof process !== 'undefined' && process.env.PUBLIC_WEB_ORIGIN);
+
+  if (configured) return String(configured).replace(/\/+$/, '');
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return String(window.location.origin).replace(/\/+$/, '');
+  }
+  return API_BASE;
+};
+
+export const PUBLIC_WEB_ORIGIN = resolvePublicWebOrigin();
+
 export const TIME_LABELS = {
   day: '白天',
   golden: '黄金时刻',
