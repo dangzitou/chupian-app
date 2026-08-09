@@ -31,6 +31,7 @@ const {
   MAX_JSON_SIZE = "2mb",
   MAX_FILE_SIZE = "120mb",
   SPOT_CACHE_TTL = "90",
+  MEDIA_PUBLIC_URL = "",
 } = process.env;
 
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
@@ -64,8 +65,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, "..");
 const ASSET_DIR = path.join(ROOT_DIR, UPLOAD_DIR);
+const MEDIA_BASE_URL = String(MEDIA_PUBLIC_URL || "").trim().replace(/\/+$/, "");
 
 fs.mkdirSync(ASSET_DIR, { recursive: true });
+
+function buildMediaUrl(req, filename) {
+  const safeFilename = encodeURIComponent(String(filename || ""));
+  if (MEDIA_BASE_URL) return `${MEDIA_BASE_URL}/${safeFilename}`;
+  return `${req.protocol}://${req.get("host")}/media/${safeFilename}`;
+}
 
 const allowedExtensions = new Set(ALLOWED_UPLOAD_EXT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
 const allowedMimes = new Set([
@@ -3108,7 +3116,7 @@ app.post("/api/v1/media/upload", (req, res, next) => {
       ok: true,
       media: [{
         kind: req.file.mimetype?.startsWith("video/") ? "video" : "image",
-        url: `${req.protocol}://${req.get("host")}/media/${req.file.filename}`,
+        url: buildMediaUrl(req, req.file.filename),
         duration: 0,
       }],
     };
