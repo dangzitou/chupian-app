@@ -45,6 +45,7 @@ const EMPTY_DRAFT_STATE = {
   state: EMPTY_SHOT,
   coverIndex: -1,
   mediaList: [],
+  publishIdempotencyKey: '',
 };
 
 function isUsableDraftMedia(item) {
@@ -226,6 +227,7 @@ export default function NewPostScreen({ navigation, route }) {
     state,
     mediaList,
     coverIndex,
+    publishIdempotencyKey: idempotencyKeyRef.current || '',
   }), [coverIndex, mediaList, state]);
 
   const applyDraft = useCallback((draft = EMPTY_DRAFT_STATE) => {
@@ -233,6 +235,7 @@ export default function NewPostScreen({ navigation, route }) {
     const storedMedia = Array.isArray(draft.mediaList) ? draft.mediaList.filter(Boolean) : [];
     const nextMedia = storedMedia.filter(isUsableDraftMedia);
     const nextCover = Number.isInteger(draft.coverIndex) ? draft.coverIndex : -1;
+    idempotencyKeyRef.current = String(draft.publishIdempotencyKey || '').trim();
 
     dispatch({ type: 'reset' });
     dispatch({
@@ -665,6 +668,9 @@ export default function NewPostScreen({ navigation, route }) {
     try {
       // Keep the draft until the post transaction succeeds. A page refresh after
       // a failed upload must not erase the user's text or shooting metadata.
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = buildSessionIdempotencyKey('post-create', `${state.spotId || ''}-${state.author || ''}`);
+      }
       await saveDraft();
       const orderedMediaList = mediaList.length
         ? (coverIndex > 0 && coverIndex < mediaList.length
@@ -814,9 +820,6 @@ export default function NewPostScreen({ navigation, route }) {
         ? { ...current, phase: 'publishing' }
         : current);
 
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = buildSessionIdempotencyKey('post-create', `${state.spotId || ''}-${state.author || ''}`);
-      }
       const created = await api.createPost(payload, idempotencyKeyRef.current);
       await clearDraft();
       mediaIdempotencyRef.current.clear();
