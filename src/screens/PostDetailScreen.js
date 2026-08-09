@@ -346,6 +346,8 @@ export default function PostDetailScreen({ route, navigation }) {
   const commentSeedRef = useRef('');
   const commentsLoadingRef = useRef(false);
   const commentsCursorRef = useRef(null);
+  const postRequestSeqRef = useRef(0);
+  const commentsRequestSeqRef = useRef(0);
 
   const applyPost = useCallback((updater) => {
     setPost((prev) => {
@@ -378,6 +380,8 @@ export default function PostDetailScreen({ route, navigation }) {
   const loadComments = useCallback(async ({ append = false } = {}) => {
     if (!postId) return;
     if (commentsLoadingRef.current) return;
+    const requestSeq = commentsRequestSeqRef.current + 1;
+    commentsRequestSeqRef.current = requestSeq;
     const cursor = append ? commentsCursorRef.current : null;
     commentsLoadingRef.current = true;
     setCommentsLoading(true);
@@ -394,6 +398,7 @@ export default function PostDetailScreen({ route, navigation }) {
         limit: COMMENT_PAGE_SIZE,
         cursor,
       });
+      if (requestSeq !== commentsRequestSeqRef.current) return;
       setComments((prev) => {
         const merged = append ? [...prev, ...payload.comments] : payload.comments;
         const seen = new Set();
@@ -409,6 +414,7 @@ export default function PostDetailScreen({ route, navigation }) {
       commentsCursorRef.current = nextCursor;
       setCommentsHasMore(Boolean(payload.hasMore));
     } catch (err) {
+      if (requestSeq !== commentsRequestSeqRef.current) return;
       setCommentsLoadError(err?.message || '评论加载失败');
       if (!append) {
         setComments([]);
@@ -416,6 +422,7 @@ export default function PostDetailScreen({ route, navigation }) {
         setCommentsHasMore(false);
       }
     } finally {
+      if (requestSeq !== commentsRequestSeqRef.current) return;
       commentsLoadingRef.current = false;
       setCommentsLoading(false);
     }
@@ -423,6 +430,11 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const loadPost = useCallback(async () => {
     if (!postId) return;
+    const requestSeq = postRequestSeqRef.current + 1;
+    postRequestSeqRef.current = requestSeq;
+    commentsRequestSeqRef.current += 1;
+    commentsLoadingRef.current = false;
+    setCommentsLoading(false);
     setLoading(true);
     setError(null);
     setCommentError(null);
@@ -430,14 +442,17 @@ export default function PostDetailScreen({ route, navigation }) {
 
     try {
       const payload = await api.getPost(postId, { withComments: false });
+      if (requestSeq !== postRequestSeqRef.current) return;
       setPost(payload);
       commentIdempotencyRef.current = '';
       commentSeedRef.current = '';
       await loadComments();
     } catch (err) {
+      if (requestSeq !== postRequestSeqRef.current) return;
       setError(err?.message || '加载失败');
       setPost(null);
     } finally {
+      if (requestSeq !== postRequestSeqRef.current) return;
       setLoading(false);
       setRefreshing(false);
     }
