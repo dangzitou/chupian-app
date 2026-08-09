@@ -3,7 +3,26 @@ import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
+import { NEW_POST_DRAFT_STORAGE_KEY } from '../constants/storage';
 import { api } from '../api';
+import { createDraftStorage } from '../hooks/useDraftStorage';
+
+const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
+const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function hasDraftContent(raw) {
+  if (!raw || !raw.state) return false;
+  if (raw.savedAt && Date.now() - Number(raw.savedAt) > DRAFT_MAX_AGE_MS) return false;
+  const state = raw.state;
+  const fields = [
+    'title', 'content', 'tags', 'stylesText', 'spotName', 'district', 'author', 'authorBio',
+    'angle', 'direction', 'timeWindow', 'shotAt', 'bestTime', 'camera', 'lens', 'focal',
+    'aperture', 'shutter', 'iso', 'whiteBalance', 'latitude', 'longitude',
+  ];
+  return fields.some((key) => String(state[key] || '').trim())
+    || (Array.isArray(raw.mediaList) && raw.mediaList.length > 0)
+    || Number(raw.coverIndex) >= 0;
+}
 
 const NAV_ITEMS = new Set([
   APP_ROUTES.MAP,
@@ -99,6 +118,43 @@ function NotificationBadge() {
   );
 }
 
+function DraftBadge({ onChange }) {
+  const [hasDraft, setHasDraft] = useState(false);
+  const loadingRef = useRef(false);
+
+  const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const raw = await draftStorage.read();
+      const next = hasDraftContent(raw);
+      setHasDraft(next);
+      onChange?.(next);
+    } catch (_err) {
+      setHasDraft(false);
+      onChange?.(false);
+    } finally {
+      loadingRef.current = false;
+    }
+  }, [onChange]);
+
+  useEffect(() => {
+    load();
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') load();
+    });
+    return () => subscription?.remove?.();
+  }, [load]);
+
+  if (!hasDraft) return null;
+
+  return (
+    <View style={styles.draftBadge} accessible accessibilityLabel="有未完成草稿">
+      <Text style={styles.draftBadgeText}>草稿</Text>
+    </View>
+  );
+}
+
 function TabGlyph({ routeName, color, isCreate }) {
   if (isCreate) return <PlusIcon />;
   if (routeName === APP_ROUTES.MAP) return <MapIcon color={color} />;
@@ -108,6 +164,7 @@ function TabGlyph({ routeName, color, isCreate }) {
 
 export default function AppTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const [hasDraft, setHasDraft] = useState(false);
   const bottomInset = Platform.OS === 'web' ? Math.max(8, insets.bottom) : insets.bottom;
   const activeRoute = state.routes[state.index];
   if (activeRoute?.name === APP_ROUTES.CREATE) return null;
@@ -142,7 +199,7 @@ export default function AppTabBar({ state, descriptors, navigation }) {
               onPress={onPress}
               onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
               accessibilityRole="tab"
-              accessibilityLabel={options.tabBarAccessibilityLabel || label}
+              accessibilityLabel={options.tabBarAccessibilityLabel || (isCreate && hasDraft ? '发布，有未完成草稿' : label)}
               accessibilityState={focused ? { selected: true } : {}}
               testID={options.tabBarButtonTestID}
               hitSlop={6}
@@ -152,6 +209,7 @@ export default function AppTabBar({ state, descriptors, navigation }) {
               </View>
               <Text style={[styles.label, { color }, focused && styles.labelActive]}>{label}</Text>
               {focused ? <View style={styles.activeDot} /> : <View style={styles.activeDotPlaceholder} />}
+              {isCreate ? <DraftBadge onChange={setHasDraft} /> : null}
               {route.name === APP_ROUTES.PROFILE ? <NotificationBadge /> : null}
             </Pressable>
           );
@@ -256,6 +314,26 @@ const styles = StyleSheet.create({
     borderColor: '#fffdfb',
   },
   badgeText: {
+    color: COLORS.white,
+    fontSize: 8.5,
+    fontWeight: '800',
+    lineHeight: 11,
+  },
+  draftBadge: {
+    position: 'absolute',
+    top: -7,
+    right: '12%',
+    minWidth: 25,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: COLORS.ink,
+    borderWidth: 2,
+    borderColor: '#fffdfb',
+  },
+  draftBadgeText: {
     color: COLORS.white,
     fontSize: 8.5,
     fontWeight: '800',
