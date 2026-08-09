@@ -449,6 +449,25 @@ export default function PostsScreen({ navigation }) {
     }
   }, [activeTag, load, q, setSort, setTag, sort]);
 
+  const clearDiscoveryFilters = useCallback(() => {
+    const dataChanged = Boolean(q) || Boolean(activeTag) || sort !== 'latest';
+    setSearchInput('');
+    setActiveTag('');
+    setTag('');
+    setSort('latest');
+    setFeedLayout('masonry');
+    setFiltersOpen(false);
+    if (dataChanged) {
+      load({
+        append: false,
+        cursor: null,
+        nextSort: 'latest',
+        nextQ: '',
+        nextTag: '',
+      });
+    }
+  }, [activeTag, load, q, setSort, setTag, sort]);
+
   const onLike = useCallback((postId) => toggleAction({
     postId,
     metricField: 'likes',
@@ -735,6 +754,16 @@ export default function PostsScreen({ navigation }) {
                     <Text style={styles.retryText}>刷新</Text>
                   </Pressable>
                 </View>
+              ) : null}
+              {showEmpty && !error && (q || activeTag || sort !== 'latest') ? (
+                <Pressable
+                  style={styles.clearEmptyBtn}
+                  onPress={clearDiscoveryFilters}
+                  accessibilityRole="button"
+                  accessibilityLabel="清除搜索和筛选条件"
+                >
+                  <Text style={styles.clearEmptyText}>清除搜索和筛选</Text>
+                </Pressable>
               ) : null}
             </View>
           )
