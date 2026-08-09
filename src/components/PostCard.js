@@ -70,6 +70,9 @@ function PostCard({
     (onAuthorPress || onPress)?.(post);
   }, [onAuthorPress, onPress, post]);
   const handleLike = useCallback(() => onLike?.(post.id), [onLike, post.id]);
+  const handleDoubleTap = useCallback(() => {
+    if (!post.liked) onLike?.(post.id);
+  }, [onLike, post.id, post.liked]);
   const handleFavorite = useCallback(() => onFavorite?.(post.id), [onFavorite, post.id]);
   const handleComment = useCallback(() => onComment?.(post.id), [onComment, post.id]);
   const handleShare = useCallback(() => onShare?.(post), [onShare, post]);
@@ -104,7 +107,8 @@ function PostCard({
         <View style={styles.compactMediaWrap}>
           <MediaGallery
             media={cardMedia}
-            onPressImage={onPress}
+            onPressImage={handlePress}
+            onDoubleTap={handleDoubleTap}
             showAll={false}
             columns={1}
             containerWidth={Math.max(0, cardWidth - 4)}
@@ -199,6 +203,7 @@ function PostCard({
         <MediaGallery
           media={cardMedia}
           onPressImage={handlePress}
+          onDoubleTap={handleDoubleTap}
           showAll={!compact}
           columns={compact ? 1 : mediaColumns}
           containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
