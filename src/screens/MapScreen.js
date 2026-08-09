@@ -53,7 +53,9 @@ const sanitize = (value) => String(value || '')
 
 export default function MapScreen({ navigation, route }) {
   const [error, setError] = useState(false);
+  const [mapDataError, setMapDataError] = useState(false);
   const [mapRevision, setMapRevision] = useState(0);
+  const [mapDataAttempt, setMapDataAttempt] = useState(0);
   const [webLocation, setWebLocation] = useState(null);
   const [spots, setSpots] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -639,6 +641,7 @@ export default function MapScreen({ navigation, route }) {
           if (!savedAt || Date.now() - savedAt > MAP_CACHE_MAX_AGE_MS) return;
           const payload = cached?.payload || {};
           cacheApplied = true;
+          setMapDataError(false);
           setSpots(Array.isArray(payload.spots) ? payload.spots : []);
           setPosts(Array.isArray(payload.posts) ? payload.posts : []);
         } catch (_err) {
@@ -651,6 +654,7 @@ export default function MapScreen({ navigation, route }) {
       .then((payload) => {
         if (!alive) return;
         freshLoaded = true;
+        setMapDataError(false);
         setSpots(Array.isArray(payload?.spots) ? payload.spots : []);
         setPosts(Array.isArray(payload?.posts) ? payload.posts : []);
         AsyncStorage.setItem(cacheKey, JSON.stringify({
@@ -666,6 +670,7 @@ export default function MapScreen({ navigation, route }) {
         if (cacheApplied) return;
         setSpots([]);
         setPosts([]);
+        setMapDataError(true);
       });
 
     return () => {
@@ -791,10 +796,11 @@ export default function MapScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => {
     mapDataLocationRef.current = '';
     return loadMapData(focusLocation || webLocation || resolvedLocation);
-  }, [focusLocation, loadMapData, resolvedLocation, webLocation]));
+  }, [focusLocation, loadMapData, mapDataAttempt, resolvedLocation, webLocation]));
 
   const retryLocation = useCallback(() => {
     setError(false);
+    setMapDataError(false);
     setLocationStatus('locating');
     if (focusLocation) return;
     setWebLocation(null);
@@ -869,11 +875,15 @@ export default function MapScreen({ navigation, route }) {
 
   const retryMap = useCallback(() => {
     setError(false);
+    setMapDataError(false);
+    mapDataLocationRef.current = '';
     setMapRevision((value) => value + 1);
+    setMapDataAttempt((value) => value + 1);
   }, []);
 
   const locationPending = !focusLocation && !currentLocation && locationStatus === 'locating';
   const locationUnavailable = !focusLocation && !currentLocation && locationStatus === 'error';
+  const mapUnavailable = error || mapDataError;
 
   return (
     <View style={styles.container}>
@@ -909,7 +919,7 @@ export default function MapScreen({ navigation, route }) {
           )}
         />
       )}
-      {!error ? (
+      {!mapUnavailable ? (
         <View style={styles.actionsWrap} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="标记出片点位"
@@ -1021,7 +1031,7 @@ export default function MapScreen({ navigation, route }) {
           ) : null}
         </View>
       ) : null}
-      {error ? (
+      {mapUnavailable ? (
         <View style={styles.errorOverlay}>
           <Text style={styles.errorTitle}>地图暂时加载失败</Text>
           <Text style={styles.errorHint}>请检查网络后重试，已保存的作品不会受影响。</Text>
@@ -1230,7 +1240,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: COLORS.bg,
+    backgroundColor: 'rgba(230,237,243,0.62)',
   },
   locationTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700', marginTop: 8 },
   locationHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
