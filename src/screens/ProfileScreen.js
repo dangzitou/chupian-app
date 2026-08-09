@@ -19,6 +19,7 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { sharePost } from '../utils/share';
+import { getCreatorTier } from '../utils/rewards';
 import { getActorName, isAuthenticated } from '../lib/actor';
 
 const PAGE_SIZE = 8;
@@ -64,15 +65,22 @@ function CreatorRewardCard({ reward, onOpenCreate }) {
   const publishedCount = Number(reward?.publishedCount || 0);
   const guideCount = Number(reward?.guideCount || 0);
   const nextGuidePoints = Number(reward?.nextGuidePoints || 15);
+  const tier = getCreatorTier(points);
   const guideRewardText = guideCount > 0
     ? `已完成 ${guideCount} 篇攻略 · 下一篇完整攻略再得 +${nextGuidePoints}`
     : `发布第一篇即可得 +5 · 完整攻略再得 +${nextGuidePoints}`;
   return (
     <View style={styles.rewardCard}>
       <View style={styles.rewardCopy}>
-        <Text style={styles.rewardTitle}>贡献值 {points}</Text>
+        <Text style={styles.rewardTitle}>{tier.current.name} · 贡献值 {points}</Text>
         <Text style={styles.rewardMeta}>已发布 {publishedCount} 条 · 完整攻略 {guideCount} 条</Text>
         <Text style={styles.rewardNext}>{guideRewardText}</Text>
+        <View style={styles.rewardProgressTrack}>
+          <View style={[styles.rewardProgressFill, { width: `${tier.progress * 100}%` }]} />
+        </View>
+        <Text style={styles.rewardProgressText}>
+          {tier.next ? `距离${tier.next.name}还差 ${tier.remaining} 贡献值` : '已解锁最高贡献等级，继续记录城市光影'}
+        </Text>
       </View>
       <Pressable style={styles.rewardAction} onPress={onOpenCreate} accessibilityRole="button">
         <Text style={styles.rewardActionText}>继续发布</Text>
@@ -575,6 +583,19 @@ const styles = StyleSheet.create({
   rewardTitle: { color: COLORS.accent, fontSize: 14, fontWeight: '800' },
   rewardMeta: { color: COLORS.ink, fontSize: 11.5, marginTop: 3 },
   rewardNext: { color: COLORS.muted, fontSize: 11, marginTop: 3, lineHeight: 16 },
+  rewardProgressTrack: {
+    height: 5,
+    marginTop: 7,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: 'rgba(217,54,87,0.16)',
+  },
+  rewardProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: COLORS.accent,
+  },
+  rewardProgressText: { color: COLORS.muted, fontSize: 10.5, marginTop: 4 },
   rewardAction: {
     borderRadius: 999,
     paddingHorizontal: 10,
