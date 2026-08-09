@@ -51,6 +51,7 @@ const WEATHER_LOOKUP_TIMEOUT_MS = Number.parseInt(process.env.WEATHER_LOOKUP_TIM
 const HTTP_KEEP_ALIVE_TIMEOUT_MS = Number.parseInt(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || "65000", 10) || 65000;
 const HTTP_HEADERS_TIMEOUT_MS = Number.parseInt(process.env.HTTP_HEADERS_TIMEOUT_MS || "20000", 10) || 20000;
 const HTTP_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS || "180000", 10) || 180000;
+const POST_VIEW_TTL_SECONDS = Number.parseInt(process.env.POST_VIEW_TTL_SECONDS || "1800", 10) || 1800;
 const IDEMPOTENCY_TTL_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "3600", 10) || 3600;
 const IDEMPOTENCY_LOCK_SECONDS = Number.parseInt(process.env.IDEMPOTENCY_LOCK_SECONDS || "60", 10) || 60;
 const ACTOR_SESSION_TTL_SECONDS = Number.parseInt(process.env.ACTOR_SESSION_TTL_SECONDS || String(60 * 60 * 24 * 180), 10) || 60 * 60 * 24 * 180;
@@ -1551,8 +1552,16 @@ async function getPostHandler(req, res) {
   if (!rows.length) return res.status(404).json({ error: "post not found" });
 
   const post = (await loadPostMeta(rows, { includeComments: withComments, actor }))[0];
-  await query("UPDATE posts SET stats_views = stats_views + 1 WHERE id = ?", [postId]);
-  post.views += 1;
+  const viewerKey = String(actor || req.ip || "guest").slice(0, 160);
+  const counted = await cacheSetIfNotExists(
+    `post:view:${postId}:${viewerKey}`,
+    "1",
+    POST_VIEW_TTL_SECONDS,
+  );
+  if (counted) {
+    await query("UPDATE posts SET stats_views = stats_views + 1 WHERE id = ?", [postId]);
+    post.views += 1;
+  }
   await cacheSetJson(cacheKey, { post }, 120);
   return res.json({ post });
 }
