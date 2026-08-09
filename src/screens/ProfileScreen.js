@@ -384,9 +384,13 @@ export default function ProfileScreen({ navigation }) {
   const onShare = useCallback(async (item) => {
     if (!item) return;
     try {
-      await sharePost(item);
-    } catch (_err) {
-      // share unsupported in current runtime, fail silently for list usage
+      const result = await sharePost(item);
+      if (result === 'copied') {
+        Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      Alert.alert('分享失败', err?.message || '当前环境暂不支持分享，请稍后重试。');
     }
   }, []);
 

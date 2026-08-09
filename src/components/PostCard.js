@@ -182,7 +182,7 @@ function PostCard({
               onLike={handleLike}
               onFavorite={handleFavorite}
               onComment={handleComment}
-              onShare={null}
+              onShare={handleShare}
             />
             {onManage ? (
               <Pressable

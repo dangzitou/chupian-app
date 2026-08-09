@@ -141,7 +141,7 @@ export default function ActionBar({
           android_ripple={{ color: COLORS.accentSoft, borderless: true }}
         >
           <ActionGlyph type="share" busy={shareBusy} compact={compact} />
-          <Text style={[styles.text, compact && styles.textCompact]}>分享</Text>
+          {compact ? null : <Text style={styles.text}>分享</Text>}
         </Pressable>
       ) : null}
     </View>
