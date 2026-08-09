@@ -95,6 +95,7 @@ export default function ProfileScreen({ navigation }) {
   const [actorAvatar, setActorAvatar] = useState(() => String(getCurrentUser()?.avatar || '').trim());
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
   const focusedAuthState = useRef(isAuthenticated());
+  const metricsRequestSeqRef = useRef(0);
   const [weather, setWeather] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -155,44 +156,51 @@ export default function ProfileScreen({ navigation }) {
   });
 
   const loadSectionMetrics = useCallback(async () => {
-    try {
-      const [locationPayload, userPostsFeed, spotCountPayload, notificationPayload, rewardPayload] = await Promise.all([
-        api.resolveLocation().catch(() => null),
-        api.mePosts({ limit: 1, sort: 'latest' }),
-        api.meSpotCount().catch(() => ({ count: 0 })),
-        api.notifications({ limit: 1 }),
-        api.rewards().catch(() => ({
-          points: 0,
-          publishedCount: 0,
-          guideCount: 0,
-          nextGuidePoints: 15,
-        })),
-      ]);
+    const requestId = metricsRequestSeqRef.current + 1;
+    metricsRequestSeqRef.current = requestId;
+    setLoadingMeta(true);
+    const results = await Promise.allSettled([
+      api.resolveLocation(),
+      api.mePosts({ limit: 1, sort: 'latest' }),
+      api.meSpotCount(),
+      api.notifications({ limit: 1 }),
+      api.rewards(),
+    ]);
+    if (requestId !== metricsRequestSeqRef.current) return;
 
-      const location = locationPayload?.location || {};
-      const hasLocation = Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lng));
-      const weatherPayload = hasLocation
-        ? await api.weather({
-          latitude: location.lat,
-          longitude: location.lng,
-          label: location.label,
-        }).catch(() => ({ ok: false }))
-        : { ok: false };
-      setWeather(weatherPayload);
-      setTotalPosts(Number(userPostsFeed?.total || 0));
-      setSpotCount(Number(spotCountPayload?.count || 0));
-      setNotificationUnread(Number(notificationPayload?.unread || 0));
-      setCreatorReward(rewardPayload);
-      setMeSectionStats((prev) => ({
-        ...prev,
-        mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
-      }));
-      setStatsError(null);
-    } catch (err) {
-      setStatsError(err?.message || '个人数据加载失败');
-    } finally {
-      setLoadingMeta(false);
+    const [locationResult, postsResult, spotsResult, notificationsResult, rewardResult] = results;
+    const locationPayload = locationResult.status === 'fulfilled' ? locationResult.value : null;
+    const location = locationPayload?.location || {};
+    const hasLocation = Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lng));
+    const weatherPayload = hasLocation
+      ? await api.weather({
+        latitude: location.lat,
+        longitude: location.lng,
+        label: location.label,
+      }).catch(() => ({ ok: false }))
+      : { ok: false };
+    if (requestId !== metricsRequestSeqRef.current) return;
+
+    if (postsResult.status === 'fulfilled') {
+      const payload = postsResult.value || {};
+      const total = Number(payload.total || payload.posts?.length || 0);
+      setTotalPosts(total);
+      setMeSectionStats((prev) => ({ ...prev, mePosts: total }));
     }
+    if (spotsResult.status === 'fulfilled') {
+      setSpotCount(Number(spotsResult.value?.count || 0));
+    }
+    if (notificationsResult.status === 'fulfilled') {
+      setNotificationUnread(Number(notificationsResult.value?.unread || 0));
+    }
+    if (rewardResult.status === 'fulfilled' && rewardResult.value) {
+      setCreatorReward(rewardResult.value);
+    }
+    setWeather(weatherPayload);
+    const partialFailure = results.some((result) => result.status === 'rejected')
+      || (hasLocation && !weatherPayload?.ok);
+    setStatsError(partialFailure ? '部分数据暂时不可用，可下拉刷新重试' : null);
+    setLoadingMeta(false);
   }, []);
 
   const ensureSectionMetric = useCallback(async (targetSection) => {
@@ -213,10 +221,6 @@ export default function ProfileScreen({ navigation }) {
       // keep stale count on error; section-specific metric is best-effort.
     }
   }, [meSectionStats]);
-
-  useEffect(() => {
-    loadSectionMetrics();
-  }, [loadSectionMetrics]);
 
   useEffect(() => {
     clearFeed();
@@ -269,14 +273,9 @@ export default function ProfileScreen({ navigation }) {
     setActorName(getActorName());
     setActorAvatar(String(getCurrentUser()?.avatar || '').trim());
     setAuthenticated(nextAuthenticated);
-    api.notifications({ limit: 1 })
-      .then((payload) => setNotificationUnread(Number(payload?.unread || 0)))
-      .catch(() => {
-        // Keep the last unread count when the message center is unavailable.
-      });
+    void loadSectionMetrics();
     if (authChanged) {
       void load({ append: false, cursor: null });
-      void loadSectionMetrics();
     }
   }, [load, loadSectionMetrics]));
 
