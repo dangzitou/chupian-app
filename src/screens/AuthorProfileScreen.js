@@ -16,6 +16,7 @@ import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
+import { sharePost } from '../utils/share';
 
 export default function AuthorProfileScreen({ route, navigation }) {
   const authorId = String(route?.params?.authorId || '').trim();
@@ -86,6 +87,19 @@ export default function AuthorProfileScreen({ route, navigation }) {
     }
   }, [authorId, followBusy, followLoading, followed]);
 
+  const shareAuthorPost = useCallback(async (item) => {
+    if (!item) return;
+    try {
+      const result = await sharePost(item);
+      if (result === 'copied') {
+        Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      Alert.alert('分享失败', err?.message || '当前环境暂不支持分享，请稍后重试。');
+    }
+  }, []);
+
   const renderCard = useCallback(({ item }) => (
     <PostCard
       post={item}
@@ -105,11 +119,13 @@ export default function AuthorProfileScreen({ route, navigation }) {
         stateField: 'favorited',
         actionResolver: ({ post, next }) => api.toggleFavorite(post.id, undefined, next ? 'favorite' : 'unfavorite'),
       })}
+      onComment={() => navigation.navigate('PostDetail', { postId: item.id, focusComment: true })}
+      onShare={() => shareAuthorPost(item)}
       likeBusy={actions.isBusy(item.id, 'liked', 'liked')}
       favoriteBusy={actions.isBusy(item.id, 'favorited', 'favorited')}
       style={styles.card}
     />
-  ), [actions, navigation]);
+  ), [actions, navigation, shareAuthorPost]);
 
   const header = useMemo(() => (
     <View>
