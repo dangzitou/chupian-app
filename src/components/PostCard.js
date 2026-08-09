@@ -271,7 +271,14 @@ function arePostCardPropsEqual(previous, next) {
     && previous.followBusy === next.followBusy
     && previous.manageBusy === next.manageBusy
     && previous.style === next.style
-    && Boolean(previous.onManage) === Boolean(next.onManage);
+    && previous.onPress === next.onPress
+    && previous.onAuthorPress === next.onAuthorPress
+    && previous.onLike === next.onLike
+    && previous.onFavorite === next.onFavorite
+    && previous.onComment === next.onComment
+    && previous.onShare === next.onShare
+    && previous.onManage === next.onManage
+    && previous.onFollow === next.onFollow;
 }
 
 export default memo(PostCard, arePostCardPropsEqual);
