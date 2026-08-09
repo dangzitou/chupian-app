@@ -1,7 +1,18 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { createDraftStorage } from './useDraftStorage';
+import { getActorName, isAuthenticated } from '../lib/actor';
 
 export function useFeedList(fetcher, options = {}) {
   const pageSize = Number.isFinite(options.limit) ? Number(options.limit) : 12;
+  const cacheKey = String(options.cacheKey || '').trim();
+  const actorScope = `${isAuthenticated() ? 'auth' : 'guest'}:${getActorName() || 'anonymous'}`;
+  const cacheTtlMs = Number.isFinite(options.cacheTtlMs)
+    ? Math.max(60 * 1000, Number(options.cacheTtlMs))
+    : 24 * 60 * 60 * 1000;
+  const cacheStorage = useMemo(
+    () => (cacheKey ? createDraftStorage(`chupian-feed-cache:${actorScope}:${cacheKey}`) : null),
+    [actorScope, cacheKey],
+  );
 
   const normalizeUniquePosts = (nextPosts) => {
     const list = [];
@@ -33,6 +44,16 @@ export function useFeedList(fetcher, options = {}) {
   const busyIdsRef = useRef(new Set());
   const requestSeqRef = useRef(0);
   const loadingMoreRef = useRef(false);
+  const cacheKeyRef = useRef(`${actorScope}:${cacheKey}`);
+  const cacheHydratedRef = useRef(false);
+  const cacheCommitSeqRef = useRef(0);
+
+  const cacheIdentity = `${actorScope}:${cacheKey}`;
+  if (cacheKeyRef.current !== cacheIdentity) {
+    cacheKeyRef.current = cacheIdentity;
+    cacheHydratedRef.current = false;
+    cacheCommitSeqRef.current = 0;
+  }
 
   const ensureLoadingState = useCallback((append) => {
     if (append) {
@@ -60,6 +81,29 @@ export function useFeedList(fetcher, options = {}) {
     const useLimit = Math.min(Math.max(pageSize, 1), 40);
     const requestSeq = ++requestSeqRef.current;
 
+    if (!append && cacheStorage && !cacheHydratedRef.current) {
+      cacheHydratedRef.current = true;
+      cacheStorage.read().then((snapshot) => {
+        if (requestSeq !== requestSeqRef.current || cacheCommitSeqRef.current >= requestSeq) return;
+        const savedAt = Number(snapshot?.savedAt || 0);
+        const cachedPosts = Array.isArray(snapshot?.posts)
+          ? normalizeUniquePosts(snapshot.posts)
+          : [];
+        if (!savedAt || Date.now() - savedAt > cacheTtlMs || !cachedPosts.length) return;
+        if (snapshot.sort !== normalizedSort
+          || String(snapshot.q || '') !== normalizedQ
+          || String(snapshot.tag || '') !== normalizedTag) return;
+        setPosts(cachedPosts);
+        setNextCursor(null);
+        setHasMore(false);
+        setTotal(Number(snapshot.total || 0));
+        setStats(snapshot.stats || null);
+        setLoading(false);
+      }).catch(() => {
+        // Cache is an acceleration layer; network remains the source of truth.
+      });
+    }
+
     if (append) loadingMoreRef.current = true;
     ensureLoadingState(append);
 
@@ -77,6 +121,7 @@ export function useFeedList(fetcher, options = {}) {
       const hasMoreFromApi = payload?.hasMore == null ? Boolean(nextCursorFromApi) : Boolean(payload.hasMore);
 
       if (requestSeq !== requestSeqRef.current) return;
+      cacheCommitSeqRef.current = requestSeq;
 
       setPosts((prev) => {
         if (!append) return nextPosts;
@@ -90,6 +135,20 @@ export function useFeedList(fetcher, options = {}) {
       setTag(normalizedTag);
       setTotal(Number(payload?.total || 0));
       setStats(payload?.stats || null);
+      if (!append && cacheStorage && nextPosts.length) {
+        void cacheStorage.write({
+          version: 1,
+          savedAt: Date.now(),
+          sort: normalizedSort,
+          q: normalizedQ,
+          tag: normalizedTag,
+          posts: nextPosts,
+          total: Number(payload?.total || 0),
+          stats: payload?.stats || null,
+        }).catch(() => {
+          // A cache write failure must never affect the fresh feed response.
+        });
+      }
       setError(null);
     } catch (e) {
       if (requestSeq !== requestSeqRef.current) return;
