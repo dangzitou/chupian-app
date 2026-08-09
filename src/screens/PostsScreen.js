@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,29 @@ import { APP_ROUTES } from '../constants/routes';
 import { sharePost } from '../utils/share';
 
 const PAGE_SIZE = 12;
+
+function estimateMasonryHeight(post) {
+  const media = Array.isArray(post?.media) ? post.media[0] : null;
+  const width = Number(media?.width);
+  const height = Number(media?.height);
+  const ratio = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+    ? Math.min(Math.max(width / height, 0.75), 1.78)
+    : 1.6;
+  const contentLength = String(post?.content || '').trim().length;
+  const titleLength = String(post?.title || '').trim().length;
+  return 190 / ratio + 92 + Math.min(70, contentLength / 3.5) + Math.min(28, titleLength / 2);
+}
+
+function splitMasonryColumns(posts) {
+  const columns = [[], []];
+  const heights = [0, 0];
+  for (const item of posts) {
+    const columnIndex = heights[0] <= heights[1] ? 0 : 1;
+    columns[columnIndex].push(item);
+    heights[columnIndex] += estimateMasonryHeight(item);
+  }
+  return columns;
+}
 const SORT_OPTIONS = [
   { key: 'latest', label: '最新' },
   { key: 'hot', label: '热门' },
@@ -410,6 +434,11 @@ export default function PostsScreen({ navigation }) {
     : `${locationLabel || '附近'} · 出片记录`;
 
   const isMasonry = feedLayout === 'masonry';
+  const useWebMasonry = Platform.OS === 'web' && isMasonry;
+  const masonryColumns = useMemo(
+    () => (useWebMasonry ? splitMasonryColumns(posts) : [[], []]),
+    [posts, useWebMasonry],
+  );
   const showStaleBanner = Boolean(error && posts.length);
   const renderCard = useCallback(({ item }) => (
     <PostCard
@@ -429,6 +458,20 @@ export default function PostsScreen({ navigation }) {
       style={isMasonry ? styles.gridCard : styles.listCard}
     />
   ), [handleAuthorPress, handleComment, handlePostPress, isActionBusy, isMasonry, onFollow, onFavorite, onLike, onShare]);
+
+  const renderMasonryBlock = useCallback(() => (
+    <View style={styles.webMasonryRow}>
+      {masonryColumns.map((column, columnIndex) => (
+        <View style={styles.webMasonryColumn} key={`masonry-column-${columnIndex}`}>
+          {column.map((item) => (
+            <View key={String(item.id)}>
+              {renderCard({ item })}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  ), [masonryColumns, renderCard]);
 
   const ListHeader = useMemo(() => (
     <View style={styles.headerSection}>
@@ -555,10 +598,10 @@ export default function PostsScreen({ navigation }) {
       <FlatList
         ref={feedListRef}
         key={isMasonry ? 'feed-masonry' : 'feed-list'}
-        data={posts}
+        data={useWebMasonry ? (posts.length ? [{ id: '__web-masonry__' }] : []) : posts}
         keyExtractor={(post) => String(post.id)}
-        numColumns={isMasonry ? 2 : 1}
-        columnWrapperStyle={isMasonry ? styles.columnWrapper : undefined}
+        numColumns={isMasonry && !useWebMasonry ? 2 : 1}
+        columnWrapperStyle={isMasonry && !useWebMasonry ? styles.columnWrapper : undefined}
         refreshing={refreshing}
         onRefresh={onRefresh}
         onEndReached={onEndReached}
@@ -569,7 +612,7 @@ export default function PostsScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
         contentContainerStyle={[styles.list, isMasonry ? styles.listMasonry : styles.listList]}
-        renderItem={renderCard}
+        renderItem={useWebMasonry ? renderMasonryBlock : renderCard}
         ListEmptyComponent={
           showSkeleton ? <FeedSkeleton count={5} /> : (
             <View style={styles.emptyWrap}>
@@ -673,6 +716,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     zIndex: 2,
     elevation: 2,
+  },
+  webMasonryRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: 4,
+    paddingHorizontal: 2,
+  },
+  webMasonryColumn: {
+    flex: 1,
+    minWidth: 0,
   },
   headerSection: {
     paddingTop: 4,
