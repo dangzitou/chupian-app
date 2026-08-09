@@ -31,8 +31,10 @@ import { formatRelativeTime } from '../utils/time';
 import { sharePost } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
 import { getActorId, getActorName, getCurrentUser } from '../lib/actor';
+import { createDraftStorage } from '../hooks/useDraftStorage';
 
 const COMMENT_PAGE_SIZE = 12;
+const COMMENT_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function CommentBubble({ comment }) {
   const author = comment.author || '匿名拍友';
@@ -339,6 +341,10 @@ function EditChoiceField({ label, value, onChange, options }) {
 
 export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
+  const commentDraftStorage = useMemo(
+    () => createDraftStorage(`chupian-comment-draft:${postId || 'unknown'}`),
+    [postId],
+  );
   const insets = useSafeAreaInsets();
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -364,10 +370,56 @@ export default function PostDetailScreen({ route, navigation }) {
   const commentInputRef = useRef(null);
   const commentIdempotencyRef = useRef('');
   const commentSeedRef = useRef('');
+  const commentDraftLoadedRef = useRef(false);
   const commentsLoadingRef = useRef(false);
   const commentsCursorRef = useRef(null);
   const postRequestSeqRef = useRef(0);
   const commentsRequestSeqRef = useRef(0);
+
+  useEffect(() => {
+    commentDraftLoadedRef.current = false;
+    setCommentInput('');
+    if (!postId) return undefined;
+
+    let disposed = false;
+    const finishLoading = () => {
+      if (!disposed) commentDraftLoadedRef.current = true;
+    };
+
+    commentDraftStorage.read()
+      .then((payload) => {
+        if (disposed) return;
+        const savedAt = Number(payload?.savedAt || 0);
+        if (savedAt && Date.now() - savedAt > COMMENT_DRAFT_MAX_AGE_MS) {
+          commentDraftStorage.remove().catch(() => {});
+          finishLoading();
+          return;
+        }
+        const text = String(payload?.text || '');
+        if (text.trim()) setCommentInput(text);
+        finishLoading();
+      })
+      .catch(() => {
+        finishLoading();
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [commentDraftStorage, postId]);
+
+  useEffect(() => {
+    if (!postId || !commentDraftLoadedRef.current || commentSending) return undefined;
+    const text = String(commentInput || '');
+    const timer = setTimeout(() => {
+      if (text.trim()) {
+        commentDraftStorage.write({ text, savedAt: Date.now() }).catch(() => {});
+      } else {
+        commentDraftStorage.remove().catch(() => {});
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [commentDraftStorage, commentInput, commentSending, postId]);
 
   const applyPost = useCallback((updater) => {
     setPost((prev) => {
@@ -673,6 +725,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const onSubmitComment = useCallback(async () => {
     const text = String(commentInput || '').trim();
     if (!text || !post || commentSending) return;
+    commentDraftStorage.remove().catch(() => {});
 
     if (commentSeedRef.current !== text) {
       commentSeedRef.current = text;
@@ -744,7 +797,7 @@ export default function PostDetailScreen({ route, navigation }) {
     } finally {
       setCommentSending(false);
     }
-  }, [commentInput, commentSending, post, applyPost, scrollToTop]);
+  }, [commentDraftStorage, commentInput, commentSending, post, applyPost, scrollToTop]);
 
   const postMeta = useMemo(() => {
     const media = Array.isArray(post?.media) ? post.media : [];
