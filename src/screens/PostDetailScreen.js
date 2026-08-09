@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,7 +29,7 @@ import ShotMetaBoard from '../components/ShotMetaBoard';
 import { formatRelativeTime } from '../utils/time';
 import { sharePost } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
-import { getActorName } from '../lib/actor';
+import { getActorId, getActorName } from '../lib/actor';
 
 const COMMENT_PAGE_SIZE = 12;
 
@@ -134,6 +135,49 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
   );
 }
 
+function buildEditDraft(post = {}) {
+  const gear = post.gear || {};
+  return {
+    title: post.title || '',
+    content: post.content || '',
+    spotId: post.spotId || '',
+    spotName: post.spotName || '',
+    district: post.district || '',
+    latitude: post.latitude ?? '',
+    longitude: post.longitude ?? '',
+    angle: post.angle || '',
+    direction: post.direction || '',
+    timeWindow: post.timeWindow || '',
+    bestTime: post.bestTime || '',
+    shotAt: post.shotAt || '',
+    camera: gear.camera || '',
+    lens: gear.lens || '',
+    focalLength: gear.focal || '',
+    aperture: gear.aperture || '',
+    shutter: gear.shutter || '',
+    iso: gear.iso || '',
+    whiteBalance: gear.whiteBalance || '',
+  };
+}
+
+function EditField({ label, value, onChange, placeholder, multiline = false }) {
+  return (
+    <View style={styles.editField}>
+      <Text style={styles.editLabel}>{label}</Text>
+      <TextInput
+        style={[styles.editInput, multiline && styles.editInputMultiline]}
+        value={String(value ?? '')}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.mutedText}
+        multiline={multiline}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        maxLength={multiline ? 3000 : 200}
+      />
+    </View>
+  );
+}
+
 export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
   const [post, setPost] = useState(null);
@@ -150,6 +194,10 @@ export default function PostDetailScreen({ route, navigation }) {
   const [commentsLoadError, setCommentsLoadError] = useState(null);
   const [viewerIndex, setViewerIndex] = useState(-1);
   const [metaOpen, setMetaOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editDraft, setEditDraft] = useState({});
 
   const listRef = useRef(null);
   const commentInputRef = useRef(null);
@@ -369,6 +417,37 @@ export default function PostDetailScreen({ route, navigation }) {
     ]);
   }, [onBlock, post, submitReport]);
 
+  const isOwnPost = Boolean(post?.authorId && String(post.authorId) === String(getActorId()));
+  const setEditField = useCallback((key, value) => {
+    setEditDraft((current) => ({ ...current, [key]: value }));
+  }, []);
+
+  const onOpenEdit = useCallback(() => {
+    if (!post || !isOwnPost) {
+      onReport();
+      return;
+    }
+    setEditDraft(buildEditDraft(post));
+    setEditError('');
+    setEditOpen(true);
+  }, [isOwnPost, onReport, post]);
+
+  const onSaveEdit = useCallback(async () => {
+    if (!post || editSaving) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const result = await api.updatePost(post.id, editDraft);
+      if (result?.post) applyPost(result.post);
+      setEditOpen(false);
+      Alert.alert('已更新', '攻略和拍摄信息已补充，原有媒体保持不变。');
+    } catch (err) {
+      setEditError(err?.cause || err?.message || '保存失败，请稍后重试');
+    } finally {
+      setEditSaving(false);
+    }
+  }, [api, applyPost, editDraft, editSaving, post]);
+
   const onOpenMap = useCallback(() => {
     if (!post) return;
     const lat = Number(post.latitude);
@@ -469,7 +548,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const postMeta = useMemo(() => {
     const media = Array.isArray(post?.media) ? post.media : [];
     const tags = [...(post?.styles || []), ...(post?.tags || [])].filter(Boolean);
-    const title = post?.title || '无标题';
+    const title = post?.title || '出片记录';
     const subtitlePieces = [
       post?.spotName || '',
       post?.district || '',
@@ -539,9 +618,9 @@ export default function PostDetailScreen({ route, navigation }) {
               </Pressable>
               <Pressable
                 style={styles.moreBtn}
-                onPress={onReport}
+                onPress={onOpenEdit}
                 accessibilityRole="button"
-                accessibilityLabel="举报这条出片"
+                accessibilityLabel={isOwnPost ? '编辑这条出片' : '举报这条出片'}
               >
                 <Text style={styles.moreText}>•••</Text>
               </Pressable>
@@ -601,7 +680,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </View>
       </View>
     );
-  }, [isPostBusy, metaOpen, onBlock, onFollow, onOpenAuthor, onOpenMap, onOpenMedia, onReport, post, postMeta, loading, scrollToTop]);
+  }, [isOwnPost, isPostBusy, metaOpen, onBlock, onFollow, onOpenAuthor, onOpenEdit, onOpenMap, onOpenMedia, onReport, post, postMeta, loading, scrollToTop]);
 
   const renderComment = useCallback(({ item }) => <CommentBubble comment={item} />, []);
 
@@ -766,6 +845,85 @@ export default function PostDetailScreen({ route, navigation }) {
         onClose={() => setViewerIndex(-1)}
         onStep={onStepMedia}
       />
+      <Modal
+        visible={editOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!editSaving) setEditOpen(false);
+        }}
+      >
+        <View style={styles.editBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.editSheet}
+          >
+            <View style={styles.editHeader}>
+              <View>
+                <Text style={styles.editTitle}>补充出片</Text>
+                <Text style={styles.editSubtitle}>媒体不变，只补充正文、地点和拍摄参数</Text>
+              </View>
+              <Pressable
+                style={styles.editClose}
+                onPress={() => setEditOpen(false)}
+                disabled={editSaving}
+                accessibilityRole="button"
+                accessibilityLabel="关闭编辑"
+              >
+                <Text style={styles.editCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.editScroll}
+              contentContainerStyle={styles.editScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {!!editError ? <Text style={styles.editError}>{editError}</Text> : null}
+              <EditField
+                label="标题"
+                value={editDraft.title}
+                onChange={(value) => setEditField('title', value)}
+                placeholder="出片记录"
+              />
+              <EditField
+                label="正文 / 攻略"
+                value={editDraft.content}
+                onChange={(value) => setEditField('content', value)}
+                placeholder="分享你的拍摄思路、避坑或最佳时间"
+                multiline
+              />
+              <Text style={styles.editSectionLabel}>位置</Text>
+              <View style={styles.editTwoCol}>
+                <View style={styles.editCol}><EditField label="地点" value={editDraft.spotName} onChange={(value) => setEditField('spotName', value)} placeholder="出片位置" /></View>
+                <View style={styles.editCol}><EditField label="区域" value={editDraft.district} onChange={(value) => setEditField('district', value)} placeholder="可选" /></View>
+              </View>
+              <Text style={styles.editSectionLabel}>拍摄信息</Text>
+              <View style={styles.editTwoCol}>
+                <View style={styles.editCol}><EditField label="机位" value={editDraft.angle} onChange={(value) => setEditField('angle', value)} placeholder="平拍 / 低机位" /></View>
+                <View style={styles.editCol}><EditField label="光线" value={editDraft.direction} onChange={(value) => setEditField('direction', value)} placeholder="逆光 / 侧光" /></View>
+                <View style={styles.editCol}><EditField label="时间窗口" value={editDraft.timeWindow} onChange={(value) => setEditField('timeWindow', value)} placeholder="18:00-19:00" /></View>
+                <View style={styles.editCol}><EditField label="拍摄时间" value={editDraft.shotAt} onChange={(value) => setEditField('shotAt', value)} placeholder="2026-08-09 18:30" /></View>
+              </View>
+              <View style={styles.editTwoCol}>
+                <View style={styles.editCol}><EditField label="机身" value={editDraft.camera} onChange={(value) => setEditField('camera', value)} placeholder="相机型号" /></View>
+                <View style={styles.editCol}><EditField label="镜头" value={editDraft.lens} onChange={(value) => setEditField('lens', value)} placeholder="镜头型号" /></View>
+                <View style={styles.editCol}><EditField label="焦段" value={editDraft.focalLength} onChange={(value) => setEditField('focalLength', value)} placeholder="35mm" /></View>
+                <View style={styles.editCol}><EditField label="光圈" value={editDraft.aperture} onChange={(value) => setEditField('aperture', value)} placeholder="f/2.8" /></View>
+                <View style={styles.editCol}><EditField label="快门" value={editDraft.shutter} onChange={(value) => setEditField('shutter', value)} placeholder="1/125s" /></View>
+                <View style={styles.editCol}><EditField label="ISO" value={editDraft.iso} onChange={(value) => setEditField('iso', value)} placeholder="100" /></View>
+              </View>
+            </ScrollView>
+            <View style={styles.editFooter}>
+              <Pressable style={styles.editCancel} onPress={() => setEditOpen(false)} disabled={editSaving}>
+                <Text style={styles.editCancelText}>取消</Text>
+              </Pressable>
+              <Pressable style={[styles.editSave, editSaving && styles.editSaveDisabled]} onPress={onSaveEdit} disabled={editSaving}>
+                <Text style={styles.editSaveText}>{editSaving ? '保存中...' : '保存补充'}</Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -972,6 +1130,68 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moreText: { color: COLORS.muted, fontSize: 16, letterSpacing: 1, lineHeight: 18 },
+  editBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15,15,15,0.42)',
+  },
+  editSheet: {
+    maxHeight: '92%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: COLORS.bg,
+  },
+  editHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.line,
+  },
+  editTitle: { color: COLORS.ink, fontSize: 17, fontWeight: '800' },
+  editSubtitle: { color: COLORS.muted, fontSize: 11, marginTop: 3 },
+  editClose: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17 },
+  editCloseText: { color: COLORS.ink, fontSize: 27, lineHeight: 29, fontWeight: '300' },
+  editScroll: { flexGrow: 0 },
+  editScrollContent: { paddingHorizontal: 16, paddingVertical: 14, paddingBottom: 24 },
+  editError: { color: '#a34a2a', fontSize: 12, marginBottom: 10 },
+  editField: { flex: 1, minWidth: 0, marginBottom: 10 },
+  editLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '700', marginBottom: 5 },
+  editInput: {
+    minHeight: 40,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    color: COLORS.ink,
+    fontSize: 13,
+  },
+  editInputMultiline: { minHeight: 92, lineHeight: 19 },
+  editSectionLabel: { marginTop: 4, marginBottom: 8, color: COLORS.ink, fontSize: 13, fontWeight: '800' },
+  editTwoCol: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 9 },
+  editCol: { width: '48.5%' },
+  editFooter: {
+    flexDirection: 'row',
+    gap: 9,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+  },
+  editCancel: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#f0eeee' },
+  editCancelText: { color: COLORS.muted, fontSize: 13, fontWeight: '700' },
+  editSave: { flex: 1.45, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: COLORS.accent },
+  editSaveDisabled: { opacity: 0.6 },
+  editSaveText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
   title: {
     color: COLORS.ink,
     fontSize: 20,
