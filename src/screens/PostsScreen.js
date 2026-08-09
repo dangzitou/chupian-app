@@ -19,10 +19,13 @@ import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
+import { createDraftStorage } from '../hooks/useDraftStorage';
 import { APP_ROUTES } from '../constants/routes';
 import { sharePost } from '../utils/share';
 
 const PAGE_SIZE = 12;
+const SEARCH_HISTORY_STORAGE_KEY = 'chupian-search-history';
+const searchHistoryStorage = createDraftStorage(SEARCH_HISTORY_STORAGE_KEY);
 
 function estimateMasonryHeight(post) {
   const media = Array.isArray(post?.media) ? post.media[0] : null;
@@ -68,7 +71,7 @@ function SearchGlyph() {
   );
 }
 
-function SearchBar({ value, onSubmit, onChange }) {
+function SearchBar({ value, onSubmit, onChange, onFocus, onBlur }) {
   return (
     <View style={styles.searchWrap}>
       <View style={styles.searchInner}>
@@ -81,12 +84,49 @@ function SearchBar({ value, onSubmit, onChange }) {
           onChangeText={onChange}
           returnKeyType="search"
           blurOnSubmit={false}
-          onSubmitEditing={onSubmit}
+          onSubmitEditing={() => onSubmit?.()}
+          onFocus={onFocus}
+          onBlur={onBlur}
           clearButtonMode="while-editing"
         />
       </View>
     </View>
   );
+}
+
+function SearchHistoryStrip({ items, onSelect, onClear }) {
+  if (!items.length) return null;
+  return (
+    <View style={styles.searchHistory}>
+      <View style={styles.searchHistoryHeader}>
+        <Text style={styles.searchHistoryTitle}>最近搜索</Text>
+        <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="清空搜索记录">
+          <Text style={styles.searchHistoryClear}>清空</Text>
+        </Pressable>
+      </View>
+      <View style={styles.searchHistoryItems}>
+        {items.map((item) => (
+          <Pressable
+            key={item}
+            style={styles.searchHistoryChip}
+            onPress={() => onSelect(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`搜索 ${item}`}
+          >
+            <Text style={styles.searchHistoryChipText} numberOfLines={1}>{item}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function normalizeSearchHistory(value) {
+  const source = Array.isArray(value) ? value : value?.queries;
+  if (!Array.isArray(source)) return [];
+  return [...new Set(source
+    .map((item) => String(item || '').trim())
+    .filter(Boolean))].slice(0, 8);
 }
 
 function SortTabs({ value, onChange }) {
@@ -176,6 +216,8 @@ export default function PostsScreen({ navigation }) {
   const [locationLabel, setLocationLabel] = useState('');
   const [locationLoading, setLocationLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHistory, setSearchHistory] = useState([]);
   const [activeTag, setActiveTag] = useState('');
   const [signals, setSignals] = useState([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
@@ -298,6 +340,20 @@ export default function PostsScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+    searchHistoryStorage.read()
+      .then((payload) => {
+        if (alive) setSearchHistory(normalizeSearchHistory(payload));
+      })
+      .catch(() => {
+        // Search history is optional and must never block feed loading.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (feedModeRef.current === feedMode) return;
     feedModeRef.current = feedMode;
     if (!bootstrappedRef.current) {
@@ -323,8 +379,14 @@ export default function PostsScreen({ navigation }) {
     });
   }, [activeTag, load, q, setTag, sort]);
 
-  const applySearch = useCallback(() => {
-    const next = searchInput.trim();
+  const applySearch = useCallback((input = searchInput) => {
+    const next = String(input || '').trim();
+    setSearchFocused(false);
+    if (next) {
+      const nextHistory = [next, ...searchHistory.filter((item) => item !== next)].slice(0, 8);
+      setSearchHistory(nextHistory);
+      void searchHistoryStorage.write({ version: 1, queries: nextHistory });
+    }
     if (next === q) return;
 
     setQ(next);
@@ -335,7 +397,22 @@ export default function PostsScreen({ navigation }) {
       nextQ: next,
       nextTag: activeTag,
     });
-  }, [activeTag, load, q, searchInput, setQ, sort]);
+  }, [activeTag, load, q, searchHistory, searchInput, setQ, sort]);
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([]);
+    void searchHistoryStorage.remove();
+  }, []);
+
+  const selectSearchHistory = useCallback((value) => {
+    setSearchInput(value);
+    applySearch(value);
+  }, [applySearch]);
+
+  const openSearchHistory = useCallback(() => setSearchFocused(true), []);
+  const closeSearchHistory = useCallback(() => {
+    setTimeout(() => setSearchFocused(false), 120);
+  }, []);
 
   const applySort = useCallback((nextSort) => {
     if (nextSort === sort) return;
@@ -529,7 +606,20 @@ export default function PostsScreen({ navigation }) {
         </Pressable>
       ) : null}
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
-      <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
+      <SearchBar
+        value={searchInput}
+        onChange={setSearchInput}
+        onSubmit={applySearch}
+        onFocus={openSearchHistory}
+        onBlur={closeSearchHistory}
+      />
+      {searchFocused && !searchInput.trim() ? (
+        <SearchHistoryStrip
+          items={searchHistory}
+          onSelect={selectSearchHistory}
+          onClear={clearSearchHistory}
+        />
+      ) : null}
       {filtersOpen ? (
         <Modal
           transparent
@@ -598,7 +688,7 @@ export default function PostsScreen({ navigation }) {
         </Modal>
       ) : null}
     </View>
-  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openTab, resetFilters, retryStaleFeed, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, clearSearchHistory, closeSearchHistory, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openSearchHistory, openTab, resetFilters, retryStaleFeed, searchFocused, searchHistory, searchInput, selectSearchHistory, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -885,6 +975,33 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 13.5,
   },
+  searchHistory: {
+    marginHorizontal: 4,
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+  },
+  searchHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  searchHistoryTitle: { color: COLORS.ink, fontSize: 12.5, fontWeight: '700' },
+  searchHistoryClear: { color: COLORS.muted, fontSize: 11.5 },
+  searchHistoryItems: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  searchHistoryChip: {
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.bgDeep,
+  },
+  searchHistoryChipText: { color: COLORS.mutedText, fontSize: 11.5 },
 
   feedTabs: {
     flexDirection: 'row',
