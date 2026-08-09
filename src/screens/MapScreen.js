@@ -1,7 +1,6 @@
 import React, { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Linking,
   Pressable,
   Platform,
@@ -14,6 +13,7 @@ import { WebView } from 'react-native-webview';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
+import RemoteImage from '../components/RemoteImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NEUTRAL_CENTER = {
@@ -943,13 +943,12 @@ export default function MapScreen({ navigation, route }) {
             >
               <Text style={styles.previewCloseText}>×</Text>
             </Pressable>
-            {selectedMapItem.cover ? (
-              <Image source={{ uri: selectedMapItem.cover }} style={styles.previewImage} />
-            ) : (
-              <View style={styles.previewImageFallback}>
-                <Text style={styles.previewImageFallbackText}>{selectedMapItem.type === 'post' ? '出片' : '点位'}</Text>
-              </View>
-            )}
+            <RemoteImage
+              uri={selectedMapItem.cover}
+              style={styles.previewImage}
+              fallback={selectedMapItem.type === 'post' ? '出片' : '点位'}
+              accessibilityLabel={`${selectedMapItem.type === 'post' ? '出片' : '点位'}预览`}
+            />
             <View style={styles.previewCopy}>
               <Text style={styles.previewEyebrow}>{selectedMapItem.type === 'post' ? '附近出片' : '拍摄点位'}</Text>
               <Text style={styles.previewTitle} numberOfLines={2}>{selectedMapItem.title}</Text>
