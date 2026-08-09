@@ -20,6 +20,7 @@ export function usePostListActions({
   setBusyForPost,
   isBusyExternal,
   busyKey,
+  onError,
 }) {
   const localBusyRef = useRef(new Set());
   const resolveBusyKey = busyKey || defaultBusyKey;
@@ -104,10 +105,11 @@ export function usePostListActions({
       patchFromServer(id, metricField, stateField, nextState, base, fresh);
     } catch (_err) {
       rollback(id, metricField, stateField, base);
+      onError?.(_err);
     } finally {
       setBusy(id, false, stateField, stateField);
     }
-  }, [applyOptimistic, getPostById, isBusy, patchFromServer, rollback, setBusy]);
+  }, [applyOptimistic, getPostById, isBusy, onError, patchFromServer, rollback, setBusy]);
 
   return {
     isBusy,
