@@ -49,6 +49,8 @@ export const MEDIA_KINDS = {
   LIVE: 'live',
 };
 
+export const MAX_MEDIA_UPLOAD_BYTES = 120 * 1024 * 1024;
+
 export const POST_FIELD_LIMIT = {
   title: 90,
   content: 3000,
