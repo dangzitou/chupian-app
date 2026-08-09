@@ -19,6 +19,7 @@ import { api } from '../api';
 import { COLORS, MEDIA_KINDS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import { EMPTY_SHOT, SHOT_PRESETS } from '../constants/shotForm';
+import { NEW_POST_DRAFT_STORAGE_KEY } from '../constants/storage';
 import { splitTags } from '../utils/postCodec';
 import { validatePostDraft } from '../utils/postValidation';
 import { mapWithConcurrency } from '../utils/async';
@@ -33,9 +34,7 @@ import { createDraftStorage } from '../hooks/useDraftStorage';
 const MAX_MEDIA_COUNT = 9;
 const MAX_VIDEO_SECONDS = 40;
 const DRAFT_DEBOUNCE_MS = 900;
-const DRAFT_STORAGE_KEY = 'chupian:new-post-v1';
-
-const draftStorage = createDraftStorage(DRAFT_STORAGE_KEY);
+const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
 
 const EMPTY_DRAFT_STATE = {
   state: EMPTY_SHOT,
