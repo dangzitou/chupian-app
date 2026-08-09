@@ -8,6 +8,13 @@ import { COLORS, TIME_LABELS } from '../config';
 import CATEGORIES from '../data/categories';
 import { APP_ROUTES } from '../constants/routes';
 
+function formatDistance(value) {
+  const distance = Number(value);
+  if (!Number.isFinite(distance)) return '';
+  if (distance < 1) return '1 km内';
+  return `${distance < 10 ? distance.toFixed(1) : Math.round(distance)} km`;
+}
+
 export default function SpotsScreen({ navigation }) {
   const [spots, setSpots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,10 +24,16 @@ export default function SpotsScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [locationLabel, setLocationLabel] = useState('');
   const [locationLoading, setLocationLoading] = useState(true);
+  const [location, setLocation] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const d = await api.spots();
+      const d = await api.spots({
+        latitude: location?.lat,
+        longitude: location?.lng,
+        radiusKm: 50,
+        limit: 80,
+      });
       setSpots(d.spots || []);
       setError(null);
     } catch (e) {
@@ -29,7 +42,7 @@ export default function SpotsScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [location]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -38,6 +51,11 @@ export default function SpotsScreen({ navigation }) {
     api.resolveLocation()
       .then((payload) => {
         if (!alive) return;
+        const lat = Number(payload?.location?.lat);
+        const lng = Number(payload?.location?.lng);
+        setLocation(
+          Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
+        );
         setLocationLabel(String(payload?.location?.label || '').trim());
       })
       .catch(() => {
@@ -95,7 +113,7 @@ export default function SpotsScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.title}>出片点位</Text>
         <Text style={styles.subtitle}>
-          {filtered.length} 个地点 · {locationLoading ? '正在定位' : (locationLabel || '附近')}
+          {filtered.length} 个地点 · {locationLoading ? '正在定位' : (locationLabel || (location ? '附近' : '全部点位'))}
         </Text>
         <Pressable style={styles.mapBtn} onPress={openMap}>
           <Text style={styles.mapBtnText}>🗺️ 打开地图</Text>
@@ -146,7 +164,12 @@ export default function SpotsScreen({ navigation }) {
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               <Text style={styles.cardSub}>
-                {item.district} · {TIME_LABELS[item.bestTime] || item.bestTime} · ⭐ {item.rating}
+                {[
+                  item.district,
+                  TIME_LABELS[item.bestTime] || item.bestTime,
+                  item.rating ? `⭐ ${item.rating}` : '',
+                  formatDistance(item.distanceKm),
+                ].filter(Boolean).join(' · ')}
               </Text>
               <Text style={styles.cardSub2}>{item.timeWindow || ''} · {(item.vantagePoints || []).length} 个机位</Text>
               <View style={styles.tags}>
