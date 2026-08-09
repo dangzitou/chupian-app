@@ -440,6 +440,10 @@ export default function PostsScreen({ navigation }) {
     [posts, useWebMasonry],
   );
   const showStaleBanner = Boolean(error && posts.length);
+  const retryStaleFeed = useCallback(
+    () => load({ append: false, cursor: null }),
+    [load],
+  );
   const renderCard = useCallback(({ item }) => (
     <PostCard
       post={item}
@@ -502,7 +506,17 @@ export default function PostsScreen({ navigation }) {
         </Pressable>
       </View>
       {showStaleBanner ? (
-        <Text style={styles.staleBanner}>网络暂时不可用，当前显示上次内容 · 下拉重试</Text>
+        <Pressable
+          style={styles.staleBanner}
+          onPress={retryStaleFeed}
+          accessibilityRole="button"
+          accessibilityLabel="重新加载发现内容"
+        >
+          <View style={styles.staleBannerRow}>
+            <Text style={styles.staleBannerText}>网络暂时不可用，当前显示上次内容</Text>
+            <Text style={styles.staleBannerAction}>点击重试</Text>
+          </View>
+        </Pressable>
       ) : null}
       {actionError ? (
         <Pressable
@@ -584,7 +598,7 @@ export default function PostsScreen({ navigation }) {
         </Modal>
       ) : null}
     </View>
-  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openTab, resetFilters, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openTab, resetFilters, retryStaleFeed, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -958,10 +972,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
-    color: '#9a5a2b',
     backgroundColor: '#fff3e8',
+  },
+  staleBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  staleBannerText: {
+    flex: 1,
+    color: '#9a5a2b',
     fontSize: 11,
     lineHeight: 15,
+  },
+  staleBannerAction: {
+    color: '#9a5a2b',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
   },
   actionError: {
     marginHorizontal: 12,
