@@ -1,3 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
 const MEMORY_DRAFT_STORE = new Map();
 
 function resolveStorageKey(namespace) {
@@ -71,6 +74,14 @@ export function createDraftStorage(namespace = 'chupian-draft') {
         const webValue = await localStorageRead(key);
         if (webValue) return webValue;
       }
+      if (Platform.OS !== 'web') {
+        try {
+          const raw = await AsyncStorage.getItem(key);
+          if (raw) return JSON.parse(raw);
+        } catch (_err) {
+          // Fall back to the in-memory store if native storage is unavailable.
+        }
+      }
       return memoryRead(key);
     },
     async write(payload) {
@@ -78,12 +89,28 @@ export function createDraftStorage(namespace = 'chupian-draft') {
         const ok = await localStorageWrite(key, payload);
         if (ok) return true;
       }
+      if (Platform.OS !== 'web') {
+        try {
+          await AsyncStorage.setItem(key, JSON.stringify(payload));
+          return true;
+        } catch (_err) {
+          // Fall back to the in-memory store if native storage is unavailable.
+        }
+      }
       return memoryWrite(key, payload);
     },
     async remove() {
       if (isWebStorageAvailable()) {
         const ok = await localStorageRemove(key);
         if (ok) return true;
+      }
+      if (Platform.OS !== 'web') {
+        try {
+          await AsyncStorage.removeItem(key);
+          return true;
+        } catch (_err) {
+          // Fall back to the in-memory store if native storage is unavailable.
+        }
       }
       return memoryRemove(key);
     },
