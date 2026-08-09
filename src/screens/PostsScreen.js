@@ -412,7 +412,7 @@ export default function PostsScreen({ navigation }) {
 
   const handleAuthorPress = useCallback((item) => {
     if (!item?.authorId) return;
-    navigation.navigate('AuthorProfile', { authorId: item.authorId, authorName: item.author });
+    navigation.navigate('AuthorProfile', { authorId: item.authorId, authorName: item.author, avatar: item.avatar });
   }, [navigation]);
 
   const handleComment = useCallback((postId) => {
