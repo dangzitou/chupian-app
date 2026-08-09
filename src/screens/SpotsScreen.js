@@ -15,6 +15,8 @@ export default function SpotsScreen({ navigation }) {
   const [cat, setCat] = useState('all');
   const [time, setTime] = useState('all');
   const [error, setError] = useState(null);
+  const [locationLabel, setLocationLabel] = useState('');
+  const [locationLoading, setLocationLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -30,6 +32,24 @@ export default function SpotsScreen({ navigation }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    api.resolveLocation()
+      .then((payload) => {
+        if (!alive) return;
+        setLocationLabel(String(payload?.location?.label || '').trim());
+      })
+      .catch(() => {
+        if (alive) setLocationLabel('');
+      })
+      .finally(() => {
+        if (alive) setLocationLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
   const openMap = useCallback(() => {
@@ -72,7 +92,9 @@ export default function SpotsScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>出片点位</Text>
-        <Text style={styles.subtitle}>{filtered.length} 个地点 · 广州</Text>
+        <Text style={styles.subtitle}>
+          {filtered.length} 个地点 · {locationLoading ? '正在定位' : (locationLabel || '附近')}
+        </Text>
         <Pressable style={styles.mapBtn} onPress={openMap}>
           <Text style={styles.mapBtnText}>🗺️ 打开地图</Text>
         </Pressable>
