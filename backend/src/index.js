@@ -47,6 +47,8 @@ const REQUIRE_ACTOR_SESSION = String(process.env.REQUIRE_ACTOR_SESSION || "true"
 const API_RATE_LIMIT_WINDOW_SECONDS = 60;
 const API_RATE_LIMIT_MAX = 240;
 const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
+const MAX_POST_MEDIA = 9;
+const MAX_POST_VIDEO_SECONDS = 40;
 const apiRateLimitMemory = new Map();
 const SYSTEM_ROUTES = new Set([
   "/health",
@@ -1523,6 +1525,19 @@ async function createPostHandler(req) {
   const title = safeText(body.title, 200) || "出片记录";
   const media = Array.isArray(body.media) ? body.media : [];
   if (!media.length) throw Object.assign(new Error("media required"), { status: 400 });
+  if (media.length > MAX_POST_MEDIA) {
+    throw Object.assign(new Error(`media cannot exceed ${MAX_POST_MEDIA} items`), { status: 400 });
+  }
+  for (const item of media) {
+    const kind = String(item?.kind || "image").trim().toLowerCase();
+    if (!["image", "video", "live"].includes(kind)) {
+      throw Object.assign(new Error("unsupported media kind"), { status: 400 });
+    }
+    const duration = Number(item?.duration || 0);
+    if ((kind === "video" || kind === "live") && Number.isFinite(duration) && duration > MAX_POST_VIDEO_SECONDS) {
+      throw Object.assign(new Error(`video cannot exceed ${MAX_POST_VIDEO_SECONDS} seconds`), { status: 400 });
+    }
+  }
 
   const content = safeText(body.content, 3000);
   const spotId = pickInt(body.spotId, 0);
@@ -1587,13 +1602,14 @@ async function createPostHandler(req) {
         const item = media[i] || {};
         const url = safeText(item.url || "", 500);
         if (!url) continue;
+        const kind = String(item.kind || "image").trim().toLowerCase();
         acceptedMedia += 1;
         await conn.execute(
           `INSERT INTO post_media (post_id, kind, url, cover_url, width, height, duration, sort_order)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             postId,
-            String(item.kind || "image").slice(0, 12),
+            kind.slice(0, 12),
             url,
             safeText(item.cover || "", 500),
             Number(item.width || 0),
