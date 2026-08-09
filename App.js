@@ -149,6 +149,9 @@ export default function App() {
                 <Tab.Screen
                   name={APP_ROUTES.MAP}
                   component={MapStack}
+                  listeners={({ navigation }) => ({
+                    tabPress: () => navigation.navigate(APP_ROUTES.MAP, { screen: 'Map' }),
+                  })}
                   options={{
                     tabBarLabel: '首页',
                   }}
@@ -156,6 +159,9 @@ export default function App() {
                 <Tab.Screen
                   name={APP_ROUTES.DISCOVERY}
                   component={DiscoveryStack}
+                  listeners={({ navigation }) => ({
+                    tabPress: () => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostsList' }),
+                  })}
                   options={{
                     tabBarLabel: '发现',
                   }}
@@ -170,6 +176,9 @@ export default function App() {
                 <Tab.Screen
                   name={APP_ROUTES.PROFILE}
                   component={ProfileStack}
+                  listeners={({ navigation }) => ({
+                    tabPress: () => navigation.navigate(APP_ROUTES.PROFILE, { screen: 'ProfileHome' }),
+                  })}
                   options={{
                     tabBarLabel: '我的',
                   }}
