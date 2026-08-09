@@ -46,6 +46,7 @@ function PreviewError({ kind, onRetry }) {
 export default function MediaBuilder({
   mediaList,
   onRemove,
+  onMove,
   coverIndex = -1,
   onSetCover,
 }) {
@@ -53,6 +54,7 @@ export default function MediaBuilder({
   const [failedKeys, setFailedKeys] = React.useState(() => new Set());
   const [loadedKeys, setLoadedKeys] = React.useState(() => new Set());
   const canSetCover = typeof onSetCover === 'function';
+  const canMove = typeof onMove === 'function';
   const safeCoverIndex = Number.isInteger(Number(coverIndex)) ? Number(coverIndex) : -1;
 
   const markPreviewFailed = React.useCallback((item) => {
@@ -109,6 +111,12 @@ export default function MediaBuilder({
     });
   }, []);
 
+  const moveMedia = React.useCallback((index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= mediaItems.length || targetIndex === index) return;
+    onMove?.(index, targetIndex);
+  }, [mediaItems.length, onMove]);
+
   if (!mediaItems.length) {
     return (
       <View style={styles.emptyWrap}>
@@ -134,7 +142,8 @@ export default function MediaBuilder({
         const previewLoading = !isVideo && !loadedKeys.has(mediaKey);
 
         return (
-          <View key={`${mediaKey}-${idx}`} style={styles.card}>
+          <View key={`${mediaKey}-${idx}`} style={styles.mediaItem}>
+            <View style={styles.card}>
             {previewFailed ? (
               <PreviewError kind={item.kind} onRetry={() => retryPreview(item)} />
             ) : isVideo ? (
@@ -201,6 +210,29 @@ export default function MediaBuilder({
             >
               <Text style={styles.deleteText}>−</Text>
             </Pressable>
+            </View>
+            {canMove ? (
+              <View style={styles.orderControls}>
+                <Pressable
+                  style={({ pressed }) => [styles.orderBtn, idx === 0 && styles.orderBtnDisabled, pressed && styles.orderBtnPressed]}
+                  onPress={() => moveMedia(idx, -1)}
+                  disabled={idx === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel={`将第 ${idx + 1} 个素材前移`}
+                >
+                  <Text style={[styles.orderText, idx === 0 && styles.orderTextDisabled]}>前移</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.orderBtn, idx === mediaItems.length - 1 && styles.orderBtnDisabled, pressed && styles.orderBtnPressed]}
+                  onPress={() => moveMedia(idx, 1)}
+                  disabled={idx === mediaItems.length - 1}
+                  accessibilityRole="button"
+                  accessibilityLabel={`将第 ${idx + 1} 个素材后移`}
+                >
+                  <Text style={[styles.orderText, idx === mediaItems.length - 1 && styles.orderTextDisabled]}>后移</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         );
       })}
@@ -211,6 +243,7 @@ export default function MediaBuilder({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  mediaItem: { width: 112, gap: 4 },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -236,6 +269,26 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     position: 'relative',
   },
+  orderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  orderBtn: {
+    flex: 1,
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  orderBtnDisabled: { opacity: 0.42 },
+  orderBtnPressed: { transform: [{ scale: 0.96 }] },
+  orderText: { color: COLORS.accent, fontSize: 10.5, fontWeight: '700' },
+  orderTextDisabled: { color: COLORS.muted },
   image: {
     width: '100%',
     height: '100%',
