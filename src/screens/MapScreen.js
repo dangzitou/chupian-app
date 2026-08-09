@@ -512,6 +512,8 @@ export default function MapScreen({ navigation, route }) {
                 const clusterMarker = L.marker([center.lat, center.lng], { icon: clusterIcon, title: group.length + ' 个出片点' })
                   .addTo(map);
                 clusterMarker.on('click', () => {
+                  clusterMarker.remove();
+                  group.forEach((item) => addSingleMarker(item));
                   map.setView([center.lat, center.lng], Math.min(map.getZoom() + 2, 18), { animate: true });
                 });
               });
