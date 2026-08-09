@@ -23,7 +23,7 @@ export default function BlockedAuthorsScreen({ navigation }) {
     setLoading(true);
     try {
       const result = await api.blockedAuthors();
-      setAuthors(result.authors || []);
+      setAuthors(Array.isArray(result?.authors) ? result.authors : []);
       setError('');
     } catch (err) {
       setError(err?.cause || err?.message || '加载失败');
@@ -37,16 +37,17 @@ export default function BlockedAuthorsScreen({ navigation }) {
   }, [load]);
 
   const unblock = useCallback((item) => {
-    if (!item?.authorId || busyId) return;
+    const authorId = String(item?.authorId || '').trim();
+    if (!authorId || busyId) return;
     Alert.alert('解除屏蔽？', `之后可能再次看到 ${item.authorName || '该创作者'} 的公开作品。`, [
       { text: '取消', style: 'cancel' },
       {
         text: '解除屏蔽',
         onPress: async () => {
-          setBusyId(item.authorId);
+          setBusyId(authorId);
           try {
-            await api.toggleBlock(item.authorId, 'unblock', item.authorName);
-            setAuthors((current) => current.filter((author) => author.authorId !== item.authorId));
+            await api.toggleBlock(authorId, 'unblock', item.authorName);
+            setAuthors((current) => current.filter((author) => String(author.authorId || '').trim() !== authorId));
           } catch (err) {
             Alert.alert('操作失败', err?.cause || err?.message || '网络异常，请稍后重试');
           } finally {
@@ -69,9 +70,9 @@ export default function BlockedAuthorsScreen({ navigation }) {
       <Pressable
         style={styles.unblock}
         onPress={() => unblock(item)}
-        disabled={busyId === item.authorId}
+        disabled={busyId === String(item.authorId || '').trim()}
       >
-        <Text style={styles.unblockText}>{busyId === item.authorId ? '...' : '解除'}</Text>
+        <Text style={styles.unblockText}>{busyId === String(item.authorId || '').trim() ? '...' : '解除'}</Text>
       </Pressable>
     </View>
   ), [busyId, unblock]);
@@ -95,7 +96,7 @@ export default function BlockedAuthorsScreen({ navigation }) {
       {!loading && !error ? (
         <FlatList
           data={authors}
-          keyExtractor={(item) => item.authorId}
+          keyExtractor={(item) => String(item.authorId || '')}
           renderItem={renderItem}
           contentContainerStyle={authors.length ? styles.list : styles.emptyList}
           ListEmptyComponent={<Text style={styles.emptyText}>还没有屏蔽创作者</Text>}
