@@ -4,6 +4,7 @@ import {
   clearAuthenticatedSession,
   getActorId,
   getActorName,
+  getCurrentUser,
   getActorToken,
   refreshActorSession,
   setAuthenticatedSession,
@@ -77,6 +78,10 @@ class ApiError extends Error {
 
 const getDefaultAuthor = () => {
   return getActorName();
+};
+
+const getActorAvatar = () => {
+  return String(getCurrentUser()?.avatar || '').trim();
 };
 
 function sleep(ms) {
@@ -825,7 +830,7 @@ export const api = {
     const target = String(authorId || '').trim();
     if (!target) throw new Error('authorId required');
     const encoded = encodeURIComponent(target);
-    const body = { action, author: getDefaultAuthor() };
+    const body = { action, author: getDefaultAuthor(), avatar: getActorAvatar() };
     const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('author-follow', `${target}-${action}`) };
     try {
       return await request(`${API_PREFIX}/authors/${encoded}/follow`, {
@@ -1035,6 +1040,7 @@ export const api = {
     const body = {
       author: (author || '').trim() || getDefaultAuthor(),
       action,
+      avatar: getActorAvatar(),
     };
     const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('post-like', `${id}-${action}`) };
     try {
@@ -1064,7 +1070,11 @@ export const api = {
   },
 
   async toggleFavorite(id, author, action = 'toggle') {
-    const body = { author: (author || '').trim() || getDefaultAuthor(), action };
+    const body = {
+      author: (author || '').trim() || getDefaultAuthor(),
+      action,
+      avatar: getActorAvatar(),
+    };
     const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('post-favorite', `${id}-${action}`) };
     try {
       const fresh = await request(`${API_PREFIX}/posts/${id}/favorite`, {
@@ -1097,6 +1107,7 @@ export const api = {
     const body = {
       author: (author || '').trim() || getDefaultAuthor(),
       text: (text || '').trim(),
+      avatar: getActorAvatar(),
     };
     const headers = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).trim() } : undefined;
     if (!body.text) throw new Error('comment required');
