@@ -1,11 +1,17 @@
 {
   "name": "出片地图",
   "short_name": "出片",
-  "start_url": "/",
+  "id": "/",
+  "start_url": "/map?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "browser"],
+  "orientation": "portrait",
   "background_color": "#f8f7f6",
   "theme_color": "#d93657",
   "lang": "zh-CN",
+  "description": "按真实位置记录城市出片方法，发现附近值得拍的光影。",
+  "categories": ["photo", "social", "lifestyle"],
   "icons": [
     {
       "src": "/favicon.ico",
