@@ -57,6 +57,8 @@ function TabGlyph({ routeName, color, isCreate }) {
 export default function AppTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'web' ? Math.max(8, insets.bottom) : insets.bottom;
+  const activeRoute = state.routes[state.index];
+  if (activeRoute?.name === APP_ROUTES.CREATE) return null;
 
   return (
     <View style={[styles.bar, { paddingBottom: bottomInset }]}>
