@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { createDraftStorage } from './useDraftStorage';
-import { getActorName, isAuthenticated } from '../lib/actor';
+import { getActorId, isAuthenticated } from '../lib/actor';
 
 export function useFeedList(fetcher, options = {}) {
   const pageSize = Number.isFinite(options.limit) ? Number(options.limit) : 12;
   const cacheKey = String(options.cacheKey || '').trim();
-  const actorScope = `${isAuthenticated() ? 'auth' : 'guest'}:${getActorName() || 'anonymous'}`;
+  const actorScope = `${isAuthenticated() ? 'auth' : 'guest'}:${getActorId() || 'anonymous'}`;
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs)
     ? Math.max(60 * 1000, Number(options.cacheTtlMs))
     : 24 * 60 * 60 * 1000;
