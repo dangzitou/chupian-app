@@ -22,6 +22,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
   const authorName = String(route?.params?.authorName || '匿名拍友').trim();
   const [followed, setFollowed] = useState(false);
   const [followers, setFollowers] = useState(0);
+  const [followLoading, setFollowLoading] = useState(true);
   const [followBusy, setFollowBusy] = useState(false);
   const [followError, setFollowError] = useState('');
   const [followLoadAttempt, setFollowLoadAttempt] = useState(0);
@@ -45,14 +46,17 @@ export default function AuthorProfileScreen({ route, navigation }) {
   useEffect(() => {
     if (!authorId) return undefined;
     let alive = true;
+    setFollowLoading(true);
     api.getAuthorFollow(authorId).then((state) => {
       if (!alive) return;
       setFollowError('');
       setFollowed(Boolean(state.followed));
       setFollowers(Number(state.followers || 0));
+      setFollowLoading(false);
     }).catch((err) => {
       if (!alive) return;
       setFollowError(err?.message || '关注状态加载失败');
+      setFollowLoading(false);
     });
     return () => { alive = false; };
   }, [authorId, followLoadAttempt]);
@@ -62,7 +66,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
   }, [authorId]);
 
   const toggleFollow = useCallback(async () => {
-    if (!authorId || followBusy) return;
+    if (!authorId || followBusy || followLoading) return;
     const next = !followed;
     setFollowBusy(true);
     setFollowError('');
@@ -80,7 +84,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
     } finally {
       setFollowBusy(false);
     }
-  }, [authorId, followBusy, followed]);
+  }, [authorId, followBusy, followLoading, followed]);
 
   const renderCard = useCallback(({ item }) => (
     <PostCard
@@ -124,8 +128,8 @@ export default function AuthorProfileScreen({ route, navigation }) {
             <Text style={styles.bio}>出片位置记录者</Text>
           </View>
         </View>
-        <Pressable style={[styles.follow, followed && styles.followed]} onPress={toggleFollow} disabled={followBusy}>
-          <Text style={[styles.followText, followed && styles.followedText]}>{followBusy ? '...' : (followed ? '已关注' : '关注')}</Text>
+        <Pressable style={[styles.follow, followed && styles.followed]} onPress={toggleFollow} disabled={followBusy || followLoading}>
+          <Text style={[styles.followText, followed && styles.followedText]}>{followBusy || followLoading ? '...' : (followed ? '已关注' : '关注')}</Text>
         </Pressable>
         {followError ? (
           <Pressable
@@ -156,7 +160,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
         <View style={styles.profileTabUnderline} />
       </View>
     </View>
-  ), [authorAvatar, authorName, feed.total, followed, followBusy, followers, navigation, toggleFollow]);
+  ), [authorAvatar, authorName, feed.total, followed, followBusy, followError, followLoading, followers, navigation, toggleFollow]);
 
   if (!authorId) {
     return <SafeAreaView style={styles.empty}><Text style={styles.error}>创作者信息不可用</Text></SafeAreaView>;
