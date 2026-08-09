@@ -363,6 +363,7 @@ export default function PostsScreen({ navigation }) {
     : `${locationLabel || '附近'} · 出片记录`;
 
   const isMasonry = feedLayout === 'masonry';
+  const showStaleBanner = Boolean(error && posts.length);
   const renderCard = useCallback(({ item }) => (
     <PostCard
       post={item}
@@ -410,6 +411,9 @@ export default function PostsScreen({ navigation }) {
           </Text>
         </Pressable>
       </View>
+      {showStaleBanner ? (
+        <Text style={styles.staleBanner}>网络暂时不可用，当前显示上次内容 · 下拉重试</Text>
+      ) : null}
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       {filtersOpen ? (
@@ -440,7 +444,7 @@ export default function PostsScreen({ navigation }) {
         </View>
       ) : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -746,6 +750,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     fontSize: 11.5,
     marginBottom: 4,
+  },
+  staleBanner: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    color: '#9a5a2b',
+    backgroundColor: '#fff3e8',
+    fontSize: 11,
+    lineHeight: 15,
   },
 
   error: { color: '#a34a2a', marginBottom: 6 },
