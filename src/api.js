@@ -574,12 +574,16 @@ export const api = {
     return request(`${API_PREFIX}/auth/me`, { noCache: true });
   },
 
-  async updateProfile(displayName, bio = '') {
+  async updateProfile(displayName, bio = '', avatar = '') {
     const nextName = String(displayName || '').trim();
     if (!nextName) throw new Error('displayName required');
     const result = await request(`${API_PREFIX}/auth/me`, {
       method: 'PATCH',
-      body: JSON.stringify({ displayName: nextName, bio: String(bio || '').trim() }),
+      body: JSON.stringify({
+        displayName: nextName,
+        bio: String(bio || '').trim(),
+        avatar: String(avatar || '').trim(),
+      }),
       noCache: true,
     });
     await setAuthenticatedSession({ user: result.user, token: getActorToken() });
