@@ -524,12 +524,20 @@ export default function NewPostScreen({ navigation, route }) {
       state.iso,
       state.whiteBalance,
     ].filter((value) => String(value || '').trim()).length;
-    const contentReady = state.content.trim().length >= 120;
+    const contentLength = state.content.trim().length;
+    const contentReady = contentLength >= 120;
     const guideReady = contentReady && metadataCount >= 3;
+    const missing = [
+      contentReady ? '' : `正文还差 ${120 - contentLength} 字`,
+      metadataCount >= 3 ? '' : `参数还差 ${3 - metadataCount} 项`,
+    ].filter(Boolean);
     return {
       metadataCount,
       guideReady,
-      earnedHint: guideReady ? '完整攻略奖励已解锁' : '补充 120 字攻略和 3 项参数，可多得 +15 贡献值',
+      contentLength,
+      contentProgress: Math.min(contentLength / 120, 1),
+      metadataProgress: Math.min(metadataCount / 3, 1),
+      earnedHint: guideReady ? '完整攻略奖励已解锁 +15' : `${missing.join('，')}，解锁 +15 贡献值`,
     };
   }, [state]);
 
@@ -737,7 +745,30 @@ export default function NewPostScreen({ navigation, route }) {
           <Text style={styles.title}>发布出片</Text>
           <Text style={styles.subtitle}>先发出来，拍摄参数和攻略之后再补也可以</Text>
           <View style={styles.rewardHint}>
-            <Text style={styles.rewardHintTitle}>发布即可得 +5 贡献值</Text>
+            <View style={styles.rewardHintHeader}>
+              <Text style={styles.rewardHintTitle}>发布即可得 +5 贡献值</Text>
+              <Text style={styles.rewardHintStatus}>{rewardPreview.guideReady ? '攻略 +15 已解锁' : '攻略奖励 +15'}</Text>
+            </View>
+            <View style={styles.rewardMeter}>
+              <View style={styles.rewardMeterRow}>
+                <View style={styles.rewardMeterLabels}>
+                  <Text style={styles.rewardMeterLabel}>正文</Text>
+                  <Text style={styles.rewardMeterValue}>{Math.min(rewardPreview.contentLength, 120)}/120</Text>
+                </View>
+                <View style={styles.rewardTrack}>
+                  <View style={[styles.rewardFill, { width: `${rewardPreview.contentProgress * 100}%` }]} />
+                </View>
+              </View>
+              <View style={styles.rewardMeterRow}>
+                <View style={styles.rewardMeterLabels}>
+                  <Text style={styles.rewardMeterLabel}>拍摄参数</Text>
+                  <Text style={styles.rewardMeterValue}>{Math.min(rewardPreview.metadataCount, 3)}/3</Text>
+                </View>
+                <View style={styles.rewardTrack}>
+                  <View style={[styles.rewardFill, { width: `${rewardPreview.metadataProgress * 100}%` }]} />
+                </View>
+              </View>
+            </View>
             <Text style={styles.rewardHintText}>{rewardPreview.earnedHint}</Text>
           </View>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
@@ -1074,8 +1105,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: COLORS.accentBg,
   },
+  rewardHintHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   rewardHintTitle: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
-  rewardHintText: { color: COLORS.muted, fontSize: 11.5, marginTop: 3 },
+  rewardHintStatus: { color: COLORS.accent, fontSize: 10.5, fontWeight: '700' },
+  rewardMeter: { marginTop: 8, gap: 6 },
+  rewardMeterRow: { gap: 3 },
+  rewardMeterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  rewardMeterLabel: { color: COLORS.muted, fontSize: 10.5 },
+  rewardMeterValue: { color: COLORS.ink, fontSize: 10.5, fontWeight: '700' },
+  rewardTrack: {
+    height: 4,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: COLORS.cardBorder,
+  },
+  rewardFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: COLORS.accent,
+  },
+  rewardHintText: { color: COLORS.muted, fontSize: 11.5, marginTop: 7 },
   sectionTitle: {
     color: COLORS.ink,
     marginTop: 16,
