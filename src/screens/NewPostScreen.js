@@ -290,7 +290,8 @@ export default function NewPostScreen({ navigation, route }) {
 
   const clearDraft = useCallback(async () => {
     await draftStorage.remove();
-    hasHydratedDraftRef.current = false;
+    // Clearing is a completed hydration step; new edits must keep autosaving.
+    hasHydratedDraftRef.current = true;
     setDraftMediaWarning('');
     dispatch({ type: 'reset' });
     setMediaList([]);
