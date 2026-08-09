@@ -14,13 +14,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
+import Avatar from '../components/Avatar';
 import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { sharePost } from '../utils/share';
 import { getCreatorTier } from '../utils/rewards';
-import { getActorName, isAuthenticated } from '../lib/actor';
+import { getActorName, getCurrentUser, isAuthenticated } from '../lib/actor';
 
 const PAGE_SIZE = 8;
 
@@ -91,6 +92,7 @@ function CreatorRewardCard({ reward, onOpenCreate }) {
 
 export default function ProfileScreen({ navigation }) {
   const [actorName, setActorName] = useState(() => getActorName());
+  const [actorAvatar, setActorAvatar] = useState(() => String(getCurrentUser()?.avatar || '').trim());
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
   const focusedAuthState = useRef(isAuthenticated());
   const [weather, setWeather] = useState(null);
@@ -256,6 +258,7 @@ export default function ProfileScreen({ navigation }) {
     const authChanged = focusedAuthState.current !== nextAuthenticated;
     focusedAuthState.current = nextAuthenticated;
     setActorName(getActorName());
+    setActorAvatar(String(getCurrentUser()?.avatar || '').trim());
     setAuthenticated(nextAuthenticated);
     api.notifications({ limit: 1 })
       .then((payload) => setNotificationUnread(Number(payload?.unread || 0)))
@@ -282,6 +285,7 @@ export default function ProfileScreen({ navigation }) {
           try {
             await api.logout();
             setActorName(getActorName());
+            setActorAvatar(String(getCurrentUser()?.avatar || '').trim());
             setAuthenticated(false);
             await load({ append: false, cursor: null });
             await loadSectionMetrics();
@@ -359,7 +363,7 @@ export default function ProfileScreen({ navigation }) {
       compact
       onPress={() => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'PostDetail', params: { postId: item.id, title: item.title } })}
       onAuthorPress={item.authorId
-        ? () => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'AuthorProfile', params: { authorId: item.authorId, authorName: item.author } })
+        ? () => navigation.navigate(APP_ROUTES.DISCOVERY, { screen: 'AuthorProfile', params: { authorId: item.authorId, authorName: item.author, avatar: item.avatar } })
         : undefined}
       onLike={() => onLike(item.id)}
       onFavorite={() => onFavorite(item.id)}
@@ -378,9 +382,7 @@ export default function ProfileScreen({ navigation }) {
   const ListHeader = useMemo(() => (
     <View>
       <View style={styles.heroCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{actorName.slice(-2)}</Text>
-        </View>
+        <Avatar name={actorName} uri={actorAvatar} size={56} />
         <View style={styles.heroMeta}>
           <Text style={styles.name}>{actorName}</Text>
           <Text style={styles.bio}>记录机位、光线和器材</Text>
@@ -464,7 +466,7 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.blockedManageHint}>管理不想再看到的创作者</Text>
       </Pressable>
     </View>
-  ), [actorName, authenticated, creatorReward, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenCreate, onOpenEditProfile, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorAvatar, actorName, authenticated, creatorReward, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenCreate, onOpenEditProfile, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -540,15 +542,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 6,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.bgDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   heroMeta: { flex: 1 },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   notifyAction: { position: 'relative', paddingHorizontal: 8, paddingVertical: 5 },
