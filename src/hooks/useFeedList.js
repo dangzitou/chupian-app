@@ -95,7 +95,12 @@ export function useFeedList(fetcher, options = {}) {
       if (requestSeq !== requestSeqRef.current) return;
       setError(e.message || 'network error');
     } finally {
-      if (append) loadingMoreRef.current = false;
+      // An old page request must not unlock a newer request started after a
+      // tab switch or refresh. The ref is the synchronous guard for
+      // FlatList's repeated onEndReached calls.
+      if (append && requestSeq === requestSeqRef.current) {
+        loadingMoreRef.current = false;
+      }
       if (requestSeq !== requestSeqRef.current) return;
       setLoading(false);
       setRefreshing(false);
