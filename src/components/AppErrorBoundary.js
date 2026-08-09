@@ -5,7 +5,7 @@ import { COLORS } from '../config';
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, resetVersion: 0 };
   }
 
   static getDerivedStateFromError() {
@@ -18,7 +18,10 @@ export default class AppErrorBoundary extends React.Component {
   }
 
   reset = () => {
-    this.setState({ hasError: false });
+    this.setState((current) => ({
+      hasError: false,
+      resetVersion: current.resetVersion + 1,
+    }));
   };
 
   reloadWebApp = () => {
@@ -30,7 +33,13 @@ export default class AppErrorBoundary extends React.Component {
   };
 
   render() {
-    if (!this.state.hasError) return this.props.children;
+    if (!this.state.hasError) {
+      return (
+        <React.Fragment key={this.state.resetVersion}>
+          {this.props.children}
+        </React.Fragment>
+      );
+    }
 
     return (
       <View style={styles.container}>
