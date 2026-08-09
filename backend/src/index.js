@@ -896,6 +896,10 @@ async function fetchAuthorFeedRows({ actorId, authorId = actorId, limit, cursor,
 }
 
 async function fetchDiscoverySignals(limit = 20) {
+  const cacheKey = `discovery:signals:${limit}`;
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return cached;
+
   const rows = await query(
     `SELECT name, type, cnt FROM (
       SELECT tag AS name, 'tag' AS type, COUNT(*) AS cnt
@@ -911,17 +915,20 @@ async function fetchDiscoverySignals(limit = 20) {
     [limit]
   );
 
-  return rows.map((r) => ({
+  const payload = rows.map((r) => ({
     name: r.name,
     type: r.type,
     count: Number(r.cnt || 0),
   })).filter((r) => Boolean(r.name));
+  await cacheSetJson(cacheKey, payload, 45);
+  return payload;
 }
 
 async function invalidateAllPostsCaches() {
   await cacheDel("post:detail:*");
   await cacheDel("feed:*");
   await cacheDel("map:v1:*");
+  await cacheDel("discovery:signals:*");
 }
 
 async function invalidatePostCaches(postId) {
@@ -2346,6 +2353,9 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
+  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId: "" });
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
   const payload = await fetchFeedRows({
     sort,
     cursor,
@@ -2354,6 +2364,7 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
     q,
     tag,
   });
+  await cacheSetJson(cacheKey, payload, 20);
   return res.json(payload);
 }));
 
@@ -2859,6 +2870,14 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
   const sort = req.query.sort === "hot" ? "hot" : "latest";
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
+  const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId: "" });
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) {
+    return res.json({
+      ...cached,
+      stats: cached.stats || { totalPosts: cached.total },
+    });
+  }
   const payload = await fetchFeedRows({
     sort,
     cursor,
@@ -2867,6 +2886,7 @@ app.get("/api/posts", asyncHandler(async (req, res) => {
     q,
     tag,
   });
+  await cacheSetJson(cacheKey, payload, 20);
   return res.json({
     ...payload,
     stats: payload.stats || { totalPosts: payload.total },
