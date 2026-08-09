@@ -89,7 +89,7 @@ export function useFeedList(fetcher, options = {}) {
         const cachedPosts = Array.isArray(snapshot?.posts)
           ? normalizeUniquePosts(snapshot.posts)
           : [];
-        if (!savedAt || Date.now() - savedAt > cacheTtlMs || !cachedPosts.length) return;
+        if (snapshot.version !== 1 || !savedAt || Date.now() - savedAt > cacheTtlMs || !cachedPosts.length) return;
         if (snapshot.sort !== normalizedSort
           || String(snapshot.q || '') !== normalizedQ
           || String(snapshot.tag || '') !== normalizedTag) return;
@@ -165,7 +165,7 @@ export function useFeedList(fetcher, options = {}) {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [ensureLoadingState, fetcher, loadingMore, pageSize, q, sort, tag]);
+  }, [cacheStorage, cacheTtlMs, ensureLoadingState, fetcher, loadingMore, pageSize, q, sort, tag]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
