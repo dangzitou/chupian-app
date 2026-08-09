@@ -626,9 +626,13 @@ export default function PostDetailScreen({ route, navigation }) {
   const onShare = useCallback(async () => {
     if (!post) return;
     try {
-      await sharePost(post);
-    } catch (_err) {
-      Alert.alert('分享失败', '暂不支持当前环境分享');
+      const result = await sharePost(post);
+      if (result === 'copied') {
+        Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
+      }
+    } catch (shareError) {
+      if (shareError?.name === 'AbortError') return;
+      Alert.alert('分享失败', shareError?.message || '当前环境暂不支持分享，请稍后重试。');
     }
   }, [post]);
 
