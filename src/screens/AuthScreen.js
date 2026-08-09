@@ -123,6 +123,15 @@ export default function AuthScreen({ navigation }) {
               {isRegister ? '已有账号？返回登录' : '还没有账号？注册拍摄档案'}
             </Text>
           </Pressable>
+          <Pressable
+            style={styles.guestEntry}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="先浏览，不注册"
+          >
+            <Text style={styles.guestTitle}>先看看，不注册</Text>
+            <Text style={styles.guestSubtitle}>地图、出片点和公开作品都可以先浏览</Text>
+          </Pressable>
           <Text style={styles.privacy}>密码仅以加盐 scrypt 摘要存储，不保存明文。</Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -173,5 +182,17 @@ const styles = StyleSheet.create({
   submitText: { color: COLORS.onAccent, fontSize: 15, fontWeight: '800' },
   switch: { alignItems: 'center', paddingVertical: 18 },
   switchText: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
+  guestEntry: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginBottom: 18,
+  },
+  guestTitle: { color: COLORS.ink, fontSize: 13, fontWeight: '700' },
+  guestSubtitle: { color: COLORS.muted, fontSize: 11.5, marginTop: 3 },
   privacy: { color: COLORS.mutedText, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 'auto' },
 });
