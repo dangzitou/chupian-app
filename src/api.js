@@ -13,6 +13,7 @@ import { buildSessionIdempotencyKey } from './lib/idempotency';
 const NETWORK_TIMEOUT_MS = 12_000;
 const GET_CACHE_TTL_MS = 4000;
 const MAX_RETRIES = 2;
+const MAX_GET_CACHE_ENTRIES = 250;
 
 const inFlightGetRequests = new Map();
 const getResponseCache = new Map();
@@ -44,6 +45,21 @@ function clonePayload(value) {
   } catch (_err) {
     return value;
   }
+}
+
+function setGetResponseCache(key, value, ttl) {
+  const now = Date.now();
+  for (const [cachedKey, cached] of getResponseCache) {
+    if (cached.expiresAt <= now) getResponseCache.delete(cachedKey);
+  }
+  if (!getResponseCache.has(key) && getResponseCache.size >= MAX_GET_CACHE_ENTRIES) {
+    const oldestKey = getResponseCache.keys().next().value;
+    if (oldestKey !== undefined) getResponseCache.delete(oldestKey);
+  }
+  getResponseCache.set(key, {
+    value: clonePayload(value),
+    expiresAt: now + ttl,
+  });
 }
 
 function buildCacheKey(method, path, options = {}) {
@@ -177,10 +193,7 @@ async function request(path, options = {}) {
       try {
         const value = await doRequest(path, options);
         if (shouldCache) {
-          getResponseCache.set(key, {
-            value: clonePayload(value),
-            expiresAt: Date.now() + cacheTtl,
-          });
+          setGetResponseCache(key, value, cacheTtl);
         }
         return value;
       } catch (err) {
