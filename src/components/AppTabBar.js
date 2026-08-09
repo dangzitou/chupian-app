@@ -88,6 +88,8 @@ function NotificationBadge() {
     };
   }, [load]);
 
+  useEffect(() => api.subscribeNotificationRefresh?.(load), [load]);
+
   if (!unread) return null;
 
   return (
