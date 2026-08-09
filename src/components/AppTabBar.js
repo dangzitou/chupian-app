@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
@@ -50,20 +50,42 @@ function PlusIcon() {
 
 function NotificationBadge() {
   const [unread, setUnread] = useState(0);
+  const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
       const payload = await api.notifications({ limit: 1 });
       setUnread(Math.max(0, Number(payload?.unread || 0)));
     } catch (_err) {
       // Notifications are non-blocking; keep the tab bar stable if unavailable.
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
-    load();
-    const timer = setInterval(load, 60_000);
-    return () => clearInterval(timer);
+    let timer = null;
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    const start = () => {
+      stop();
+      load();
+      timer = setInterval(load, 60_000);
+    };
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') start();
+      else stop();
+    });
+
+    if (AppState.currentState === 'active') start();
+    return () => {
+      stop();
+      subscription?.remove?.();
+    };
   }, [load]);
 
   if (!unread) return null;
