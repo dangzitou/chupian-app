@@ -1,9 +1,31 @@
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { formatCount } from '../utils/format';
 
 function ActionGlyph({ type, active = false, busy = false, compact = false }) {
+  const activeScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!active) {
+      Animated.timing(activeScale, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }).start();
+      return undefined;
+    }
+
+    activeScale.setValue(0.82);
+    Animated.spring(activeScale, {
+      toValue: 1,
+      speed: 28,
+      bounciness: 5,
+      useNativeDriver: true,
+    }).start();
+    return undefined;
+  }, [active, activeScale]);
+
   if (busy) {
     return (
       <ActivityIndicator
@@ -34,7 +56,18 @@ function ActionGlyph({ type, active = false, busy = false, compact = false }) {
       ? (active ? '★' : '☆')
       : '↗';
 
-  return <Text style={[styles.icon, compact && styles.iconCompact, active && styles.active]}>{glyph}</Text>;
+  return (
+    <Animated.Text
+      style={[
+        styles.icon,
+        compact && styles.iconCompact,
+        active && styles.active,
+        { transform: [{ scale: activeScale }] },
+      ]}
+    >
+      {glyph}
+    </Animated.Text>
+  );
 }
 
 export default function ActionBar({
