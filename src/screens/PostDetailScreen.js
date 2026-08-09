@@ -87,7 +87,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
   const gestureRef = useRef({ mode: 'idle', distance: 0, baseScale: 1 });
   useEffect(() => {
     setLoadError(false);
-    setMediaLoading(Boolean(item?.url || item?.cover) && !isPlayableMedia(item));
+    setMediaLoading(Boolean(item?.url || item?.cover));
     currentScaleRef.current = 1;
     gestureRef.current = { mode: 'idle', distance: 0, baseScale: 1 };
     zoom.setValue(1);
@@ -168,7 +168,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
                 style={styles.viewerRetry}
                 onPress={() => {
                   setLoadError(false);
-                  setMediaLoading(Boolean(item?.url || item?.cover) && !isPlayableMedia(item));
+                  setMediaLoading(Boolean(item?.url || item?.cover));
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="重试加载素材"
@@ -184,7 +184,12 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
               controls
               loop={item.kind === 'live'}
               poster={item.cover}
-              onError={() => setLoadError(true)}
+              onLoadStart={() => setMediaLoading(true)}
+              onReady={() => setMediaLoading(false)}
+              onError={() => {
+                setMediaLoading(false);
+                setLoadError(true);
+              }}
             />
           ) : (
             imageUri ? (
