@@ -17,6 +17,23 @@ const MAX_GET_CACHE_ENTRIES = 250;
 
 const inFlightGetRequests = new Map();
 const getResponseCache = new Map();
+const notificationRefreshListeners = new Set();
+
+function subscribeNotificationRefresh(listener) {
+  if (typeof listener !== 'function') return () => {};
+  notificationRefreshListeners.add(listener);
+  return () => notificationRefreshListeners.delete(listener);
+}
+
+function emitNotificationRefresh() {
+  for (const listener of notificationRefreshListeners) {
+    try {
+      listener();
+    } catch (_err) {
+      // A badge refresh must never affect the completed write operation.
+    }
+  }
+}
 
 class ApiError extends Error {
   constructor(message, { status, path, method, payload, cause } = {}) {
@@ -556,24 +573,32 @@ export const api = {
     return normalizeNotificationsResponse(raw);
   },
 
+  subscribeNotificationRefresh(listener) {
+    return subscribeNotificationRefresh(listener);
+  },
+
   async markNotificationRead(id) {
     const target = String(id || '').trim();
     if (!target) throw new Error('notification id required');
-    return request(`${API_PREFIX}/notifications/${encodeURIComponent(target)}/read`, {
+    const result = await request(`${API_PREFIX}/notifications/${encodeURIComponent(target)}/read`, {
       method: 'POST',
       headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read', target) },
       body: JSON.stringify({}),
       noCache: true,
     });
+    emitNotificationRefresh();
+    return result;
   },
 
   async markAllNotificationsRead() {
-    return request(`${API_PREFIX}/notifications/read-all`, {
+    const result = await request(`${API_PREFIX}/notifications/read-all`, {
       method: 'POST',
       headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read-all', 'current') },
       body: JSON.stringify({}),
       noCache: true,
     });
+    emitNotificationRefresh();
+    return result;
   },
 
   async authorPosts(authorId, params = {}) {
