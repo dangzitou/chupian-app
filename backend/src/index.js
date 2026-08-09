@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import multer from "multer";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import helmet from "helmet";
 import { closeDb, tx, query } from "./db.js";
 import {
@@ -32,6 +33,14 @@ const {
   MAX_FILE_SIZE = "120mb",
   SPOT_CACHE_TTL = "90",
   MEDIA_PUBLIC_URL = "",
+  MEDIA_STORAGE = "local",
+  MEDIA_KEY_PREFIX = "media/",
+  S3_BUCKET = "",
+  S3_REGION = "us-east-1",
+  S3_ENDPOINT = "",
+  S3_ACCESS_KEY_ID = "",
+  S3_SECRET_ACCESS_KEY = "",
+  S3_FORCE_PATH_STYLE = "false",
 } = process.env;
 
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
@@ -65,14 +74,79 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, "..");
 const ASSET_DIR = path.join(ROOT_DIR, UPLOAD_DIR);
+const MEDIA_STORAGE_MODE = String(MEDIA_STORAGE || "local").trim().toLowerCase();
 const MEDIA_BASE_URL = String(MEDIA_PUBLIC_URL || "").trim().replace(/\/+$/, "");
+const MEDIA_KEY_PREFIX_VALUE = String(MEDIA_KEY_PREFIX || "")
+  .trim()
+  .replace(/^\/+|\/+$/g, "");
+const S3_BUCKET_NAME = String(S3_BUCKET || "").trim();
+const S3_REGION_NAME = String(S3_REGION || "us-east-1").trim();
+const S3_ENDPOINT_URL = String(S3_ENDPOINT || "").trim().replace(/\/+$/, "");
+const S3_FORCE_PATH_STYLE_VALUE = String(S3_FORCE_PATH_STYLE || "false").toLowerCase() === "true";
+
+if (!["local", "s3"].includes(MEDIA_STORAGE_MODE)) {
+  throw new Error(`Unsupported MEDIA_STORAGE: ${MEDIA_STORAGE_MODE}`);
+}
+if (MEDIA_STORAGE_MODE === "s3" && (!S3_BUCKET_NAME || !S3_REGION_NAME)) {
+  throw new Error("S3_BUCKET and S3_REGION are required when MEDIA_STORAGE=s3");
+}
+
+const s3Client = MEDIA_STORAGE_MODE === "s3"
+  ? new S3Client({
+      region: S3_REGION_NAME,
+      endpoint: S3_ENDPOINT_URL || undefined,
+      forcePathStyle: S3_FORCE_PATH_STYLE_VALUE,
+      credentials: S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY
+        ? { accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY }
+        : undefined,
+    })
+  : null;
 
 fs.mkdirSync(ASSET_DIR, { recursive: true });
 
-function buildMediaUrl(req, filename) {
+function encodeObjectKey(value) {
+  return String(value || "")
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function getMediaObjectKey(filename) {
+  return `${MEDIA_KEY_PREFIX_VALUE ? `${MEDIA_KEY_PREFIX_VALUE}/` : ""}${String(filename || "")}`;
+}
+
+function buildMediaUrl(req, filename, objectKey = filename) {
   const safeFilename = encodeURIComponent(String(filename || ""));
-  if (MEDIA_BASE_URL) return `${MEDIA_BASE_URL}/${safeFilename}`;
+  const safeObjectKey = encodeObjectKey(objectKey || filename);
+  if (MEDIA_BASE_URL) {
+    return `${MEDIA_BASE_URL}/${MEDIA_STORAGE_MODE === "s3" ? safeObjectKey : safeFilename}`;
+  }
+  if (MEDIA_STORAGE_MODE === "s3") {
+    if (S3_ENDPOINT_URL) {
+      const endpointPath = S3_FORCE_PATH_STYLE_VALUE
+        ? `${encodeURIComponent(S3_BUCKET_NAME)}/${safeObjectKey}`
+        : safeObjectKey;
+      return `${S3_ENDPOINT_URL}/${endpointPath}`;
+    }
+    return `https://${S3_BUCKET_NAME}.s3.${S3_REGION_NAME}.amazonaws.com/${safeObjectKey}`;
+  }
   return `${req.protocol}://${req.get("host")}/media/${safeFilename}`;
+}
+
+async function persistMediaFile(req, file) {
+  if (MEDIA_STORAGE_MODE !== "s3") return buildMediaUrl(req, file.filename);
+
+  const objectKey = getMediaObjectKey(file.filename);
+  await s3Client.send(new PutObjectCommand({
+    Bucket: S3_BUCKET_NAME,
+    Key: objectKey,
+    Body: fs.createReadStream(file.path),
+    ContentType: file.mimetype,
+    CacheControl: "public, max-age=31536000, immutable",
+  }));
+  await fs.promises.unlink(file.path).catch(() => {});
+  return buildMediaUrl(req, file.filename, objectKey);
 }
 
 const allowedExtensions = new Set(ALLOWED_UPLOAD_EXT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
@@ -3112,20 +3186,19 @@ app.post("/api/v1/media/upload", (req, res, next) => {
 
     const actor = readActorId(req, req.body || {});
     const filePath = req.file.path;
-    const uploadPayload = {
-      ok: true,
-      media: [{
-        kind: req.file.mimetype?.startsWith("video/") ? "video" : "image",
-        url: buildMediaUrl(req, req.file.filename),
-        duration: 0,
-      }],
-    };
 
     runWithIdempotency({
       req,
       actor,
       scope: "media:upload",
-      handler: async () => uploadPayload,
+      handler: async () => ({
+        ok: true,
+        media: [{
+          kind: req.file.mimetype?.startsWith("video/") ? "video" : "image",
+          url: await persistMediaFile(req, req.file),
+          duration: 0,
+        }],
+      }),
     }).then(async (result) => {
       if (result.replay) {
         await fs.promises.unlink(filePath).catch(() => {});
