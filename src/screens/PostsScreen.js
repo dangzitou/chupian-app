@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { COLORS } from '../config';
 import PostCard from '../components/PostCard';
@@ -157,6 +158,8 @@ export default function PostsScreen({ navigation }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const bootstrappedRef = useRef(false);
   const feedModeRef = useRef('');
+  const firstFocusRef = useRef(true);
+  const refreshOnFocusRef = useRef(null);
 
   const feedFetcher = useCallback(
     (params) => (feedMode === 'following' ? api.meFollowing(params) : api.feed(params)),
@@ -183,6 +186,21 @@ export default function PostsScreen({ navigation }) {
     setBusyForPost,
     isPostBusy,
   } = useFeedList(feedFetcher, { limit: PAGE_SIZE, sort: 'latest' });
+
+  refreshOnFocusRef.current = () => {
+    load({
+      append: false,
+      cursor: null,
+      nextSort: sort,
+      nextQ: q,
+      nextTag: activeTag,
+    });
+  };
+
+  useFocusEffect(useCallback(() => {
+    if (!firstFocusRef.current) refreshOnFocusRef.current?.();
+    firstFocusRef.current = false;
+  }, []));
 
   const switchFeedMode = useCallback((nextMode) => {
     if (nextMode === feedMode) return;
