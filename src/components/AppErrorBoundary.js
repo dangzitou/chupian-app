@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 
 export default class AppErrorBoundary extends React.Component {
@@ -21,6 +21,14 @@ export default class AppErrorBoundary extends React.Component {
     this.setState({ hasError: false });
   };
 
+  reloadWebApp = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.location.reload();
+      return;
+    }
+    this.reset();
+  };
+
   render() {
     if (!this.state.hasError) return this.props.children;
 
@@ -40,6 +48,16 @@ export default class AppErrorBoundary extends React.Component {
           >
             <Text style={styles.retryText}>重新加载</Text>
           </Pressable>
+          {Platform.OS === 'web' ? (
+            <Pressable
+              style={styles.reload}
+              onPress={this.reloadWebApp}
+              accessibilityRole="button"
+              accessibilityLabel="刷新网页应用"
+            >
+              <Text style={styles.reloadText}>刷新页面</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     );
@@ -87,4 +105,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   retryText: { color: COLORS.onAccent, fontSize: 12.5, fontWeight: '800' },
+  reload: { marginTop: 10, paddingHorizontal: 18, paddingVertical: 8 },
+  reloadText: { color: COLORS.muted, fontSize: 12.5, fontWeight: '700' },
 });
