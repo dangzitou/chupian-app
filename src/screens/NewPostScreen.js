@@ -165,12 +165,15 @@ export default function NewPostScreen({ navigation, route }) {
   const [loadingSpots, setLoadingSpots] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [publishError, setPublishError] = useState('');
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftMediaWarning, setDraftMediaWarning] = useState('');
   const [shootingOpen, setShootingOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [state, dispatch] = useReducer(reducer, EMPTY_SHOT);
   const idempotencyKeyRef = useRef('');
@@ -507,6 +510,29 @@ export default function NewPostScreen({ navigation, route }) {
 
   const validation = useMemo(() => validatePostDraft(state, mediaList), [mediaList, state]);
 
+  const rewardPreview = useMemo(() => {
+    const metadataCount = [
+      state.angle,
+      state.direction,
+      state.timeWindow,
+      state.shotAt,
+      state.camera,
+      state.lens,
+      state.focal,
+      state.aperture,
+      state.shutter,
+      state.iso,
+      state.whiteBalance,
+    ].filter((value) => String(value || '').trim()).length;
+    const contentReady = state.content.trim().length >= 120;
+    const guideReady = contentReady && metadataCount >= 3;
+    return {
+      metadataCount,
+      guideReady,
+      earnedHint: guideReady ? '完整攻略奖励已解锁' : '补充 120 字攻略和 3 项参数，可多得 +15 贡献值',
+    };
+  }, [state]);
+
   const hasDraftPayload = useMemo(
     () => (
       state.title.trim()
@@ -541,7 +567,11 @@ export default function NewPostScreen({ navigation, route }) {
     }
 
     setSubmitting(true);
+    setPublishError('');
     try {
+      // Keep the draft until the post transaction succeeds. A page refresh after
+      // a failed upload must not erase the user's text or shooting metadata.
+      await saveDraft();
       const orderedMediaList = mediaList.length
         ? (coverIndex > 0 && coverIndex < mediaList.length
           ? [mediaList[coverIndex], ...mediaList.slice(0, coverIndex), ...mediaList.slice(coverIndex + 1)]
@@ -550,7 +580,7 @@ export default function NewPostScreen({ navigation, route }) {
       const uploadTotal = orderedMediaList.reduce((total, item) => (
         total + (item.kind === MEDIA_KINDS.LIVE && item.pairedVideo?.uri ? 2 : 1)
       ), 0);
-      setUploadProgress({ completed: 0, total: uploadTotal });
+      setUploadProgress({ completed: 0, total: uploadTotal, phase: 'uploading' });
       const markUploadComplete = () => {
         setUploadProgress((current) => current
           ? { ...current, completed: Math.min(current.total, current.completed + 1) }
@@ -634,14 +664,19 @@ export default function NewPostScreen({ navigation, route }) {
         authorBio: state.authorBio.trim(),
       };
 
+      setUploadProgress((current) => current
+        ? { ...current, phase: 'publishing' }
+        : current);
+
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = buildSessionIdempotencyKey('post-create', `${state.spotId || ''}-${state.author || ''}`);
       }
+      const created = await api.createPost(payload, idempotencyKeyRef.current);
       await clearDraft();
-      await api.createPost(payload, idempotencyKeyRef.current);
       mediaIdempotencyRef.current.clear();
       setUploadProgress(null);
-      Alert.alert('发布成功', '作品已发送审核，预计短时间内上架');
+      const earnedPoints = Number(created?.reward?.earnedPoints || 5);
+      Alert.alert('发布成功', `作品已发布，获得 +${earnedPoints} 贡献值`);
       dispatch({ type: 'reset' });
       setMediaList([]);
       setCoverIndex(-1);
@@ -655,12 +690,12 @@ export default function NewPostScreen({ navigation, route }) {
         parent.navigate(APP_ROUTES.DISCOVERY);
       }
     } catch (err) {
-      Alert.alert('发布失败', err.message || '网络异常，请稍后再试');
+      setPublishError('发布失败，草稿和已完成的上传状态已保留。检查网络后再次点击即可继续。');
     } finally {
       setSubmitting(false);
       setUploadProgress(null);
     }
-  }, [api, clearDraft, coverIndex, dispatch, getMediaUploadKey, mediaList, navigation, selectedSpot, state, validation]);
+  }, [api, clearDraft, coverIndex, dispatch, getMediaUploadKey, mediaList, navigation, saveDraft, selectedSpot, state, validation]);
 
   const onSaveDraft = useCallback(() => {
     saveDraft()
@@ -700,8 +735,13 @@ export default function NewPostScreen({ navigation, route }) {
       >
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>发布出片</Text>
-          <Text style={styles.subtitle}>记录一张照片的地点、参数和故事</Text>
+          <Text style={styles.subtitle}>先发出来，拍摄参数和攻略之后再补也可以</Text>
+          <View style={styles.rewardHint}>
+            <Text style={styles.rewardHintTitle}>发布即可得 +5 贡献值</Text>
+            <Text style={styles.rewardHintText}>{rewardPreview.earnedHint}</Text>
+          </View>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
+          {!!publishError ? <Text style={styles.publishError} accessibilityLiveRegion="polite">{publishError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
           {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
 
@@ -751,7 +791,7 @@ export default function NewPostScreen({ navigation, route }) {
           />
 
         <PostInput
-          label="标题 *"
+          label="标题（可选）"
           error={validation.errors.title}
           value={state.title}
           onChange={(value) => setField('title', value)}
@@ -759,39 +799,45 @@ export default function NewPostScreen({ navigation, route }) {
           maxLength={90}
         />
 
-        <Text style={styles.sectionTitle}>出片位置</Text>
-        <View style={styles.spotWrap}>
-          {loadingSpots ? <ActivityIndicator color={COLORS.accent} /> : (
-            spots.slice(0, 12).map((item) => {
-              const active = String(item.id) === String(state.spotId);
-              return (
-                <Pressable
-                  key={item.id}
-                  style={[styles.spotBtn, active && styles.spotBtnActive]}
-                  onPress={() => selectSpot(item)}
-                >
-                  <Text style={[styles.spotBtnText, active && styles.spotBtnTextActive]}>{item.name}</Text>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
-        <PostInput
-          label="或手动输入地点"
-          error={validation.errors.spotName}
-          value={state.spotName}
-          onChange={(value) => setField('spotName', value)}
-          placeholder="如：海珠区江湾路"
-          maxLength={80}
-        />
-        <PostInput
-          label="行政区"
-          error={validation.errors.district}
-          value={state.district}
-          onChange={(value) => setField('district', value)}
-          placeholder="如：海珠区"
-          maxLength={24}
-        />
+        <FormSection
+          title="出片位置"
+          summary={state.spotName || (state.latitude && state.longitude) ? '已记录位置，可补充点位名称' : '可选，之后也能从地图补充'}
+          expanded={locationOpen}
+          onToggle={() => setLocationOpen((value) => !value)}
+        >
+          <View style={styles.spotWrap}>
+            {loadingSpots ? <ActivityIndicator color={COLORS.accent} /> : (
+              spots.slice(0, 12).map((item) => {
+                const active = String(item.id) === String(state.spotId);
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[styles.spotBtn, active && styles.spotBtnActive]}
+                    onPress={() => selectSpot(item)}
+                  >
+                    <Text style={[styles.spotBtnText, active && styles.spotBtnTextActive]}>{item.name}</Text>
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+          <PostInput
+            label="地点名称（可选）"
+            error={validation.errors.spotName}
+            value={state.spotName}
+            onChange={(value) => setField('spotName', value)}
+            placeholder="如：海珠区江湾路"
+            maxLength={80}
+          />
+          <PostInput
+            label="行政区（可选）"
+            error={validation.errors.district}
+            value={state.district}
+            onChange={(value) => setField('district', value)}
+            placeholder="如：海珠区"
+            maxLength={24}
+          />
+        </FormSection>
 
         <FormSection
           title="拍摄信息"
@@ -922,31 +968,38 @@ export default function NewPostScreen({ navigation, route }) {
           />
         </FormSection>
 
-        <Text style={styles.sectionTitle}>正文 / 经验</Text>
+        <Text style={styles.sectionTitle}>正文 / 攻略（可选）</Text>
         <PostInput
-          label="正文 *"
+          label="正文 / 攻略"
           error={validation.errors.content}
           value={state.content}
           onChange={(value) => setField('content', value)}
           placeholder="记录时间、天气、机位、拍摄流程、避坑提醒"
           multiline
           maxLength={3000}
-          help="建议 300 字以上可提高曝光率"
+          help="补充 120 字和 3 项拍摄参数，可获得额外贡献值"
         />
-        <PostInput
-          label="标签（逗号分隔）"
-          error={validation.errors.tags}
-          value={state.tags}
-          onChange={(value) => setField('tags', value)}
-          placeholder="夜景, 人像, 人群"
-        />
-        <PostInput
-          label="风格（逗号分隔）"
-          error={validation.errors.stylesText}
-          value={state.stylesText}
-          onChange={(value) => setField('stylesText', value)}
-          placeholder="霓虹, 街头, 人文"
-        />
+        <FormSection
+          title="标签与风格"
+          summary={[state.tags, state.stylesText].filter(Boolean).join(' · ') || '可选，帮助更多人找到攻略'}
+          expanded={tagsOpen}
+          onToggle={() => setTagsOpen((value) => !value)}
+        >
+          <PostInput
+            label="标签（逗号分隔）"
+            error={validation.errors.tags}
+            value={state.tags}
+            onChange={(value) => setField('tags', value)}
+            placeholder="夜景, 人像, 人群"
+          />
+          <PostInput
+            label="风格（逗号分隔）"
+            error={validation.errors.stylesText}
+            value={state.stylesText}
+            onChange={(value) => setField('stylesText', value)}
+            placeholder="霓虹, 街头, 人文"
+          />
+        </FormSection>
 
         <FormSection
           title="作者信息"
@@ -997,7 +1050,9 @@ export default function NewPostScreen({ navigation, route }) {
           </Pressable>
           {submitting && uploadProgress ? (
             <Text style={styles.uploadProgress}>
-              正在上传素材 {uploadProgress.completed}/{uploadProgress.total}
+              {uploadProgress.phase === 'publishing'
+                ? '正在发布作品'
+                : `正在上传素材 ${uploadProgress.completed}/${uploadProgress.total}`}
             </Text>
           ) : null}
         </View>
@@ -1012,6 +1067,15 @@ const styles = StyleSheet.create({
   body: { padding: 16, paddingBottom: 96 },
   title: { fontSize: 24, color: COLORS.ink, fontWeight: '700' },
   subtitle: { color: COLORS.muted, marginTop: 3, marginBottom: 12, fontSize: 12.5 },
+  rewardHint: {
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.accentBg,
+  },
+  rewardHintTitle: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
+  rewardHintText: { color: COLORS.muted, fontSize: 11.5, marginTop: 3 },
   sectionTitle: {
     color: COLORS.ink,
     marginTop: 16,
@@ -1193,6 +1257,12 @@ const styles = StyleSheet.create({
     color: '#b84b4b',
     marginTop: 4,
     fontSize: 12,
+  },
+  publishError: {
+    color: '#a34a2a',
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 18,
   },
   previewWrap: {
     marginTop: 10,

@@ -40,11 +40,9 @@ export function validatePostDraft(state = {}, mediaList = []) {
   const tags = splitTags(state.tags);
   const styles = splitTags(state.stylesText);
 
-  if (!title) errors.title = '标题不能为空';
-  else if (title.length > FIELD_LIMITS.title) errors.title = `标题不能超过${FIELD_LIMITS.title}字`;
+  if (title.length > FIELD_LIMITS.title) errors.title = `标题不能超过${FIELD_LIMITS.title}字`;
 
-  if (!content) errors.content = '正文不能为空';
-  else if (content.length > FIELD_LIMITS.content) errors.content = `正文不能超过${FIELD_LIMITS.content}字`;
+  if (content.length > FIELD_LIMITS.content) errors.content = `正文不能超过${FIELD_LIMITS.content}字`;
 
   if (!mediaList.length) errors.media = '请至少上传1张图片/视频';
   if (mediaList.length > FIELD_LIMITS.mediaList) errors.media = `素材不能超过${FIELD_LIMITS.mediaList}个`;

@@ -59,6 +59,24 @@ function ProfileStats({ spotCount, posts, liked, saved, onSelectSection, onOpenM
   );
 }
 
+function CreatorRewardCard({ reward, onOpenCreate }) {
+  const points = Number(reward?.points || 0);
+  const publishedCount = Number(reward?.publishedCount || 0);
+  const guideCount = Number(reward?.guideCount || 0);
+  return (
+    <View style={styles.rewardCard}>
+      <View style={styles.rewardCopy}>
+        <Text style={styles.rewardTitle}>贡献值 {points}</Text>
+        <Text style={styles.rewardMeta}>已发布 {publishedCount} 条 · 完整攻略 {guideCount} 条</Text>
+        <Text style={styles.rewardNext}>补充攻略文字和拍摄参数，下一篇可多得 +{Number(reward?.nextGuidePoints || 15)}</Text>
+      </View>
+      <Pressable style={styles.rewardAction} onPress={onOpenCreate} accessibilityRole="button">
+        <Text style={styles.rewardActionText}>继续发布</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function ProfileScreen({ navigation }) {
   const [actorName, setActorName] = useState(() => getActorName());
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
@@ -70,6 +88,7 @@ export default function ProfileScreen({ navigation }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState('');
   const [notificationUnread, setNotificationUnread] = useState(0);
+  const [creatorReward, setCreatorReward] = useState({ points: 0, publishedCount: 0, guideCount: 0, nextGuidePoints: 15 });
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -117,17 +136,24 @@ export default function ProfileScreen({ navigation }) {
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, s, notificationPayload] = await Promise.all([
+      const [w, userPostsFeed, s, notificationPayload, rewardPayload] = await Promise.all([
         api.weather(),
         api.mePosts({ limit: 1, sort: 'latest' }),
         api.spots(),
         api.notifications({ limit: 1 }),
+        api.rewards().catch(() => ({
+          points: 0,
+          publishedCount: 0,
+          guideCount: 0,
+          nextGuidePoints: 15,
+        })),
       ]);
 
       setWeather(w);
       setTotalPosts(Number(userPostsFeed?.total || 0));
       setSpotCount((s.spots || []).length);
       setNotificationUnread(Number(notificationPayload?.unread || 0));
+      setCreatorReward(rewardPayload);
       setMeSectionStats((prev) => ({
         ...prev,
         mePosts: Number(userPostsFeed?.total || userPostsFeed.posts?.length || 0),
@@ -362,6 +388,8 @@ export default function ProfileScreen({ navigation }) {
         onOpenMap={onOpenMap}
       />
 
+      <CreatorRewardCard reward={creatorReward} onOpenCreate={onOpenCreate} />
+
       {weather?.ok && (
         <Pressable style={styles.weatherCard} onPress={() => setWeatherOpen((value) => !value)}>
           <View style={styles.weatherSummary}>
@@ -410,7 +438,7 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.blockedManageHint}>管理不想再看到的创作者</Text>
       </Pressable>
     </View>
-  ), [actorName, authenticated, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenEditProfile, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
+  ), [actorName, authenticated, creatorReward, meSectionStats, notificationUnread, onAuthAction, onOpenBlockedAuthors, onOpenCreate, onOpenEditProfile, onOpenMap, onOpenNotifications, onSwitchSection, section, spotCount, totalPosts, weather, weatherOpen]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -529,6 +557,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: COLORS.line,
   },
+  rewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: COLORS.accentBg,
+  },
+  rewardCopy: { flex: 1 },
+  rewardTitle: { color: COLORS.accent, fontSize: 14, fontWeight: '800' },
+  rewardMeta: { color: COLORS.ink, fontSize: 11.5, marginTop: 3 },
+  rewardNext: { color: COLORS.muted, fontSize: 11, marginTop: 3, lineHeight: 16 },
+  rewardAction: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: COLORS.accent,
+  },
+  rewardActionText: { color: COLORS.onAccent, fontSize: 11.5, fontWeight: '700' },
   statCard: {
     flex: 1,
     alignItems: 'center',

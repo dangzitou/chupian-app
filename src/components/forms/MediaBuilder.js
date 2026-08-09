@@ -65,14 +65,24 @@ export default function MediaBuilder({
 
             {canSetCover && !isCover && mediaList.length > 1 ? (
               <Pressable
-                style={styles.coverBtn}
+                style={({ pressed }) => [styles.coverBtn, pressed && styles.coverBtnPressed]}
                 onPress={() => onSetCover(idx)}
+                accessibilityRole="button"
+                accessibilityLabel={`将第 ${idx + 1} 个素材设为封面`}
+                accessibilityState={{ selected: isCover }}
+                hitSlop={6}
               >
                 <Text style={styles.coverBtnText}>设为封面</Text>
               </Pressable>
             ) : null}
 
-            <Pressable style={styles.delete} onPress={() => onRemove(idx)}>
+            <Pressable
+              style={({ pressed }) => [styles.delete, pressed && styles.deletePressed]}
+              onPress={() => onRemove(idx)}
+              accessibilityRole="button"
+              accessibilityLabel={`删除第 ${idx + 1} 个素材`}
+              hitSlop={6}
+            >
               <Text style={styles.deleteText}>−</Text>
             </Pressable>
           </View>
@@ -139,6 +149,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
   },
+  deletePressed: {
+    opacity: 0.6,
+    transform: [{ scale: 0.92 }],
+  },
   badge: {
     position: 'absolute',
     right: 6,
@@ -184,5 +198,9 @@ const styles = StyleSheet.create({
     color: COLORS.onAccent,
     fontSize: 10,
     fontWeight: '700',
+  },
+  coverBtnPressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.97 }],
   },
 });
