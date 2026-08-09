@@ -121,6 +121,7 @@ export default function ProfileScreen({ navigation }) {
     onRefresh,
     onEndReached,
     patchById,
+    clearFeed,
     setBusyForPost,
     isPostBusy,
   } = useFeedList(loadSectionPayload, { limit: PAGE_SIZE, sort: 'latest' });
@@ -203,8 +204,9 @@ export default function ProfileScreen({ navigation }) {
   }, [loadSectionMetrics]);
 
   useEffect(() => {
+    clearFeed();
     load({ append: false });
-  }, [load, section]);
+  }, [clearFeed, load, section]);
 
   useEffect(() => {
     ensureSectionMetric(section);
