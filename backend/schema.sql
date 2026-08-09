@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
   display_name VARCHAR(64) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   bio VARCHAR(160) NOT NULL DEFAULT '',
+  avatar_url VARCHAR(500) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_display_name (display_name)
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS posts (
   author_id VARCHAR(64) DEFAULT '',
   author_name VARCHAR(64) NOT NULL DEFAULT '匿名拍友',
   author_bio VARCHAR(120) DEFAULT '',
+  author_avatar VARCHAR(500) DEFAULT '',
   spot_id BIGINT UNSIGNED DEFAULT NULL,
   spot_name VARCHAR(128) DEFAULT '',
   district VARCHAR(64) DEFAULT '',
