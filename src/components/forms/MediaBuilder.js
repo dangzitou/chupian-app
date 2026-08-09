@@ -9,6 +9,12 @@ const KIND_LABEL = {
   [MEDIA_KINDS.LIVE]: '实况',
 };
 
+const MAX_MEDIA = 9;
+
+function getMediaKey(item) {
+  return String(item?.id || item?.assetId || item?.uri || item?.url || 'media');
+}
+
 function toNumber(value) {
   const valueNumber = Number(value || 0);
   return Number.isFinite(valueNumber) ? valueNumber : 0;
@@ -21,32 +27,102 @@ function formatDuration(value) {
   return `${Math.max(1, seconds)}s`;
 }
 
+function PreviewError({ kind, onRetry }) {
+  return (
+    <View style={styles.previewError}>
+      <Text style={styles.previewErrorTitle}>{KIND_LABEL[kind] || '素材'}预览失败</Text>
+      <Pressable
+        style={({ pressed }) => [styles.retry, pressed && styles.retryPressed]}
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="重新加载素材预览"
+      >
+        <Text style={styles.retryText}>重试</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function MediaBuilder({
   mediaList,
   onRemove,
   coverIndex = -1,
   onSetCover,
 }) {
+  const mediaItems = Array.isArray(mediaList) ? mediaList : [];
+  const [failedKeys, setFailedKeys] = React.useState(() => new Set());
   const canSetCover = typeof onSetCover === 'function';
   const safeCoverIndex = Number.isInteger(Number(coverIndex)) ? Number(coverIndex) : -1;
 
-  if (!mediaList.length) {
-    return <Text style={styles.empty}>建议上传 1~9 张图片/视频，内容更容易被发现</Text>;
+  const markPreviewFailed = React.useCallback((item) => {
+    const key = getMediaKey(item);
+    setFailedKeys((current) => {
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, []);
+
+  const retryPreview = React.useCallback((item) => {
+    const key = getMediaKey(item);
+    setFailedKeys((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const removeMedia = React.useCallback((index) => {
+    const item = mediaItems[index];
+    const key = getMediaKey(item);
+    setFailedKeys((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+    onRemove?.(index);
+  }, [mediaItems, onRemove]);
+
+  if (!mediaItems.length) {
+    return (
+      <View style={styles.emptyWrap}>
+        <Text style={styles.empty}>先选一张照片或视频，拍摄参数可以稍后补充</Text>
+        <Text style={styles.emptyHint}>支持静态图片、实况和视频，最多 {MAX_MEDIA} 个</Text>
+      </View>
+    );
   }
 
   return (
-    <View style={styles.row}>
-      {mediaList.map((item, idx) => {
+    <View>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summary}>已选 {mediaItems.length}/{MAX_MEDIA}</Text>
+        <Text style={styles.summaryHint}>图片 · 实况 · 视频</Text>
+      </View>
+      <View style={styles.row}>
+      {mediaItems.map((item, idx) => {
         const durationText = formatDuration(item.duration);
         const isCover = safeCoverIndex === idx;
         const isVideo = item.kind === MEDIA_KINDS.VIDEO;
+        const mediaKey = getMediaKey(item);
+        const previewFailed = failedKeys.has(mediaKey);
 
         return (
-          <View key={`${item.uri}-${idx}`} style={styles.card}>
-            {isVideo ? (
-              <VideoSurface uri={item.uri} style={styles.image} />
+          <View key={`${mediaKey}-${idx}`} style={styles.card}>
+            {previewFailed ? (
+              <PreviewError kind={item.kind} onRetry={() => retryPreview(item)} />
+            ) : isVideo ? (
+              <VideoSurface uri={item.uri} style={styles.image} onError={() => markPreviewFailed(item)} />
             ) : (
-              <Image source={{ uri: item.uri }} style={styles.image} resizeMode="cover" />
+              <Image
+                source={{ uri: item.uri }}
+                style={styles.image}
+                resizeMode="cover"
+                onError={() => markPreviewFailed(item)}
+                accessibilityLabel={`${KIND_LABEL[item.kind] || '素材'}预览`}
+              />
             )}
             <Text style={styles.kind}>{KIND_LABEL[item.kind] || item.kind}</Text>
             <Text style={styles.badge}>
@@ -66,7 +142,7 @@ export default function MediaBuilder({
             {canSetCover && !isCover && mediaList.length > 1 ? (
               <Pressable
                 style={({ pressed }) => [styles.coverBtn, pressed && styles.coverBtnPressed]}
-                onPress={() => onSetCover(idx)}
+                onPress={() => onSetCover?.(idx)}
                 accessibilityRole="button"
                 accessibilityLabel={`将第 ${idx + 1} 个素材设为封面`}
                 accessibilityState={{ selected: isCover }}
@@ -78,7 +154,7 @@ export default function MediaBuilder({
 
             <Pressable
               style={({ pressed }) => [styles.delete, pressed && styles.deletePressed]}
-              onPress={() => onRemove(idx)}
+              onPress={() => removeMedia(idx)}
               accessibilityRole="button"
               accessibilityLabel={`删除第 ${idx + 1} 个素材`}
               hitSlop={6}
@@ -88,12 +164,28 @@ export default function MediaBuilder({
           </View>
         );
       })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summary: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  summaryHint: {
+    color: COLORS.muted,
+    fontSize: 11,
+  },
   card: {
     width: 112,
     height: 112,
@@ -169,7 +261,50 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     marginTop: 6,
+  },
+  emptyWrap: {
+    marginTop: 6,
     marginBottom: 4,
+    gap: 3,
+  },
+  emptyHint: {
+    color: COLORS.muted,
+    fontSize: 11,
+  },
+  previewError: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    backgroundColor: '#eeeae6',
+  },
+  previewErrorTitle: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retry: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  retryText: {
+    color: COLORS.onAccent,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  retryPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.96 }],
   },
   coverMark: {
     position: 'absolute',
