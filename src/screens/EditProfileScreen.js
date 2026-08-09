@@ -28,12 +28,16 @@ export default function EditProfileScreen({ navigation }) {
   const [initialBio, setInitialBio] = useState('');
   const [initialAvatar, setInitialAvatar] = useState('');
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const avatarUploadKeyRef = useRef('');
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setError('');
     api.me().then((result) => {
       if (!alive) return;
       const nextUsername = result?.user?.username || '';
@@ -47,20 +51,24 @@ export default function EditProfileScreen({ navigation }) {
       setInitialDisplayName(nextDisplayName);
       setInitialBio(nextBio);
       setInitialAvatar(nextAvatar);
+      setProfileLoaded(true);
     }).catch((err) => {
-      if (alive) setError(err?.cause || err?.message || '资料加载失败');
+      if (alive) {
+        setProfileLoaded(false);
+        setError(err?.cause || err?.message || '资料加载失败');
+      }
     }).finally(() => {
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, []);
+  }, [loadAttempt]);
 
   const hasChanges = displayName.trim() !== initialDisplayName
     || bio.trim() !== initialBio
     || avatarUri.trim() !== initialAvatar.trim();
 
   const pickAvatar = useCallback(async () => {
-    if (saving) return;
+    if (saving || !profileLoaded) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -76,6 +84,7 @@ export default function EditProfileScreen({ navigation }) {
       if (result.canceled || !result.assets?.[0]) return;
       setAvatarAsset(result.assets[0]);
       setAvatarUri(result.assets[0].uri || '');
+      avatarUploadKeyRef.current = '';
       setError('');
     } catch (err) {
       setError(err?.message || '选择头像失败，请重试');
@@ -115,6 +124,7 @@ export default function EditProfileScreen({ navigation }) {
   }, [hasChanges, navigation, saving]);
 
   const save = useCallback(async () => {
+    if (!profileLoaded) return;
     const nextName = displayName.trim();
     const nextBio = bio.trim();
     if (!nextName) {
@@ -158,7 +168,9 @@ export default function EditProfileScreen({ navigation }) {
     } finally {
       setSaving(false);
     }
-  }, [avatarAsset, avatarUri, bio, displayName, initialAvatar, navigation]);
+  }, [avatarAsset, avatarUri, bio, displayName, initialAvatar, navigation, profileLoaded]);
+
+  const profileUnavailable = !loading && !profileLoaded;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -174,7 +186,7 @@ export default function EditProfileScreen({ navigation }) {
           <Pressable
             style={styles.avatarPicker}
             onPress={pickAvatar}
-            disabled={loading || saving}
+            disabled={loading || saving || profileUnavailable}
             accessibilityRole="button"
             accessibilityLabel="更换头像"
           >
@@ -196,7 +208,7 @@ export default function EditProfileScreen({ navigation }) {
             maxLength={64}
             placeholder="你的拍摄昵称"
             placeholderTextColor={COLORS.muted}
-            editable={!loading && !saving}
+            editable={!loading && !saving && !profileUnavailable}
           />
           <Text style={styles.counter}>{displayName.length}/64</Text>
 
@@ -210,12 +222,24 @@ export default function EditProfileScreen({ navigation }) {
             textAlignVertical="top"
             placeholder="例如：夜景、街头和城市边缘"
             placeholderTextColor={COLORS.muted}
-            editable={!loading && !saving}
+            editable={!loading && !saving && !profileUnavailable}
           />
           <Text style={styles.counter}>{bio.length}/160</Text>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable style={[styles.save, (loading || saving) && styles.saveDisabled]} onPress={save} disabled={loading || saving}>
+          {profileUnavailable ? (
+            <View style={styles.loadError}>
+              <Text style={styles.error}>{error || '资料暂时无法加载'}</Text>
+              <Pressable
+                style={styles.loadRetry}
+                onPress={() => setLoadAttempt((value) => value + 1)}
+                accessibilityRole="button"
+                accessibilityLabel="重新加载资料"
+              >
+                <Text style={styles.loadRetryText}>重新加载</Text>
+              </Pressable>
+            </View>
+          ) : (error ? <Text style={styles.error}>{error}</Text> : null)}
+          <Pressable style={[styles.save, (loading || saving || profileUnavailable) && styles.saveDisabled]} onPress={save} disabled={loading || saving || profileUnavailable}>
             {saving ? <ActivityIndicator color={COLORS.onAccent} /> : <Text style={styles.saveText}>保存资料</Text>}
           </Pressable>
         </ScrollView>
@@ -245,6 +269,9 @@ const styles = StyleSheet.create({
   bioInput: { minHeight: 108, paddingTop: 13, paddingBottom: 13, lineHeight: 20 },
   counter: { color: COLORS.muted, fontSize: 10.5, textAlign: 'right', marginTop: 4 },
   error: { color: '#b43a41', fontSize: 12.5, lineHeight: 18, marginTop: 14 },
+  loadError: { alignItems: 'center', marginTop: 8 },
+  loadRetry: { marginTop: 10, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 999, backgroundColor: COLORS.accentBg },
+  loadRetryText: { color: COLORS.accent, fontSize: 12.5, fontWeight: '700' },
   save: { height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent, marginTop: 22 },
   saveDisabled: { opacity: 0.6 },
   saveText: { color: COLORS.onAccent, fontSize: 15, fontWeight: '800' },
