@@ -689,6 +689,7 @@ async function loadPostMeta(rows, options = {}) {
       authorId: row.author_id || "",
       author: row.author_name || "匿名拍友",
       authorBio: row.author_bio || "",
+      avatar: row.author_avatar || "",
       spotId: row.spot_id ? String(row.spot_id) : "",
       spotName: row.spot_name || "",
       district: row.district || "",
@@ -968,6 +969,7 @@ async function ensurePostsSchemaCompatibility() {
       }
     };
     await ensureColumn("author_id", "VARCHAR(64) DEFAULT ''", "content");
+    await ensureColumn("author_avatar", "VARCHAR(500) DEFAULT ''", "author_bio");
     await ensureColumn("latitude", "DECIMAL(10,7) DEFAULT NULL", "district");
     await ensureColumn("longitude", "DECIMAL(10,7) DEFAULT NULL", "latitude");
 
@@ -1033,11 +1035,16 @@ async function ensureAuthSchemaCompatibility() {
         display_name VARCHAR(64) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         bio VARCHAR(160) NOT NULL DEFAULT '',
+        avatar_url VARCHAR(500) NOT NULL DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_users_display_name (display_name)
       ) ENGINE=InnoDB
     `);
+    const avatarColumns = await query("SHOW COLUMNS FROM users LIKE 'avatar_url'");
+    if (!Array.isArray(avatarColumns) || avatarColumns.length === 0) {
+      await query("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500) NOT NULL DEFAULT '' AFTER bio");
+    }
   } catch (err) {
     console.warn(`[schema] ensureAuthSchemaCompatibility skipped: ${err?.message || "unknown error"}`);
   }
@@ -1548,6 +1555,12 @@ async function createPostHandler(req) {
   const tags = normalizeList(body.tags || body.tag || "");
   const styles = normalizeList(body.styles || "");
   const actorId = readActorId(req, body);
+  const userId = readUserSession(req);
+  let authorAvatar = "";
+  if (userId) {
+    const userRows = await query("SELECT avatar_url FROM users WHERE id = ? LIMIT 1", [userId]);
+    authorAvatar = String(userRows[0]?.avatar_url || "");
+  }
   let shotAt = null;
   if (body.shotAt) {
     const parsed = new Date(body.shotAt);
@@ -1564,6 +1577,7 @@ async function createPostHandler(req) {
         safeText(actorId, 64),
         safeText(body.author || "匿名拍友", 64),
         safeText(body.authorBio || "", 120),
+        authorAvatar,
         spotId || null,
         spotName,
         district,
@@ -1589,7 +1603,7 @@ async function createPostHandler(req) {
 
       const [postResult] = await conn.execute(
         `INSERT INTO posts
-         (title, content, author_id, author_name, author_bio, spot_id, spot_name, district, latitude, longitude, direction, angle,
+         (title, content, author_id, author_name, author_bio, author_avatar, spot_id, spot_name, district, latitude, longitude, direction, angle,
         time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
         media_type, cover_url, status, guide_rewarded)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`,
@@ -2059,6 +2073,7 @@ function publicUser(row) {
     username: String(row?.username || ""),
     displayName: String(row?.display_name || row?.username || ""),
     bio: String(row?.bio || ""),
+    avatar: String(row?.avatar_url || ""),
   };
 }
 
@@ -2133,6 +2148,7 @@ app.post("/api/v1/auth/register", asyncHandler(async (req, res) => {
     display_name: credentials.displayName,
     password_hash: await hashPassword(credentials.password),
     bio: "",
+    avatar_url: "",
   };
   const anonymousActorId = readAnonymousActorId(req);
   try {
@@ -2157,7 +2173,7 @@ app.post("/api/v1/auth/register", asyncHandler(async (req, res) => {
 app.post("/api/v1/auth/login", asyncHandler(async (req, res) => {
   const credentials = parseAuthCredentials(req.body);
   const rows = await query(
-    "SELECT id, username, display_name, password_hash, bio FROM users WHERE username = ? LIMIT 1",
+    "SELECT id, username, display_name, password_hash, bio, avatar_url FROM users WHERE username = ? LIMIT 1",
     [credentials.username]
   );
   const user = rows[0];
@@ -2171,7 +2187,7 @@ app.get("/api/v1/auth/me", asyncHandler(async (req, res) => {
   const userId = readUserSession(req);
   if (!userId) return res.status(401).json({ error: "login required" });
   const rows = await query(
-    "SELECT id, username, display_name, bio FROM users WHERE id = ? LIMIT 1",
+    "SELECT id, username, display_name, bio, avatar_url FROM users WHERE id = ? LIMIT 1",
     [userId]
   );
   if (!rows.length) return res.status(401).json({ error: "account not found" });
@@ -2183,6 +2199,8 @@ app.patch("/api/v1/auth/me", asyncHandler(async (req, res) => {
   if (!userId) return res.status(401).json({ error: "login required" });
   const displayName = safeText(req.body?.displayName || req.body?.name || "", 64).trim();
   const bio = safeText(req.body?.bio || "", 160).trim();
+  const hasAvatar = Object.prototype.hasOwnProperty.call(req.body || {}, "avatar");
+  const avatar = hasAvatar ? safeText(req.body?.avatar || "", 500).trim() : null;
   if (!displayName) throw Object.assign(new Error("昵称不能为空"), { status: 400 });
 
   const updated = await tx(async (conn) => {
@@ -2192,16 +2210,30 @@ app.patch("/api/v1/auth/me", asyncHandler(async (req, res) => {
     );
     if (!userRows.length) throw Object.assign(new Error("account not found"), { status: 401 });
 
-    await conn.execute(
-      "UPDATE users SET display_name = ?, bio = ? WHERE id = ?",
-      [displayName, bio, userId]
-    );
+    if (hasAvatar) {
+      await conn.execute(
+        "UPDATE users SET display_name = ?, bio = ?, avatar_url = ? WHERE id = ?",
+        [displayName, bio, avatar, userId]
+      );
+    } else {
+      await conn.execute(
+        "UPDATE users SET display_name = ?, bio = ? WHERE id = ?",
+        [displayName, bio, userId]
+      );
+    }
 
     const actorId = actorHash(userId);
-    await conn.execute(
-      "UPDATE posts SET author_name = ?, author_bio = ? WHERE author_id = ?",
-      [displayName, bio, actorId]
-    );
+    if (hasAvatar) {
+      await conn.execute(
+        "UPDATE posts SET author_name = ?, author_bio = ?, author_avatar = ? WHERE author_id = ?",
+        [displayName, bio, avatar, actorId]
+      );
+    } else {
+      await conn.execute(
+        "UPDATE posts SET author_name = ?, author_bio = ? WHERE author_id = ?",
+        [displayName, bio, actorId]
+      );
+    }
     await conn.execute(
       "UPDATE post_comments SET actor_name = ? WHERE actor_id = ?",
       [displayName, actorId]
@@ -2216,7 +2248,7 @@ app.patch("/api/v1/auth/me", asyncHandler(async (req, res) => {
     );
 
     const [rows] = await conn.execute(
-      "SELECT id, username, display_name, bio FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, username, display_name, bio, avatar_url FROM users WHERE id = ? LIMIT 1",
       [userId]
     );
     return rows[0];
