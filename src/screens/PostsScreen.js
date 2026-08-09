@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { api } from '../api';
 import { COLORS } from '../config';
 import PostCard from '../components/PostCard';
@@ -160,6 +160,9 @@ export default function PostsScreen({ navigation }) {
   const feedModeRef = useRef('');
   const firstFocusRef = useRef(true);
   const refreshOnFocusRef = useRef(null);
+  const feedListRef = useRef(null);
+
+  useScrollToTop(feedListRef);
 
   const feedFetcher = useCallback(
     (params) => (feedMode === 'following' ? api.meFollowing(params) : api.feed(params)),
@@ -450,6 +453,7 @@ export default function PostsScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FlatList
+        ref={feedListRef}
         key={isMasonry ? 'feed-masonry' : 'feed-list'}
         data={posts}
         keyExtractor={(post) => String(post.id)}
