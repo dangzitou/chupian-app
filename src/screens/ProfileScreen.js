@@ -108,6 +108,7 @@ export default function ProfileScreen({ navigation }) {
   const [notificationUnread, setNotificationUnread] = useState(0);
   const [creatorReward, setCreatorReward] = useState({ points: 0, publishedCount: 0, guideCount: 0, nextGuidePoints: 15 });
   const firstFocusRef = useRef(true);
+  const notificationBadgeRequestRef = useRef(0);
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -115,6 +116,26 @@ export default function ProfileScreen({ navigation }) {
     if (section === 'meFollowing') return api.meFollowing(params);
     return api.mePosts(params);
   }, [section]);
+
+  const refreshNotificationBadge = useCallback(async () => {
+    const requestId = notificationBadgeRequestRef.current + 1;
+    notificationBadgeRequestRef.current = requestId;
+    try {
+      const payload = await api.notifications({ limit: 1 });
+      if (requestId === notificationBadgeRequestRef.current) {
+        setNotificationUnread(Number(payload?.unread || 0));
+      }
+    } catch (_err) {
+      // A badge refresh must never interrupt the completed interaction.
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = api.subscribeNotificationRefresh(() => {
+      void refreshNotificationBadge();
+    });
+    return unsubscribe;
+  }, [refreshNotificationBadge]);
 
   const {
     posts,
