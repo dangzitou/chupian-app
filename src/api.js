@@ -432,6 +432,14 @@ export const api = {
     );
   },
 
+  async resolveLocation() {
+    return safeRequestWithFallback(
+      `${API_PREFIX}/location`,
+      '/api/location',
+      { cacheTtl: 24 * 60 * 60 * 1000 },
+    );
+  },
+
   async feed(params = {}) {
     const queryString = buildFeedQuery({
       q: params.q,

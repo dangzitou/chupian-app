@@ -34,6 +34,8 @@ const {
 } = process.env;
 
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
+const LOCATION_CACHE_TTL_SECONDS = Number.parseInt(process.env.LOCATION_CACHE_TTL || String(60 * 60 * 24), 10) || 60 * 60 * 24;
+const LOCATION_LOOKUP_TIMEOUT_MS = Number.parseInt(process.env.LOCATION_LOOKUP_TIMEOUT_MS || "2500", 10) || 2500;
 const HTTP_KEEP_ALIVE_TIMEOUT_MS = Number.parseInt(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || "65000", 10) || 65000;
 const HTTP_HEADERS_TIMEOUT_MS = Number.parseInt(process.env.HTTP_HEADERS_TIMEOUT_MS || "20000", 10) || 20000;
 const HTTP_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS || "180000", 10) || 180000;
@@ -261,6 +263,72 @@ function ipToActorFingerprint(req) {
     || "127.0.0.1";
   const salt = process.env.ACTOR_HASH_SALT || "chupian-mobile-salt";
   return crypto.createHash("sha256").update(`${salt}|${ip}`).digest("hex").slice(0, 24);
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const raw = (Array.isArray(forwarded) ? forwarded[0] : String(forwarded || "")).split(",")[0].trim()
+    || String(req.headers["cf-connecting-ip"] || "").trim()
+    || String(req.ip || req.socket.remoteAddress || "").trim();
+  return raw.replace(/^::ffff:/i, "").replace(/^\[|\]$/g, "");
+}
+
+function isPrivateIp(value) {
+  const ip = String(value || "").toLowerCase();
+  if (!ip) return true;
+  if (ip === "localhost" || ip === "::1" || ip === "0.0.0.0") return true;
+  if (/^(10|127)\./.test(ip)) return true;
+  if (/^192\.168\./.test(ip)) return true;
+  const private172 = ip.match(/^172\.(\d+)\./);
+  if (private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31) return true;
+  return /^(fc|fd|fe80:)/.test(ip);
+}
+
+async function networkLocationHandler(req, res) {
+  const ip = getClientIp(req);
+  if (isPrivateIp(ip)) {
+    return res.status(503).json({ error: "network location unavailable" });
+  }
+
+  const salt = process.env.LOCATION_HASH_SALT || ACTOR_SESSION_SECRET;
+  const ipKey = crypto.createHash("sha256").update(`${salt}|${ip}`).digest("hex").slice(0, 32);
+  const cacheKey = `location:ip:v1:${ipKey}`;
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOCATION_LOOKUP_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
+      headers: { Accept: "application/json", "User-Agent": "chupian-location/1.0" },
+      signal: controller.signal,
+    });
+    if (!upstream.ok) {
+      return res.status(503).json({ error: "network location unavailable" });
+    }
+    const data = await upstream.json();
+    const lat = Number(data?.latitude);
+    const lng = Number(data?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(503).json({ error: "network location unavailable" });
+    }
+    const label = [data?.city, data?.region, data?.country_name]
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(" · ");
+    const payload = {
+      location: { lat, lng, label: label || "当前位置" },
+      source: "ip",
+      accuracy: "coarse",
+    };
+    await cacheSetJson(cacheKey, payload, LOCATION_CACHE_TTL_SECONDS);
+    return res.json(payload);
+  } catch (_err) {
+    return res.status(503).json({ error: "network location unavailable" });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function encodeSessionPart(value) {
@@ -1691,7 +1759,7 @@ const weatherHandler = async (_req, res) => {
     humidity: 74,
     wind: 3,
     label: "阳光明媚",
-    location: "广州",
+    location: "当前位置",
   });
 };
 app.get("/health", healthHandler);
@@ -1990,6 +2058,8 @@ async function mapHandler(req, res) {
 
 app.get("/api/v1/spots", asyncHandler(spotsHandler));
 app.get("/api/spots", asyncHandler(spotsHandler));
+app.get("/api/v1/location", asyncHandler(networkLocationHandler));
+app.get("/api/location", asyncHandler(networkLocationHandler));
 app.get("/api/v1/map", asyncHandler(mapHandler));
 app.get("/api/map", asyncHandler(mapHandler));
 
