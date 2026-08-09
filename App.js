@@ -24,6 +24,7 @@ import BlockedAuthorsScreen from './src/screens/BlockedAuthorsScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import AppTabBar from './src/components/AppTabBar';
 import AppErrorBoundary from './src/components/AppErrorBoundary';
+import NetworkStatusBanner from './src/components/NetworkStatusBanner';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -136,6 +137,7 @@ export default function App() {
       <AppErrorBoundary>
         <View style={styles.viewport}>
           <View style={styles.mobileShell}>
+            <NetworkStatusBanner />
             <NavigationContainer linking={linking}>
               <Tab.Navigator
                 initialRouteName={APP_ROUTES.MAP}
