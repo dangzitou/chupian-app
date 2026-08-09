@@ -1115,6 +1115,40 @@ async function ensureCreatorRewardSchemaCompatibility() {
   }
 }
 
+async function ensureGuideRewardSchemaCompatibility() {
+  try {
+    await query("ALTER TABLE posts ADD COLUMN guide_rewarded TINYINT(1) NOT NULL DEFAULT 0");
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err?.message || ""))) {
+      console.warn(`[schema] guide_rewarded column skipped: ${err?.message || "unknown error"}`);
+    }
+  }
+
+  try {
+    await query(`
+      UPDATE posts
+      SET guide_rewarded = 1
+      WHERE guide_rewarded = 0
+        AND CHAR_LENGTH(COALESCE(content, '')) >= 120
+        AND (
+          (CASE WHEN COALESCE(angle, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(direction, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(time_window, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN shot_at IS NOT NULL THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(camera, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(lens, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(focal_length, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(aperture, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(shutter, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(iso, '') <> '' THEN 1 ELSE 0 END)
+          + (CASE WHEN COALESCE(white_balance, '') <> '' THEN 1 ELSE 0 END)
+        ) >= 3
+    `);
+  } catch (err) {
+    console.warn(`[schema] guide_rewarded backfill skipped: ${err?.message || "unknown error"}`);
+  }
+}
+
 async function insertNotification(conn, {
   recipientId,
   actorId,
@@ -1481,6 +1515,7 @@ async function createPostHandler(req) {
       shotAt = parsed.toISOString().slice(0, 19).replace("T", " ");
     }
   }
+  const rewardInput = calculateCreatorReward(body);
 
     const result = await tx(async (conn) => {
       const postValues = [
@@ -1516,9 +1551,9 @@ async function createPostHandler(req) {
         `INSERT INTO posts
          (title, content, author_id, author_name, author_bio, spot_id, spot_name, district, latitude, longitude, direction, angle,
         time_window, best_time, shot_at, camera, lens, focal_length, aperture, shutter, iso, white_balance,
-        media_type, cover_url, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
-        postValues
+        media_type, cover_url, status, guide_rewarded)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`,
+        [...postValues, rewardInput.guide ? 1 : 0]
       );
 
       const postId = postResult.insertId;
@@ -1558,7 +1593,6 @@ async function createPostHandler(req) {
 
       let reward = null;
       try {
-        const rewardInput = calculateCreatorReward(body);
         const [rewardRows] = await conn.execute(
           `INSERT INTO creator_rewards (actor_id, points, published_count, guide_count)
            VALUES (?, ?, 1, ?)
@@ -1679,11 +1713,55 @@ async function updatePostHandler(req) {
     ],
   );
 
+  const mediaCountRows = await query("SELECT COUNT(*) AS c FROM post_media WHERE post_id = ?", [postId]);
+  const guideInput = calculateCreatorReward({
+    content,
+    angle,
+    direction,
+    timeWindow,
+    shotAt,
+    camera,
+    lens,
+    focalLength,
+    aperture,
+    shutter,
+    iso,
+    whiteBalance,
+    latitude,
+    longitude,
+    media: new Array(Number(mediaCountRows[0]?.c || 0)).fill({}),
+  });
+  let reward = null;
+  if (guideInput.guide) {
+    try {
+      reward = await tx(async (conn) => {
+        const [marked] = await conn.execute(
+          `UPDATE posts
+           SET guide_rewarded = 1
+           WHERE id = ? AND author_id = ? AND status = 'published' AND guide_rewarded = 0`,
+          [postId, actor],
+        );
+        if (marked.affectedRows !== 1) return null;
+        await conn.execute(
+          `INSERT INTO creator_rewards (actor_id, points, published_count, guide_count)
+           VALUES (?, 15, 0, 1)
+           ON DUPLICATE KEY UPDATE
+             points = points + 15,
+             guide_count = guide_count + 1`,
+          [safeText(actor, 64)],
+        );
+        return { earnedPoints: 15, guide: true };
+      });
+    } catch (rewardError) {
+      console.warn(`[reward] edit guide reward skipped: ${rewardError?.message || "unknown error"}`);
+    }
+  }
+
   await invalidateAllPostsCaches();
   await invalidatePostCaches(postId);
   const detail = await query("SELECT p.* FROM posts p WHERE p.id = ?", [postId]);
   const normalized = (await loadPostMeta(detail, { actor }))[0];
-  return { ok: true, post: normalized };
+  return { ok: true, post: normalized, reward };
 }
 
 async function applyActionOnPost({ postId, action, actor, actorName, kind }) {
@@ -2886,6 +2964,7 @@ await ensureNotificationSchemaCompatibility();
 await ensureReportSchemaCompatibility();
 await ensureBlockSchemaCompatibility();
 await ensureCreatorRewardSchemaCompatibility();
+await ensureGuideRewardSchemaCompatibility();
 
 let server;
 let isShuttingDown = false;

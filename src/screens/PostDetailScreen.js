@@ -440,7 +440,13 @@ export default function PostDetailScreen({ route, navigation }) {
       const result = await api.updatePost(post.id, editDraft);
       if (result?.post) applyPost(result.post);
       setEditOpen(false);
-      Alert.alert('已更新', '攻略和拍摄信息已补充，原有媒体保持不变。');
+      const earnedPoints = Number(result?.reward?.earnedPoints || 0);
+      Alert.alert(
+        '已更新',
+        earnedPoints > 0
+          ? `攻略已补充，获得 +${earnedPoints} 贡献值；原有媒体保持不变。`
+          : '攻略和拍摄信息已补充，原有媒体保持不变。',
+      );
     } catch (err) {
       setEditError(err?.cause || err?.message || '保存失败，请稍后重试');
     } finally {
