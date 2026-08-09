@@ -9,7 +9,7 @@ try {
   NativeVideo = null;
 }
 
-export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, poster, onError }) {
+export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, poster, onError, muted = false }) {
   if (!uri) return null;
 
   if (Platform.OS === 'web') {
@@ -19,7 +19,7 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
       controls,
       autoPlay: shouldPlay,
       loop,
-      muted: shouldPlay,
+      muted,
       playsInline: true,
       preload: 'metadata',
       poster: poster || undefined,
@@ -37,6 +37,7 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
         resizeMode="cover"
         shouldPlay={shouldPlay}
         isLooping={loop}
+        isMuted={muted}
         onError={onError}
       />
     );
