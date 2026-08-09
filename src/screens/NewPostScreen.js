@@ -181,6 +181,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [mediaList, setMediaList] = useState([]);
   const [coverIndex, setCoverIndex] = useState(-1);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [rewardOpen, setRewardOpen] = useState(false);
   const [draftMediaWarning, setDraftMediaWarning] = useState('');
   const [shootingOpen, setShootingOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -845,11 +846,20 @@ export default function NewPostScreen({ navigation, route }) {
             </Pressable>
           </View>
           <View style={styles.rewardHint}>
-            <View style={styles.rewardHintHeader}>
+            <Pressable
+              style={styles.rewardHintHeader}
+              onPress={() => setRewardOpen((value) => !value)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: rewardOpen }}
+            >
               <Text style={styles.rewardHintTitle}>发布即可得 +5 贡献值</Text>
-              <Text style={styles.rewardHintStatus}>{rewardPreview.guideReady ? '攻略 +15 已解锁' : '攻略奖励 +15'}</Text>
-            </View>
-            <View style={styles.rewardMeter}>
+              <Text style={styles.rewardHintStatus}>
+                {rewardOpen ? '收起' : (rewardPreview.guideReady ? '攻略 +15 已解锁' : '攻略奖励 +15')}
+              </Text>
+            </Pressable>
+            {rewardOpen ? (
+              <>
+                <View style={styles.rewardMeter}>
               <View style={styles.rewardMeterRow}>
                 <View style={styles.rewardMeterLabels}>
                   <Text style={styles.rewardMeterLabel}>正文</Text>
@@ -868,30 +878,36 @@ export default function NewPostScreen({ navigation, route }) {
                   <View style={[styles.rewardFill, { width: `${rewardPreview.metadataProgress * 100}%` }]} />
                 </View>
               </View>
-            </View>
-            <Text style={styles.rewardHintText}>{rewardPreview.earnedHint}</Text>
+                </View>
+                <Text style={styles.rewardHintText}>{rewardPreview.earnedHint}</Text>
+              </>
+            ) : (
+              <Text style={styles.rewardHintText}>{rewardPreview.earnedHint}</Text>
+            )}
           </View>
           {!!validation.firstError ? <Text style={styles.validationMsg}>{validation.firstError}</Text> : null}
           {!!publishError ? <Text style={styles.publishError} accessibilityLiveRegion="polite">{publishError}</Text> : null}
           {draftLoaded ? <Text style={styles.draftHint}>已读取本地草稿，继续编辑即可接续发布。</Text> : null}
           {draftMediaWarning ? <Text style={styles.draftMediaWarning}>{draftMediaWarning}</Text> : null}
 
-          <View style={styles.formActions}>
-            <Pressable
-              style={[styles.secondaryBtn, !hasDraftPayload && styles.secondaryBtnDisabled]}
-              onPress={onSaveDraft}
-              disabled={submitting || !hasDraftPayload}
-            >
-              <Text style={styles.secondaryBtnText}>保存草稿</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.secondaryBtn, (!draftLoaded && !hasDraftPayload) && styles.secondaryBtnDisabled]}
-              onPress={onClearDraft}
-              disabled={submitting || (!draftLoaded && !hasDraftPayload)}
-            >
-              <Text style={styles.secondaryBtnText}>清空草稿</Text>
-            </Pressable>
-          </View>
+          {(draftLoaded || hasDraftPayload) ? (
+            <View style={styles.formActions}>
+              <Pressable
+                style={[styles.secondaryBtn, !hasDraftPayload && styles.secondaryBtnDisabled]}
+                onPress={onSaveDraft}
+                disabled={submitting || !hasDraftPayload}
+              >
+                <Text style={styles.secondaryBtnText}>保存草稿</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.secondaryBtn, (!draftLoaded && !hasDraftPayload) && styles.secondaryBtnDisabled]}
+                onPress={onClearDraft}
+                disabled={submitting || (!draftLoaded && !hasDraftPayload)}
+              >
+                <Text style={styles.secondaryBtnText}>清空草稿</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <Text style={styles.sectionTitle}>素材</Text>
           <Text style={[styles.note, validation.errors.media && styles.mediaError]}>{validation.errors.media || '先选 1-9 个素材，再补齐机位与拍摄参数；视频最大 40s，实况仅支持 iPhone'}</Text>
