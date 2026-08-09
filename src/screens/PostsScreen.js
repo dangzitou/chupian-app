@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -435,31 +436,60 @@ export default function PostsScreen({ navigation }) {
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       {filtersOpen ? (
-        <View style={styles.filterPanel}>
-          <View style={styles.filterTools}>
-            <View style={styles.sortSlot}>
-              <Text style={styles.filterHint}>排序</Text>
-              <SortTabs value={sort} onChange={applySort} />
-            </View>
+        <Modal
+          transparent
+          visible
+          animationType="slide"
+          onRequestClose={() => setFiltersOpen(false)}
+        >
+          <View style={styles.filterModal}>
             <Pressable
-              style={styles.layoutBtn}
-              onPress={() => setFeedLayout((prev) => (prev === 'masonry' ? 'list' : 'masonry'))}
+              style={styles.filterBackdrop}
+              onPress={() => setFiltersOpen(false)}
               accessibilityRole="button"
-              accessibilityLabel="切换作品布局"
-            >
-              <Text style={styles.layoutBtnText}>
-                {feedLayout === 'masonry' ? '列表' : '网格'}
-              </Text>
-            </Pressable>
+              accessibilityLabel="关闭筛选面板"
+            />
+            <View style={styles.filterSheet}>
+              <View style={styles.filterHandle} />
+              <View style={styles.filterSheetHeader}>
+                <Text style={styles.filterSheetTitle}>筛选发现</Text>
+                <Pressable
+                  style={styles.filterDone}
+                  onPress={() => setFiltersOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="完成筛选"
+                >
+                  <Text style={styles.filterDoneText}>完成</Text>
+                </Pressable>
+              </View>
+              <View style={styles.filterPanel}>
+                <View style={styles.filterTools}>
+                  <View style={styles.sortSlot}>
+                    <Text style={styles.filterHint}>排序</Text>
+                    <SortTabs value={sort} onChange={applySort} />
+                  </View>
+                  <Pressable
+                    style={styles.layoutBtn}
+                    onPress={() => setFeedLayout((prev) => (prev === 'masonry' ? 'list' : 'masonry'))}
+                    accessibilityRole="button"
+                    accessibilityLabel="切换作品布局"
+                  >
+                    <Text style={styles.layoutBtnText}>
+                      {feedLayout === 'masonry' ? '列表' : '网格'}
+                    </Text>
+                  </Pressable>
+                </View>
+                <SignalStrip
+                  items={signals}
+                  activeTag={activeTag}
+                  onSelect={applyTagFilter}
+                  loading={signalsLoading}
+                />
+                {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
+              </View>
+            </View>
           </View>
-          <SignalStrip
-            items={signals}
-            activeTag={activeTag}
-            onSelect={applyTagFilter}
-            loading={signalsLoading}
-          />
-          {!!signalsError ? <Text style={styles.signalError}>发现推荐加载失败：{signalsError}</Text> : null}
-        </View>
+        </Modal>
       ) : null}
     </View>
   ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
@@ -524,6 +554,44 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.line,
   },
+  filterModal: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  filterBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(28, 24, 21, 0.42)',
+  },
+  filterSheet: {
+    maxHeight: '72%',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: COLORS.bg,
+    shadowColor: '#1c1c1c',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
+  },
+  filterHandle: {
+    alignSelf: 'center',
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.line,
+    marginBottom: 10,
+  },
+  filterSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterSheetTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '800' },
+  filterDone: { paddingHorizontal: 8, paddingVertical: 6 },
+  filterDoneText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
   filterTools: {
     flexDirection: 'row',
     alignItems: 'center',
