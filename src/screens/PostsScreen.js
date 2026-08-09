@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -22,6 +23,7 @@ import { usePostListActions } from '../hooks/usePostListActions';
 import { createDraftStorage } from '../hooks/useDraftStorage';
 import { APP_ROUTES } from '../constants/routes';
 import { sharePost } from '../utils/share';
+import { isAuthenticated } from '../lib/actor';
 
 const PAGE_SIZE = 12;
 const SEARCH_HISTORY_STORAGE_KEY = 'chupian-search-history';
@@ -279,8 +281,28 @@ export default function PostsScreen({ navigation }) {
     firstFocusRef.current = false;
   }, []));
 
+  const openAuth = useCallback(() => {
+    const parent = navigation?.getParent?.();
+    if (parent?.navigate) {
+      parent.navigate(APP_ROUTES.PROFILE, { screen: 'Auth' });
+      return;
+    }
+    navigation?.navigate?.(APP_ROUTES.PROFILE, { screen: 'Auth' });
+  }, [navigation]);
+
   const switchFeedMode = useCallback((nextMode) => {
     if (nextMode === feedMode) return;
+    if (nextMode === 'following' && !isAuthenticated()) {
+      Alert.alert(
+        '登录后查看关注动态',
+        '登录后可以持续看到已关注拍友的最新出片，也能跨设备保留你的互动记录。',
+        [
+          { text: '先看看推荐', style: 'cancel' },
+          { text: '去登录', onPress: openAuth },
+        ],
+      );
+      return;
+    }
     clearFeed();
     setFeedMode(nextMode);
     setActiveTag('');
@@ -288,7 +310,7 @@ export default function PostsScreen({ navigation }) {
     setQ('');
     setTag('');
     setSort('latest');
-  }, [clearFeed, feedMode, setQ, setSort, setTag]);
+  }, [clearFeed, feedMode, openAuth, setQ, setSort, setTag]);
 
   const getPostById = useCallback(
     (postId) => posts.find((item) => String(item.id) === String(postId)),
