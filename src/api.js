@@ -315,6 +315,7 @@ function normalizePostComment(raw = {}) {
   return {
     id: source.id || source.commentId || source._id || `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     author: source.author || source.actorName || source.actor || '匿名拍友',
+    avatar: source.avatar || source.authorAvatar || source.avatarUrl || '',
     text: source.text || source.content || source.comment || '',
     createdAt: source.createdAt || source.created_at || new Date().toISOString(),
   };
