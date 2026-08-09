@@ -42,6 +42,9 @@ export default function AuthorProfileScreen({ route, navigation }) {
     patchById: feed.patchById,
     setBusyForPost: feed.setBusyForPost,
     isBusyExternal: feed.isPostBusy,
+    onError: (actionError) => {
+      Alert.alert('操作失败', actionError?.message || '网络不稳定，操作未完成，请重试');
+    },
   });
 
   useEffect(() => {

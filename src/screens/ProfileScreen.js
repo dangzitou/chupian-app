@@ -169,6 +169,9 @@ export default function ProfileScreen({ navigation }) {
     patchById,
     setBusyForPost,
     isBusyExternal: isPostBusy,
+    onError: (actionError) => {
+      Alert.alert('操作失败', actionError?.message || '网络不稳定，操作未完成，请重试');
+    },
   });
 
   const [totalPosts, setTotalPosts] = useState(0);
