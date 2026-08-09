@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Linking,
   Pressable,
@@ -190,6 +191,7 @@ export default function NewPostScreen({ navigation, route }) {
   const idempotencyKeyRef = useRef('');
   const draftTimer = useRef(null);
   const hasHydratedDraftRef = useRef(false);
+  const saveDraftRef = useRef(null);
   const mediaIdempotencyRef = useRef(new Map());
 
   const getMediaUploadKey = useCallback((item, part) => {
@@ -246,6 +248,44 @@ export default function NewPostScreen({ navigation, route }) {
     }
     await draftStorage.write(payload);
   }, [toDraftPayload]);
+
+
+  useEffect(() => {
+    saveDraftRef.current = saveDraft;
+  }, [saveDraft]);
+
+  useEffect(() => {
+    let lastPersistAt = 0;
+    const persist = () => {
+      if (!hasHydratedDraftRef.current) return;
+      const now = Date.now();
+      if (now - lastPersistAt < 500) return;
+      lastPersistAt = now;
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current);
+        draftTimer.current = null;
+      }
+      const pending = saveDraftRef.current?.();
+      pending?.catch(() => {
+        // Draft persistence is best effort during app suspension.
+      });
+    };
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') persist();
+    });
+    let removeVisibilityListener = null;
+    if (typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') persist();
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      removeVisibilityListener = () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    return () => {
+      subscription?.remove?.();
+      removeVisibilityListener?.();
+    };
+  }, []);
 
   const clearDraft = useCallback(async () => {
     await draftStorage.remove();
