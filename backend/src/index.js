@@ -1023,6 +1023,7 @@ async function invalidateAllPostsCaches() {
   await cacheDel("feed:*");
   await cacheDel("following:*");
   await cacheDel("map:v1:*");
+  await cacheDel("map:v2:*");
   await cacheDel("discovery:signals:*");
 }
 
@@ -2640,6 +2641,7 @@ function mapDistanceKm(lat1, lng1, lat2, lng2) {
 }
 
 async function mapHandler(req, res) {
+  const actor = readActorId(req, req.query);
   const latitude = pickFloat(req.query.lat, null, { min: -90, max: 90 });
   const longitude = pickFloat(req.query.lng, null, { min: -180, max: 180 });
   if (latitude === null || longitude === null) {
@@ -2648,7 +2650,7 @@ async function mapHandler(req, res) {
 
   const radiusKm = pickFloat(req.query.radius, 35, { min: 1, max: 50 });
   const limit = pickInt(req.query.limit, 60, { min: 1, max: 80 });
-  const cacheKey = `map:v1:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm}:${limit}`;
+  const cacheKey = `map:v2:${actor || "guest"}:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm}:${limit}`;
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
 
@@ -2675,12 +2677,16 @@ async function mapHandler(req, res) {
       `SELECT id, title, spot_name, district, latitude, longitude, cover_url, created_at
        FROM posts
        WHERE status = 'published'
+         AND (author_id = ? OR NOT EXISTS (
+           SELECT 1 FROM blocked_authors b
+           WHERE b.blocker_id = ? AND b.blocked_id = posts.author_id
+         ))
          AND latitude IS NOT NULL AND longitude IS NOT NULL
          AND latitude BETWEEN ? AND ?
          AND longitude BETWEEN ? AND ?
-       ORDER BY created_at DESC, id DESC
-       LIMIT ?`,
-      [minLatitude, maxLatitude, minLongitude, maxLongitude, candidateLimit]
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      [actor, actor, minLatitude, maxLatitude, minLongitude, maxLongitude, candidateLimit]
     ),
   ]);
 
