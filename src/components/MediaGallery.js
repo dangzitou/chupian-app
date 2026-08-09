@@ -84,6 +84,7 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
           shouldPlay={playing}
           controls={playing}
           poster={item.cover || item.thumbnail}
+          muted
           onError={handleError}
         />
         {item.duration > 0 ? (
@@ -108,6 +109,7 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
           loop
           controls
           poster={item.cover}
+          muted
           onError={handleError}
         />
         <Text style={styles.liveMark}>实况 · 播放中</Text>
