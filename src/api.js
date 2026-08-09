@@ -63,7 +63,7 @@ function emitNotificationRefresh() {
 }
 
 class ApiError extends Error {
-  constructor(message, { status, path, method, payload, cause } = {}) {
+  constructor(message, { status, path, method, payload, cause, retryAfterMs } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -71,6 +71,7 @@ class ApiError extends Error {
     this.method = method;
     this.payload = payload;
     this.cause = cause;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -80,6 +81,16 @@ const getDefaultAuthor = () => {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1000));
+  const timestamp = Date.parse(raw);
+  if (!Number.isFinite(timestamp)) return 0;
+  return Math.max(0, timestamp - Date.now());
 }
 
 function clonePayload(value) {
@@ -210,6 +221,7 @@ function uploadFormDataWithProgress(path, {
             method,
             payload: data,
             cause: message,
+            retryAfterMs: parseRetryAfterMs(xhr.getResponseHeader?.('Retry-After')),
           }));
           return;
         }
@@ -312,6 +324,7 @@ async function doRequest(path, options = {}) {
         method,
         payload: data,
         cause: message,
+        retryAfterMs: parseRetryAfterMs(res.headers?.get?.('Retry-After')),
       });
     }
 
@@ -376,7 +389,12 @@ async function request(path, options = {}) {
         if (!shouldRetry(err.status, method, err, Boolean(options.retryUnsafe)) || i >= MAX_RETRIES) {
           throw err;
         }
-        await sleep(Math.min(1200, 120 * 2 ** i) + Math.floor(Math.random() * 80));
+        const serverDelay = Number(lastError?.retryAfterMs);
+        const exponentialDelay = Math.min(1200, 120 * 2 ** i);
+        const retryDelay = Number.isFinite(serverDelay) && serverDelay > 0
+          ? Math.min(30_000, serverDelay)
+          : exponentialDelay;
+        await sleep(retryDelay + Math.floor(Math.random() * 80));
       }
     }
     throw lastError;
