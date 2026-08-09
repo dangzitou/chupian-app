@@ -381,6 +381,21 @@ export default function PostsScreen({ navigation }) {
     }
   }, []);
 
+  const handlePostPress = useCallback((item) => {
+    if (!item?.id) return;
+    navigation.navigate('PostDetail', { postId: item.id, title: item.title });
+  }, [navigation]);
+
+  const handleAuthorPress = useCallback((item) => {
+    if (!item?.authorId) return;
+    navigation.navigate('AuthorProfile', { authorId: item.authorId, authorName: item.author });
+  }, [navigation]);
+
+  const handleComment = useCallback((postId) => {
+    if (!postId) return;
+    navigation.navigate('PostDetail', { postId: String(postId) });
+  }, [navigation]);
+
   const openTab = useCallback((routeName) => {
     const parent = navigation?.getParent?.();
     if (parent?.navigate) {
@@ -401,21 +416,19 @@ export default function PostsScreen({ navigation }) {
       post={item}
       compact={isMasonry}
       showFollow={!isMasonry}
-      onPress={() => navigation.navigate('PostDetail', { postId: item.id, title: item.title })}
-      onAuthorPress={item.authorId
-        ? () => navigation.navigate('AuthorProfile', { authorId: item.authorId, authorName: item.author })
-        : undefined}
-      onLike={() => onLike(item.id)}
-      onFavorite={() => onFavorite(item.id)}
-      onFollow={() => onFollow(item.id)}
-      onComment={() => navigation.navigate('PostDetail', { postId: item.id })}
-      onShare={() => onShare(item)}
+      onPress={handlePostPress}
+      onAuthorPress={handleAuthorPress}
+      onLike={onLike}
+      onFavorite={onFavorite}
+      onFollow={onFollow}
+      onComment={handleComment}
+      onShare={onShare}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}
       favoriteBusy={isActionBusy(item.id, 'favorited', 'favorited')}
       followBusy={isActionBusy(item.id, 'followed', 'followed')}
       style={isMasonry ? styles.gridCard : styles.listCard}
     />
-  ), [isActionBusy, isMasonry, navigation, onFollow, onFavorite, onLike, onShare]);
+  ), [handleAuthorPress, handleComment, handlePostPress, isActionBusy, isMasonry, onFollow, onFavorite, onLike, onShare]);
 
   const ListHeader = useMemo(() => (
     <View style={styles.headerSection}>
