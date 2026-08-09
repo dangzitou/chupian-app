@@ -5,7 +5,7 @@ import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import { NEW_POST_DRAFT_STORAGE_KEY } from '../constants/storage';
 import { api } from '../api';
-import { createDraftStorage } from '../hooks/useDraftStorage';
+import { createDraftStorage, subscribeDraftStorage } from '../hooks/useDraftStorage';
 
 const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
 const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -140,10 +140,18 @@ function DraftBadge({ onChange }) {
 
   useEffect(() => {
     load();
+    const draftSubscription = subscribeDraftStorage(NEW_POST_DRAFT_STORAGE_KEY, (raw) => {
+      const next = hasDraftContent(raw);
+      setHasDraft(next);
+      onChange?.(next);
+    });
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') load();
     });
-    return () => subscription?.remove?.();
+    return () => {
+      draftSubscription();
+      subscription?.remove?.();
+    };
   }, [load]);
 
   if (!hasDraft) return null;

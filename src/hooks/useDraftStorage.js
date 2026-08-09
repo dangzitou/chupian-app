@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 const MEMORY_DRAFT_STORE = new Map();
 const STORAGE_QUEUES = new Map();
+const STORAGE_LISTENERS = new Map();
 
 function enqueueStorageOperation(key, operation) {
   const previous = STORAGE_QUEUES.get(key) || Promise.resolve();
@@ -15,6 +16,30 @@ function enqueueStorageOperation(key, operation) {
 
 function resolveStorageKey(namespace) {
   return String(namespace || 'chupian-draft').trim() || 'chupian-draft';
+}
+
+function notifyStorageChange(key, payload) {
+  const listeners = STORAGE_LISTENERS.get(key);
+  if (!listeners) return;
+  for (const listener of listeners) {
+    try {
+      listener(payload);
+    } catch (_err) {
+      // A badge or cache observer must never break persistence.
+    }
+  }
+}
+
+export function subscribeDraftStorage(namespace = 'chupian-draft', listener) {
+  if (typeof listener !== 'function') return () => {};
+  const key = resolveStorageKey(namespace);
+  const listeners = STORAGE_LISTENERS.get(key) || new Set();
+  listeners.add(listener);
+  STORAGE_LISTENERS.set(key, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size) STORAGE_LISTENERS.delete(key);
+  };
 }
 
 function isWebStorageAvailable() {
@@ -107,6 +132,7 @@ export function createDraftStorage(namespace = 'chupian-draft') {
           const ok = await localStorageWrite(key, payload);
           if (ok) {
             memoryRemove(key);
+            notifyStorageChange(key, payload);
             return true;
           }
         }
@@ -114,12 +140,15 @@ export function createDraftStorage(namespace = 'chupian-draft') {
           try {
             await AsyncStorage.setItem(key, JSON.stringify(payload));
             memoryRemove(key);
+            notifyStorageChange(key, payload);
             return true;
           } catch (_err) {
             // Fall back to the in-memory store if native storage is unavailable.
           }
         }
-        return memoryWrite(key, payload);
+        const ok = memoryWrite(key, payload);
+        if (ok) notifyStorageChange(key, payload);
+        return ok;
       });
     },
     async remove() {
@@ -136,7 +165,9 @@ export function createDraftStorage(namespace = 'chupian-draft') {
             // Fall back to clearing the in-memory store if native storage is unavailable.
           }
         }
-        return memoryRemove(key) || removed;
+        const memoryRemoved = memoryRemove(key);
+        if (removed || memoryRemoved) notifyStorageChange(key, null);
+        return memoryRemoved || removed;
       });
     },
   };
