@@ -82,6 +82,7 @@ async function doRequest(path, options = {}) {
     noCache: _noCache,
     noDedup: _noDedup,
     cacheTtl: _cacheTtl,
+    retryUnsafe: _retryUnsafe,
     ...forwardOptions
   } = options;
   const method = String(customMethod).toUpperCase();
@@ -599,6 +600,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
@@ -606,6 +608,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
     }
   },
@@ -803,6 +806,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
       if (action === 'like' || action === 'unlike') {
         clearNetworkCaches({ postId: id });
@@ -814,6 +818,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
       if (action === 'like' || action === 'unlike') {
         clearNetworkCaches({ postId: id });
@@ -830,6 +835,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
       if (action === 'favorite' || action === 'unfavorite') {
         clearNetworkCaches({ postId: id });
@@ -842,6 +848,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: true,
       });
       if (action === 'favorite' || action === 'unfavorite') {
         clearNetworkCaches({ postId: id });
