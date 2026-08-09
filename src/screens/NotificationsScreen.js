@@ -101,7 +101,11 @@ export default function NotificationsScreen({ navigation }) {
       )));
       setUnread((value) => Math.max(0, value - 1));
       api.markNotificationRead(item.id).catch(() => {
-        // The next refresh restores the server state if the write failed.
+        setItems((prev) => prev.map((entry) => (
+          entry.id === item.id ? { ...entry, read: false } : entry
+        )));
+        setUnread((value) => value + 1);
+        setError('标记已读失败，已恢复未读状态');
       });
     }
     if (item.postId) {
@@ -181,6 +185,11 @@ export default function NotificationsScreen({ navigation }) {
           </Pressable>
         ))}
       </ScrollView>
+      {error && items.length ? (
+        <View style={styles.inlineError}>
+          <Text style={styles.error}>{error}</Text>
+        </View>
+      ) : null}
       <FlatList
         data={visibleItems}
         keyExtractor={(item) => String(item.id)}
@@ -258,6 +267,14 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemUnread: { borderColor: 'rgba(217,54,87,0.16)', backgroundColor: '#fffafb' },
+  inlineError: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#fff4f1',
+  },
   mark: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   markText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
   itemBody: { flex: 1, minWidth: 0 },
