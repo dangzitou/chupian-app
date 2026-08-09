@@ -64,6 +64,7 @@ const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
 const MAX_POST_MEDIA = 9;
 const MAX_POST_VIDEO_SECONDS = 40;
 const apiRateLimitMemory = new Map();
+const readCacheFlights = new Map();
 const SYSTEM_ROUTES = new Set([
   "/health",
   "/api/health",
@@ -550,6 +551,26 @@ function buildIdempotencyKey(scope, actor, rawKey) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readThroughCache(cacheKey, ttlSeconds, loader) {
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return cached;
+
+  const existingFlight = readCacheFlights.get(cacheKey);
+  if (existingFlight) return existingFlight;
+
+  const flight = (async () => {
+    try {
+      const payload = await loader();
+      await cacheSetJson(cacheKey, payload, ttlSeconds);
+      return payload;
+    } finally {
+      readCacheFlights.delete(cacheKey);
+    }
+  })();
+  readCacheFlights.set(cacheKey, flight);
+  return flight;
 }
 
 async function runWithIdempotency({
@@ -2580,10 +2601,8 @@ async function spotsHandler(req, res) {
   const cacheKey = hasLocation
     ? `spots:list:v3:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm.toFixed(1)}:${limit}`
     : `spots:list:v3:all:${limit}`;
-  const cached = await cacheGetJson(cacheKey);
-  if (cached) return res.json(cached);
-
-  const candidateLimit = Math.min(Math.max(limit * 4, limit), 320);
+  const payload = await readThroughCache(cacheKey, SPOT_CACHE_TTL_SECONDS, async () => {
+    const candidateLimit = Math.min(Math.max(limit * 4, limit), 320);
   const spotRows = hasLocation
     ? await query(
       `SELECT * FROM spots
@@ -2615,11 +2634,11 @@ async function spotsHandler(req, res) {
       .slice(0, limit)
       .map((spot) => ({ ...spot, distanceKm: Number(spot.distanceKm.toFixed(1)) }))
     : normalizedSpots;
-  const payload = {
+  return {
     spots,
     ...(hasLocation ? { center: { lat: latitude, lng: longitude }, radiusKm } : {}),
   };
-  await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
+  });
   return res.json(payload);
 }
 
@@ -2637,13 +2656,15 @@ async function spotHandler(req, res) {
   const spotId = pickInt(req.params.id, 0);
   if (!spotId) return res.status(400).json({ error: "valid spot id is required" });
   const cacheKey = `spot:detail:v1:${spotId}`;
-  const cached = await cacheGetJson(cacheKey);
-  if (cached) return res.json(cached);
-
-  const rows = await query("SELECT * FROM spots WHERE id = ? LIMIT 1", [spotId]);
-  if (!rows.length) return res.status(404).json({ error: "spot not found" });
-  const payload = { spot: normalizeSpotRow(rows[0]) };
-  await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
+  const payload = await readThroughCache(cacheKey, SPOT_CACHE_TTL_SECONDS, async () => {
+    const rows = await query("SELECT * FROM spots WHERE id = ? LIMIT 1", [spotId]);
+    if (!rows.length) {
+      const err = new Error("spot not found");
+      err.status = 404;
+      throw err;
+    }
+    return { spot: normalizeSpotRow(rows[0]) };
+  });
   return res.json(payload);
 }
 
@@ -2669,10 +2690,8 @@ async function mapHandler(req, res) {
   const radiusKm = pickFloat(req.query.radius, 35, { min: 1, max: 50 });
   const limit = pickInt(req.query.limit, 60, { min: 1, max: 80 });
   const cacheKey = `map:v2:${actor || "guest"}:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm}:${limit}`;
-  const cached = await cacheGetJson(cacheKey);
-  if (cached) return res.json(cached);
-
-  const latitudeDelta = radiusKm / 110.574;
+  const payload = await readThroughCache(cacheKey, 20, async () => {
+    const latitudeDelta = radiusKm / 110.574;
   const longitudeDelta = radiusKm / (111.320 * Math.max(Math.abs(Math.cos((latitude * Math.PI) / 180)), 0.15));
   const minLatitude = Math.max(-90, latitude - latitudeDelta);
   const maxLatitude = Math.min(90, latitude + latitudeDelta);
@@ -2734,13 +2753,13 @@ async function mapHandler(req, res) {
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, limit)
     .map(({ distanceKm: _distanceKm, ...marker }) => marker);
-  const payload = {
+  return {
     center: { lat: latitude, lng: longitude },
     radiusKm,
     spots,
     posts,
   };
-  await cacheSetJson(cacheKey, payload, 20);
+  });
   return res.json(payload);
 }
 
@@ -2770,10 +2789,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
     tag,
     spotId,
   });
-  const cached = await cacheGetJson(cacheKey);
-  if (cached) return res.json(cached);
-
-  const payload = await fetchFeedRows({
+  const payload = await readThroughCache(cacheKey, 20, () => fetchFeedRows({
     sort,
     cursor,
     limit,
@@ -2781,8 +2797,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
     q,
     tag,
     spotId,
-  });
-  await cacheSetJson(cacheKey, payload, 20);
+  }));
   return res.json(payload);
 }));
 app.get("/api/v1/posts", asyncHandler(async (req, res) => {
@@ -2794,9 +2809,7 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
   const tag = parseSearchText(req.query.tag);
   const spotId = String(req.query.spotId || "").trim();
   const cacheKey = buildFeedCacheKey({ actor, sort, limit, cursor, q, tag, spotId });
-  const cached = await cacheGetJson(cacheKey);
-  if (cached) return res.json(cached);
-  const payload = await fetchFeedRows({
+  const payload = await readThroughCache(cacheKey, 20, () => fetchFeedRows({
     sort,
     cursor,
     limit,
@@ -2804,8 +2817,7 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
     q,
     tag,
     spotId,
-  });
-  await cacheSetJson(cacheKey, payload, 20);
+  }));
   return res.json(payload);
 }));
 
