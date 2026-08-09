@@ -224,6 +224,7 @@ export default function PostsScreen({ navigation }) {
   const [signalsError, setSignalsError] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
   const bootstrappedRef = useRef(false);
   const feedModeRef = useRef('');
   const firstFocusRef = useRef(true);
@@ -495,9 +496,15 @@ export default function PostsScreen({ navigation }) {
   const onShare = useCallback(async (item) => {
     if (!item) return;
     try {
-      await sharePost(item);
-    } catch (_err) {
-      // share unsupported in current runtime, fail silently for list usage
+      const result = await sharePost(item);
+      setActionError('');
+      if (result === 'copied') {
+        setActionNotice('链接已复制，可粘贴到聊天或社交平台');
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setActionNotice('');
+      setActionError(err?.message || '分享失败，请稍后重试');
     }
   }, []);
 
@@ -624,6 +631,16 @@ export default function PostsScreen({ navigation }) {
           <Text style={styles.actionErrorText}>{actionError} · 点击关闭</Text>
         </Pressable>
       ) : null}
+      {actionNotice ? (
+        <Pressable
+          style={styles.actionNotice}
+          onPress={() => setActionNotice('')}
+          accessibilityRole="button"
+          accessibilityLabel="关闭分享成功提示"
+        >
+          <Text style={styles.actionNoticeText}>{actionNotice} · 点击关闭</Text>
+        </Pressable>
+      ) : null}
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar
         value={searchInput}
@@ -707,7 +724,7 @@ export default function PostsScreen({ navigation }) {
         </Modal>
       ) : null}
     </View>
-  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, clearSearchHistory, closeSearchHistory, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openSearchHistory, openTab, resetFilters, retryStaleFeed, searchFocused, searchHistory, searchInput, selectSearchHistory, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [actionError, actionNotice, activeTag, applySearch, applySort, applyTagFilter, clearSearchHistory, closeSearchHistory, feedMode, feedLayout, filtersOpen, hasActiveFilters, isMasonry, locationContext, openSearchHistory, openTab, resetFilters, retryStaleFeed, searchFocused, searchHistory, searchInput, selectSearchHistory, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -1165,6 +1182,19 @@ const styles = StyleSheet.create({
   },
   actionErrorText: {
     color: '#a83f3f',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  actionNotice: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#eef8f0',
+  },
+  actionNoticeText: {
+    color: COLORS.ok,
     fontSize: 11,
     lineHeight: 15,
   },
