@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -92,6 +92,7 @@ function CreatorRewardCard({ reward, onOpenCreate }) {
 export default function ProfileScreen({ navigation }) {
   const [actorName, setActorName] = useState(() => getActorName());
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
+  const focusedAuthState = useRef(isAuthenticated());
   const [weather, setWeather] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -245,14 +246,21 @@ export default function ProfileScreen({ navigation }) {
   }, [navigation]);
 
   useFocusEffect(useCallback(() => {
+    const nextAuthenticated = isAuthenticated();
+    const authChanged = focusedAuthState.current !== nextAuthenticated;
+    focusedAuthState.current = nextAuthenticated;
     setActorName(getActorName());
-    setAuthenticated(isAuthenticated());
+    setAuthenticated(nextAuthenticated);
     api.notifications({ limit: 1 })
       .then((payload) => setNotificationUnread(Number(payload?.unread || 0)))
       .catch(() => {
         // Keep the last unread count when the message center is unavailable.
       });
-  }, []));
+    if (authChanged) {
+      void load({ append: false, cursor: null });
+      void loadSectionMetrics();
+    }
+  }, [load, loadSectionMetrics]));
 
   const onAuthAction = useCallback(() => {
     if (!authenticated) {
