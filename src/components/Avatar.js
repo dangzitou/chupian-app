@@ -9,9 +9,11 @@ function getInitials(name) {
 export default function Avatar({ name, uri, size = 32, style, textStyle }) {
   const normalizedUri = String(uri || '').trim();
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setFailed(false);
+    setLoaded(false);
   }, [normalizedUri]);
 
   const dimension = Math.max(20, Number(size) || 32);
@@ -23,18 +25,25 @@ export default function Avatar({ name, uri, size = 32, style, textStyle }) {
       accessible
       accessibilityLabel={`${name || '匿名拍友'}的头像`}
     >
+      <Text style={[styles.text, { fontSize }, textStyle]} numberOfLines={1}>
+        {getInitials(name)}
+      </Text>
       {normalizedUri && !failed ? (
         <Image
           source={{ uri: normalizedUri }}
-          style={[StyleSheet.absoluteFillObject, { borderRadius: dimension / 2 }]}
+          style={[
+            StyleSheet.absoluteFillObject,
+            { borderRadius: dimension / 2, opacity: loaded ? 1 : 0 },
+          ]}
           resizeMode="cover"
-          onError={() => setFailed(true)}
+          onLoadStart={() => setLoaded(false)}
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            setLoaded(false);
+            setFailed(true);
+          }}
         />
-      ) : (
-        <Text style={[styles.text, { fontSize }, textStyle]} numberOfLines={1}>
-          {getInitials(name)}
-        </Text>
-      )}
+      ) : null}
     </View>
   );
 }
