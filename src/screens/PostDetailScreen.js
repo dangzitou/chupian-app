@@ -65,9 +65,13 @@ function isPlayableMedia(item) {
 }
 
 function MediaViewer({ item, index, count, onClose, onStep }) {
-  if (!item) return null;
+  const [loadError, setLoadError] = useState(false);
+  useEffect(() => {
+    setLoadError(false);
+  }, [item?.kind, item?.url, item?.cover]);
+
   const playable = isPlayableMedia(item);
-  const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
+  const imageUri = item?.kind === 'live' ? (item.cover || item.url) : item?.url;
   const panResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gestureState) => (
       !playable
@@ -79,6 +83,8 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
       onStep(gestureState.dx < 0 ? 1 : -1);
     },
   }), [onStep, playable]);
+
+  if (!item) return null;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -92,7 +98,9 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
           <Text style={styles.viewerCloseText}>×</Text>
         </Pressable>
         <View style={styles.viewerStage} {...panResponder.panHandlers}>
-          {playable ? (
+          {loadError ? (
+            <Text style={styles.viewerError}>素材加载失败，请切换下一份或稍后重试</Text>
+          ) : playable ? (
             <VideoSurface
               uri={item.url}
               style={styles.viewerVideo}
@@ -100,10 +108,16 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
               controls
               loop={item.kind === 'live'}
               poster={item.cover}
+              onError={() => setLoadError(true)}
             />
           ) : (
             imageUri ? (
-              <Image source={{ uri: imageUri }} style={styles.viewerImage} resizeMode="contain" />
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.viewerImage}
+                resizeMode="contain"
+                onError={() => setLoadError(true)}
+              />
             ) : (
               <Text style={styles.viewerError}>素材地址已失效</Text>
             )
