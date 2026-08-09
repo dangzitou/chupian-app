@@ -741,14 +741,31 @@ export default function PostsScreen({ navigation }) {
           showSkeleton ? <FeedSkeleton count={5} /> : (
             <View style={styles.emptyWrap}>
               {!!error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
-              {showEmpty ? <Text style={styles.empty}>还没有匹配作品，调整关键词或标签试试</Text> : null}
+              {showEmpty ? (
+                <Text style={styles.empty}>
+                  {feedMode === 'following' && !q && !activeTag
+                    ? '关注喜欢的拍友后，这里会出现他们的出片'
+                    : '还没有匹配作品，调整关键词或标签试试'}
+                </Text>
+              ) : null}
               {showEmpty && !error ? (
-                <Text style={styles.emptyHint}>先发一张照片，位置和参数之后再补也可以</Text>
+                <Text style={styles.emptyHint}>
+                  {feedMode === 'following' && !q && !activeTag
+                    ? '先去推荐里看看城市光影和创作者'
+                    : '先发一张照片，位置和参数之后再补也可以'}
+                </Text>
               ) : null}
               {showEmpty && !error ? (
                 <View style={styles.emptyActions}>
-                  <Pressable style={styles.publishBtn} onPress={() => openTab(APP_ROUTES.CREATE)}>
-                    <Text style={styles.publishBtnText}>发布一张</Text>
+                  <Pressable
+                    style={styles.publishBtn}
+                    onPress={() => (feedMode === 'following' && !q && !activeTag
+                      ? switchFeedMode('recommend')
+                      : openTab(APP_ROUTES.CREATE))}
+                  >
+                    <Text style={styles.publishBtnText}>
+                      {feedMode === 'following' && !q && !activeTag ? '看看推荐' : '发布一张'}
+                    </Text>
                   </Pressable>
                   <Pressable style={styles.retryBtn} onPress={() => load({ append: false })}>
                     <Text style={styles.retryText}>刷新</Text>
