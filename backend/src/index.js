@@ -341,10 +341,16 @@ function parseBoolean(value, fallback = false) {
   return fallback;
 }
 
+function parseFeedSort(value) {
+  if (value === "hot") return "hot";
+  if (value === "recommend") return "recommend";
+  return "latest";
+}
+
 function extractPaginationParams(req, fallback = 20) {
   return {
     limit: pickInt(req.query.limit, fallback, { min: 1, max: Number(MAX_FEED_LIMIT) }),
-    sort: req.query.sort === "hot" ? "hot" : "latest",
+    sort: parseFeedSort(req.query.sort),
     cursor: parseCursor(req.query.cursor || ""),
   };
 }
@@ -884,7 +890,9 @@ async function fetchFeedRows({ sort = "latest", cursor, limit, actorId, q = "", 
 
   const order = sort === "hot"
     ? " ORDER BY p.stats_likes DESC, p.created_at DESC, p.id DESC"
-    : " ORDER BY p.created_at DESC, p.id DESC";
+    : sort === "recommend"
+      ? " ORDER BY p.stats_favorites DESC, p.created_at DESC, p.id DESC"
+      : " ORDER BY p.created_at DESC, p.id DESC";
 
   clauses.push(
     ", EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.actor_id = ?) AS liked",
@@ -1551,7 +1559,7 @@ async function followingFeedHandler(req, res) {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const sort = parseFeedSort(req.query.sort);
   const cacheKey = buildFollowingFeedCacheKey({ actor, sort, limit, cursor });
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
@@ -2788,7 +2796,7 @@ app.get("/api/v1/community/feed", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const sort = parseFeedSort(req.query.sort);
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
   const spotId = String(req.query.spotId || "").trim();
@@ -2816,7 +2824,7 @@ app.get("/api/v1/posts", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
   const cursor = parseCursor(req.query.cursor || "");
   const limit = pickInt(req.query.limit, 20, { min: 1, max: 40 });
-  const sort = req.query.sort === "hot" ? "hot" : "latest";
+  const sort = parseFeedSort(req.query.sort);
   const q = parseSearchText(req.query.q);
   const tag = parseSearchText(req.query.tag);
   const spotId = String(req.query.spotId || "").trim();

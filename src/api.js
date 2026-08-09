@@ -474,7 +474,10 @@ function buildFeedQuery(params = {}, defaults = {}) {
   if (merged.spotId) query.set('spotId', String(merged.spotId).trim());
   if (merged.cursor) query.set('cursor', merged.cursor);
   query.set('limit', String(merged.limit || 20));
-  query.set('sort', merged.sort === 'hot' ? 'hot' : 'latest');
+  query.set(
+    'sort',
+    merged.sort === 'hot' || merged.sort === 'recommend' ? merged.sort : 'latest',
+  );
   return query.toString();
 }
 

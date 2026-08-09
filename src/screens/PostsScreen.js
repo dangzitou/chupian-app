@@ -236,7 +236,14 @@ export default function PostsScreen({ navigation }) {
   useScrollToTop(feedListRef);
 
   const feedFetcher = useCallback(
-    (params) => (feedMode === 'following' ? api.meFollowing(params) : api.feed(params)),
+    (params) => {
+      if (feedMode === 'following') return api.meFollowing(params);
+      return api.feed(
+        feedMode === 'recommend' && params.sort === 'latest'
+          ? { ...params, sort: 'recommend' }
+          : params,
+      );
+    },
     [feedMode],
   );
 
