@@ -506,7 +506,7 @@ export default function PostDetailScreen({ route, navigation }) {
     });
     setCommentInput('');
     Keyboard.dismiss();
-    scrollToBottom();
+    scrollToTop();
 
     setComments((prev) => [
       {
@@ -541,7 +541,7 @@ export default function PostDetailScreen({ route, navigation }) {
       commentIdempotencyRef.current = '';
       commentSeedRef.current = '';
       Keyboard.dismiss();
-      scrollToBottom();
+      scrollToTop();
     } catch (err) {
       setComments((prev) => prev.filter((item) => item.id !== tempId));
       applyPost((prev) => {
@@ -557,7 +557,7 @@ export default function PostDetailScreen({ route, navigation }) {
     } finally {
       setCommentSending(false);
     }
-  }, [commentInput, commentSending, post, applyPost, scrollToBottom]);
+  }, [commentInput, commentSending, post, applyPost, scrollToTop]);
 
   const postMeta = useMemo(() => {
     const media = Array.isArray(post?.media) ? post.media : [];
@@ -705,15 +705,22 @@ export default function PostDetailScreen({ route, navigation }) {
     return loadComments({ append: true });
   }, [commentsHasMore, commentsLoading, loadComments, postId]);
 
+  const retryComments = useCallback(() => {
+    if (!postId || commentsLoading) return;
+    return loadComments({
+      append: comments.length > 0 && commentsHasMore,
+    });
+  }, [comments.length, commentsHasMore, commentsLoading, loadComments, postId]);
+
   const renderCommentFooter = useMemo(() => {
     if (commentsLoading) {
       return <ActivityIndicator color={COLORS.accent} />;
     }
     if (commentsLoadError) {
       return (
-        <Text style={styles.commentStatusText}>
-          {commentsLoadError}
-        </Text>
+        <Pressable onPress={retryComments} style={styles.loadMoreWrap} accessibilityRole="button">
+          <Text style={styles.loadMoreText}>{commentsLoadError} · 点击重试</Text>
+        </Pressable>
       );
     }
     if (!hasMoreComments) return null;
@@ -724,16 +731,22 @@ export default function PostDetailScreen({ route, navigation }) {
         </Text>
       </Pressable>
     );
-  }, [commentsLoadError, commentsLoading, hasMoreComments, onLoadMoreComments, remainingCommentCount]);
+  }, [commentsLoadError, commentsLoading, hasMoreComments, onLoadMoreComments, remainingCommentCount, retryComments]);
   const listEmptyComment = useMemo(() => {
     if (loading || commentsLoading) return <View style={styles.commentEmpty}><ActivityIndicator color={COLORS.accent} /></View>;
-    if (commentsLoadError) return <Text style={styles.commentStatusText}>{commentsLoadError}</Text>;
+    if (commentsLoadError) {
+      return (
+        <Pressable onPress={retryComments} style={styles.loadMoreWrap} accessibilityRole="button">
+          <Text style={styles.loadMoreText}>{commentsLoadError} · 点击重试</Text>
+        </Pressable>
+      );
+    }
     return (
       <View style={styles.commentEmpty}>
         <Text style={styles.commentEmptyText}>暂时没有评论，抢占第一条吧。</Text>
       </View>
     );
-  }, [commentsLoading, commentsLoadError, loading]);
+  }, [commentsLoading, commentsLoadError, loading, retryComments]);
 
   if (!postId) {
     return (
