@@ -13,6 +13,29 @@ const DEFAULT_OPTIONS = {
   maxItems: 8,
 };
 
+const TECHNICAL_KEYS = [
+  'camera',
+  'lens',
+  'focal',
+  'focalLength',
+  'aperture',
+  'shutter',
+  'iso',
+  'whiteBalance',
+];
+
+function getContextOnlySource(source) {
+  if (!source || typeof source !== 'object') return source;
+  const context = { ...source };
+  TECHNICAL_KEYS.forEach((key) => {
+    context[key] = '';
+  });
+  if (source.gear && typeof source.gear === 'object') {
+    context.gear = {};
+  }
+  return context;
+}
+
 function hasRows(source, options) {
   const stripRows = buildShotMetaLines(source, options);
   const panelRows = toShotParamPairs(source || {});
@@ -26,12 +49,13 @@ export default function ShotMetaBoard({
   compact = false,
   fallback = '暂无可展示的拍摄参数',
   showStrip = true,
-  showPanel = true,
+  showPanel = false,
 }) {
   const mergeOptions = {
     ...DEFAULT_OPTIONS,
     ...options,
   };
+  const stripSource = showPanel ? getContextOnlySource(source) : source;
 
   if (!hasRows(source, mergeOptions)) {
     return (
@@ -47,7 +71,7 @@ export default function ShotMetaBoard({
       {title ? <Text style={[styles.title, compact && styles.compactTitle]}>{title}</Text> : null}
       {showStrip ? (
         <ShotMetaStrip
-          source={source}
+          source={stripSource}
           options={mergeOptions}
           compact={compact}
           fallback={null}
