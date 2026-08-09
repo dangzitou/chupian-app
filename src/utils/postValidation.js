@@ -12,6 +12,17 @@ const FIELD_LIMITS = {
   author: 18,
 };
 
+export const MAX_POST_VIDEO_SECONDS = 40;
+
+export function hasInvalidMediaDuration(item = {}) {
+  const kind = normalize(item.kind).toLowerCase();
+  const duration = Number(item.duration || 0);
+  const pairedDuration = Number(item.pairedVideo?.duration || 0);
+  if (kind === 'video') return Number.isFinite(duration) && duration > MAX_POST_VIDEO_SECONDS;
+  if (kind === 'live') return Number.isFinite(pairedDuration) && pairedDuration > MAX_POST_VIDEO_SECONDS;
+  return false;
+}
+
 function normalize(value) {
   return String(value || '').trim();
 }
@@ -50,8 +61,9 @@ export function validatePostDraft(state = {}, mediaList = []) {
   if (mediaList.some((item) => (
     Number(item?.size || 0) > MAX_MEDIA_UPLOAD_BYTES
     || Number(item?.pairedVideo?.size || 0) > MAX_MEDIA_UPLOAD_BYTES
+    || hasInvalidMediaDuration(item)
   ))) {
-    errors.media = '单个图片、实况或视频不能超过120MB';
+    errors.media = '单个素材不能超过120MB，视频或实况不能超过40秒';
   }
 
   if (tags.length > FIELD_LIMITS.tags) errors.tags = `标签最多${FIELD_LIMITS.tags}个`;

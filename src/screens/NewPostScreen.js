@@ -22,7 +22,11 @@ import { APP_ROUTES } from '../constants/routes';
 import { EMPTY_SHOT, SHOT_PRESETS } from '../constants/shotForm';
 import { NEW_POST_DRAFT_STORAGE_KEY } from '../constants/storage';
 import { splitTags } from '../utils/postCodec';
-import { validatePostDraft } from '../utils/postValidation';
+import {
+  hasInvalidMediaDuration,
+  MAX_POST_VIDEO_SECONDS,
+  validatePostDraft,
+} from '../utils/postValidation';
 import { mapWithConcurrency } from '../utils/async';
 import { buildShotDefaultsFromExif } from '../utils/exif';
 import { sharePost } from '../utils/share';
@@ -34,7 +38,6 @@ import { buildSessionIdempotencyKey } from '../lib/idempotency';
 import { createDraftStorage } from '../hooks/useDraftStorage';
 
 const MAX_MEDIA_COUNT = 9;
-const MAX_VIDEO_SECONDS = 40;
 const DRAFT_DEBOUNCE_MS = 900;
 const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
 
@@ -545,13 +548,8 @@ export default function NewPostScreen({ navigation, route }) {
       const candidates = res.assets
         .map((asset) => buildMediaPayload(asset))
         .filter(Boolean)
-        .filter((item) => {
-          if (item.kind === MEDIA_KINDS.VIDEO && item.duration > MAX_VIDEO_SECONDS) {
-            return false;
-          }
-          return true;
-        });
-      const skippedVideos = res.assets.length - candidates.length;
+        .filter((item) => !hasInvalidMediaDuration(item));
+      const skippedMedia = res.assets.length - candidates.length;
       setMediaList((prev) => {
         if (prev.length >= MAX_MEDIA_COUNT) {
           Alert.alert('提示', `素材最多支持 ${MAX_MEDIA_COUNT} 个`);
@@ -567,8 +565,8 @@ export default function NewPostScreen({ navigation, route }) {
         }
         return next;
       });
-      if (skippedVideos > 0) {
-        Alert.alert('提示', `检测到 ${skippedVideos} 个视频超过 ${MAX_VIDEO_SECONDS}s，已自动忽略`);
+      if (skippedMedia > 0) {
+        Alert.alert('提示', `检测到 ${skippedMedia} 个视频或实况超过 ${MAX_POST_VIDEO_SECONDS}s，已自动忽略`);
       }
     } catch (_err) {
       setMediaPickerError('相册暂时无法打开，请重试；已填写的内容和草稿不会丢失。');
@@ -585,7 +583,7 @@ export default function NewPostScreen({ navigation, route }) {
         mediaTypes: ['images', 'videos'],
         quality: 1,
         exif: true,
-        videoMaxDuration: 40,
+        videoMaxDuration: MAX_POST_VIDEO_SECONDS,
       });
       if (res.canceled || !res.assets?.length) return;
 
@@ -593,8 +591,8 @@ export default function NewPostScreen({ navigation, route }) {
       applyExifDefaults(asset.exif);
       const normalized = buildMediaPayload(asset);
       if (!normalized) return;
-      if (normalized.kind === MEDIA_KINDS.VIDEO && normalized.duration > MAX_VIDEO_SECONDS) {
-        Alert.alert('提示', `视频时长超过 ${MAX_VIDEO_SECONDS}s，不支持发布`);
+      if (hasInvalidMediaDuration(normalized)) {
+        Alert.alert('提示', `视频或实况超过 ${MAX_POST_VIDEO_SECONDS}s，不支持发布`);
         return;
       }
 
@@ -636,6 +634,10 @@ export default function NewPostScreen({ navigation, route }) {
       const normalized = buildMediaPayload(res.assets[0]);
       if (!normalized || normalized.kind !== MEDIA_KINDS.LIVE) {
         Alert.alert('不是实况照片', '请在相册中选择一张 Live Photo 后重试');
+        return;
+      }
+      if (hasInvalidMediaDuration(normalized)) {
+        Alert.alert('提示', `实况视频超过 ${MAX_POST_VIDEO_SECONDS}s，不支持发布`);
         return;
       }
 
