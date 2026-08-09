@@ -91,14 +91,13 @@ function PostCard({
         }}
       >
         <View style={styles.compactMediaWrap}>
-          <Pressable onPress={onPress} accessibilityRole="button">
-            <MediaGallery
-              media={cardMedia}
-              showAll={false}
-              columns={1}
-              containerWidth={Math.max(0, cardWidth - 4)}
-            />
-          </Pressable>
+          <MediaGallery
+            media={cardMedia}
+            onPressImage={onPress}
+            showAll={false}
+            columns={1}
+            containerWidth={Math.max(0, cardWidth - 4)}
+          />
           {cardMedia.length > 1 ? (
             <Text style={styles.multiMark}>▢ {cardMedia.length}</Text>
           ) : null}
@@ -190,14 +189,13 @@ function PostCard({
       </View>
 
       <View style={styles.mediaTapWrap}>
-        <Pressable onPress={onPress}>
-          <MediaGallery
-            media={cardMedia}
-            showAll={!compact}
-            columns={compact ? 1 : mediaColumns}
-            containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
-          />
-        </Pressable>
+        <MediaGallery
+          media={cardMedia}
+          onPressImage={onPress}
+          showAll={!compact}
+          columns={compact ? 1 : mediaColumns}
+          containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
+        />
         {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
       </View>
 
