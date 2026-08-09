@@ -11,6 +11,7 @@ export default function PostInput({
   multiline = false,
   maxLength,
   help,
+  optional = true,
   keyboardType = 'default',
   numberOfLines = 1,
 }) {
@@ -20,7 +21,10 @@ export default function PostInput({
 
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, error && styles.labelError]}>{label}</Text>
+      <View style={styles.labelRow}>
+        <Text style={[styles.label, error && styles.labelError]}>{label}</Text>
+        {optional ? <Text style={styles.optional}>可选</Text> : null}
+      </View>
       <TextInput
         style={[
           styles.input,
@@ -35,6 +39,8 @@ export default function PostInput({
         numberOfLines={numberOfLines}
         maxLength={maxLength}
         keyboardType={keyboardType}
+        accessibilityLabel={optional ? `${label}，可选` : label}
+        accessibilityHint={help || undefined}
       />
       {hasFooter ? (
         <View style={styles.footer}>
@@ -50,7 +56,14 @@ export default function PostInput({
 
 const styles = StyleSheet.create({
   field: { marginBottom: 12 },
-  label: { color: COLORS.muted, fontSize: 12.5, marginBottom: 6 },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  label: { color: COLORS.muted, fontSize: 12.5 },
+  optional: { color: COLORS.mutedText || COLORS.muted, fontSize: 10.5 },
   input: {
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
