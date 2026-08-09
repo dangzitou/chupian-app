@@ -25,11 +25,13 @@ function getMediaRatio(item) {
   return Math.min(Math.max(width / height, 0.75), 1.78);
 }
 
-function MediaFallback({ kind, ratio = IMAGE_RATIO }) {
+function MediaFallback({ kind, ratio = IMAGE_RATIO, title, hint }) {
   return (
     <View style={[styles.mediaWrap, { aspectRatio: ratio }, styles.mediaFallback]}>
-      <Text style={styles.fallbackTitle}>{kind === 'video' ? '视频暂不可用' : '图片暂不可用'}</Text>
-      <Text style={styles.fallbackHint}>素材地址已失效或无法加载</Text>
+      <Text style={styles.fallbackTitle}>
+        {title || (kind === 'video' ? '视频暂不可用' : kind === 'live' ? '实况暂不可用' : '图片暂不可用')}
+      </Text>
+      <Text style={styles.fallbackHint}>{hint || '素材地址已失效或无法加载'}</Text>
     </View>
   );
 }
@@ -51,6 +53,29 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
 
   if (item.kind === 'video') {
     if (!item.url) return <MediaFallback kind="video" ratio={ratio} />;
+    if (!playing) {
+      const posterUri = item.cover || item.thumbnail;
+      if (!posterUri) {
+        return <MediaFallback kind="video" ratio={ratio} title="视频" hint="点击播放" />;
+      }
+      return (
+        <View style={mediaStyle}>
+          <Image
+            source={{ uri: posterUri }}
+            style={styles.posterImage}
+            resizeMode="cover"
+            onError={handleError}
+          />
+          <View style={styles.posterShade} pointerEvents="none" />
+          {item.duration > 0 ? (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
+            </View>
+          ) : null}
+          <Text style={styles.playBadge}>▶</Text>
+        </View>
+      );
+    }
     return (
       <View style={mediaStyle}>
         <VideoSurface
@@ -71,10 +96,9 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
     );
   }
 
-  const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
-  if (!imageUri) return <MediaFallback kind="image" ratio={ratio} />;
+  const imageUri = item.kind === 'live' ? item.cover : item.url;
 
-  if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
+  if (item.kind === 'live' && playing && item.url) {
     return (
       <View style={mediaStyle}>
         <VideoSurface
@@ -90,6 +114,8 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
       </View>
     );
   }
+
+  if (!imageUri) return <MediaFallback kind={item.kind === 'live' ? 'live' : 'image'} ratio={ratio} hint={item.kind === 'live' ? '点击播放' : undefined} title={item.kind === 'live' ? '实况' : undefined} />;
 
   return (
     <View>
@@ -238,6 +264,15 @@ const styles = StyleSheet.create({
     aspectRatio: IMAGE_RATIO,
     borderRadius: 10,
     backgroundColor: '#e8e8e8',
+  },
+  posterImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 10,
+  },
+  posterShade: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   mediaFallback: {
     alignItems: 'center',
