@@ -176,6 +176,7 @@ export async function setAuthenticatedSession(payload = {}) {
     username: String(user.username || '').trim(),
     displayName: String(user.displayName || user.username || '').trim(),
     bio: String(user.bio || '').trim(),
+    avatar: String(user.avatar || user.avatarUrl || '').trim(),
   };
   if (Platform.OS !== 'web') {
     await SecureStore.setItemAsync(STORAGE_KEY, runtimeActorId);
