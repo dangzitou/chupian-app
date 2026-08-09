@@ -156,6 +156,7 @@ export default function PostsScreen({ navigation }) {
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [signalsError, setSignalsError] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [actionError, setActionError] = useState('');
   const bootstrappedRef = useRef(false);
   const feedModeRef = useRef('');
   const firstFocusRef = useRef(true);
@@ -229,6 +230,7 @@ export default function PostsScreen({ navigation }) {
     patchById,
     setBusyForPost,
     isBusyExternal: isPostBusy,
+    onError: () => setActionError('网络不稳定，操作未完成，请重试'),
   });
 
   const loadDiscovery = useCallback(async () => {
@@ -416,6 +418,16 @@ export default function PostsScreen({ navigation }) {
       {showStaleBanner ? (
         <Text style={styles.staleBanner}>网络暂时不可用，当前显示上次内容 · 下拉重试</Text>
       ) : null}
+      {actionError ? (
+        <Pressable
+          style={styles.actionError}
+          onPress={() => setActionError('')}
+          accessibilityRole="button"
+          accessibilityLabel="关闭操作失败提示"
+        >
+          <Text style={styles.actionErrorText}>{actionError} · 点击关闭</Text>
+        </Pressable>
+      ) : null}
       <FeedTabs value={feedMode} onChange={switchFeedMode} />
       <SearchBar value={searchInput} onChange={setSearchInput} onSubmit={applySearch} />
       {filtersOpen ? (
@@ -446,7 +458,7 @@ export default function PostsScreen({ navigation }) {
         </View>
       ) : null}
     </View>
-  ), [activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
+  ), [actionError, activeTag, applySearch, applySort, applyTagFilter, feedMode, feedLayout, filtersOpen, isMasonry, locationContext, openTab, searchInput, showStaleBanner, signals, signalsError, signalsLoading, sort, switchFeedMode]);
 
   const ListFooter = useMemo(() => {
     if (!hasMore || !loadingMore) return null;
@@ -761,6 +773,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     color: '#9a5a2b',
     backgroundColor: '#fff3e8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  actionError: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#fff0f0',
+  },
+  actionErrorText: {
+    color: '#a83f3f',
     fontSize: 11,
     lineHeight: 15,
   },
