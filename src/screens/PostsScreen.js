@@ -450,6 +450,7 @@ export default function PostsScreen({ navigation }) {
       onLike={onLike}
       onFavorite={onFavorite}
       onFollow={onFollow}
+      onTagPress={applyTagFilter}
       onComment={handleComment}
       onShare={onShare}
       likeBusy={isActionBusy(item.id, 'liked', 'liked')}
@@ -457,7 +458,7 @@ export default function PostsScreen({ navigation }) {
       followBusy={isActionBusy(item.id, 'followed', 'followed')}
       style={isMasonry ? styles.gridCard : styles.listCard}
     />
-  ), [handleAuthorPress, handleComment, handlePostPress, isActionBusy, isMasonry, onFollow, onFavorite, onLike, onShare]);
+  ), [applyTagFilter, handleAuthorPress, handleComment, handlePostPress, isActionBusy, isMasonry, onFollow, onFavorite, onLike, onShare]);
 
   const renderMasonryBlock = useCallback(() => (
     <View style={styles.webMasonryRow}>
