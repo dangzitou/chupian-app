@@ -610,10 +610,20 @@ export const api = {
     return safeRequestWithFallback('/api/v1/health', '/health');
   },
 
-  async weather() {
+  async weather({ latitude, longitude, label } = {}) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    const query = hasLocation
+      ? `?${new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        ...(label ? { label: String(label).slice(0, 80) } : {}),
+      }).toString()}`
+      : '';
     return safeRequestWithFallback(
-      '/api/v1/weather',
-      '/api/weather',
+      `/api/v1/weather${query}`,
+      `/api/weather${query}`,
       { cacheTtl: 15_000 },
     );
   },
@@ -709,6 +719,15 @@ export const api = {
       { cacheTtl: 2500, noCache: params.noCache },
     );
     return normalizeCommunityFeedResponse(raw);
+  },
+
+  async meSpotCount() {
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/community/me/spot-count`,
+      '/api/community/me/spot-count',
+      { cacheTtl: 30_000 },
+    );
+    return { count: Number(raw?.count || 0) };
   },
 
   async meLikes(params = {}) {

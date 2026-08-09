@@ -156,10 +156,10 @@ export default function ProfileScreen({ navigation }) {
 
   const loadSectionMetrics = useCallback(async () => {
     try {
-      const [w, userPostsFeed, s, notificationPayload, rewardPayload] = await Promise.all([
-        api.weather(),
+      const [locationPayload, userPostsFeed, spotCountPayload, notificationPayload, rewardPayload] = await Promise.all([
+        api.resolveLocation().catch(() => null),
         api.mePosts({ limit: 1, sort: 'latest' }),
-        api.spots(),
+        api.meSpotCount().catch(() => ({ count: 0 })),
         api.notifications({ limit: 1 }),
         api.rewards().catch(() => ({
           points: 0,
@@ -169,9 +169,18 @@ export default function ProfileScreen({ navigation }) {
         })),
       ]);
 
-      setWeather(w);
+      const location = locationPayload?.location || {};
+      const hasLocation = Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lng));
+      const weatherPayload = hasLocation
+        ? await api.weather({
+          latitude: location.lat,
+          longitude: location.lng,
+          label: location.label,
+        }).catch(() => ({ ok: false }))
+        : { ok: false };
+      setWeather(weatherPayload);
       setTotalPosts(Number(userPostsFeed?.total || 0));
-      setSpotCount((s.spots || []).length);
+      setSpotCount(Number(spotCountPayload?.count || 0));
       setNotificationUnread(Number(notificationPayload?.unread || 0));
       setCreatorReward(rewardPayload);
       setMeSectionStats((prev) => ({
