@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   RefreshControl,
@@ -66,6 +67,17 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
   if (!item) return null;
   const playable = isPlayableMedia(item);
   const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gestureState) => (
+      !playable
+      && Math.abs(gestureState.dx) > 14
+      && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+    ),
+    onPanResponderRelease: (_event, gestureState) => {
+      if (Math.abs(gestureState.dx) < 42) return;
+      onStep(gestureState.dx < 0 ? 1 : -1);
+    },
+  }), [onStep, playable]);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -78,7 +90,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
         >
           <Text style={styles.viewerCloseText}>×</Text>
         </Pressable>
-        <View style={styles.viewerStage}>
+        <View style={styles.viewerStage} {...panResponder.panHandlers}>
           {playable ? (
             <VideoSurface
               uri={item.url}
