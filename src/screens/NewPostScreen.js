@@ -25,6 +25,7 @@ import { splitTags } from '../utils/postCodec';
 import { validatePostDraft } from '../utils/postValidation';
 import { mapWithConcurrency } from '../utils/async';
 import { buildShotDefaultsFromExif } from '../utils/exif';
+import { sharePost } from '../utils/share';
 import ShotMetaBoard from '../components/ShotMetaBoard';
 import PostInput from '../components/forms/PostInput';
 import OptionPills from '../components/forms/OptionPills';
@@ -76,7 +77,7 @@ function FormSection({ title, summary, expanded, onToggle, children }) {
   );
 }
 
-function PublishSuccessModal({ result, onView, onContinue }) {
+function PublishSuccessModal({ result, onView, onShare, onContinue }) {
   return (
     <Modal
       visible={Boolean(result)}
@@ -106,6 +107,9 @@ function PublishSuccessModal({ result, onView, onContinue }) {
           </View>
           <Pressable style={styles.successPrimary} onPress={onView} accessibilityRole="button">
             <Text style={styles.successPrimaryText}>查看这条出片</Text>
+          </Pressable>
+          <Pressable style={styles.successShare} onPress={onShare} accessibilityRole="button">
+            <Text style={styles.successShareText}>分享这条出片</Text>
           </Pressable>
           <Pressable style={styles.successSecondary} onPress={onContinue} accessibilityRole="button">
             <Text style={styles.successSecondaryText}>继续发布</Text>
@@ -943,6 +947,18 @@ export default function NewPostScreen({ navigation, route }) {
     if (navigation.canGoBack && navigation.canGoBack()) navigation.goBack();
   }, [navigation, publishResult]);
 
+  const sharePublishedPost = useCallback(async () => {
+    if (!publishResult) return;
+    try {
+      const result = await sharePost({ id: publishResult.postId, title: publishResult.title });
+      if (result === 'copied') {
+        Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
+      }
+    } catch (err) {
+      Alert.alert('分享失败', err?.message || '当前环境暂不支持分享，请稍后重试。');
+    }
+  }, [publishResult]);
+
   const onSaveDraft = useCallback(() => {
     saveDraft()
       .then(() => {
@@ -1471,6 +1487,7 @@ export default function NewPostScreen({ navigation, route }) {
         <PublishSuccessModal
           result={publishResult}
           onView={viewPublishedPost}
+          onShare={sharePublishedPost}
           onContinue={continuePublishing}
         />
       </KeyboardAvoidingView>
@@ -1815,6 +1832,21 @@ const styles = StyleSheet.create({
   successPrimaryText: {
     color: COLORS.onAccent,
     fontSize: 14,
+    fontWeight: '800',
+  },
+  successShare: {
+    minHeight: 42,
+    marginTop: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accentBg,
+  },
+  successShareText: {
+    color: COLORS.accent,
+    fontSize: 13.5,
     fontWeight: '800',
   },
   successSecondary: {
