@@ -14,6 +14,7 @@ export default function SpotDetailScreen({ navigation, route }) {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState('');
+  const [coverError, setCoverError] = useState(false);
   const [error, setError] = useState(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
@@ -29,6 +30,7 @@ export default function SpotDetailScreen({ navigation, route }) {
         const s = (spotsResult.value.spots || []).find((x) => String(x.id) === String(spotId));
         if (s) {
           setSpot(s);
+          setCoverError(false);
         } else {
           setError('点位不存在或已下线');
         }
@@ -74,7 +76,18 @@ export default function SpotDetailScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.body}>
-        <Image source={{ uri: spot.cover }} style={styles.cover} />
+        {spot.cover && !coverError ? (
+          <Image
+            source={{ uri: spot.cover }}
+            style={styles.cover}
+            onError={() => setCoverError(true)}
+            accessibilityLabel={`${spot.name}封面`}
+          />
+        ) : (
+          <View style={styles.coverFallback}>
+            <Text style={styles.coverFallbackText}>出片点位</Text>
+          </View>
+        )}
         <View style={styles.content}>
           <Text style={styles.title}>{spot.name}</Text>
           <Text style={styles.sub}>
@@ -111,7 +124,23 @@ export default function SpotDetailScreen({ navigation, route }) {
 
           <Text style={styles.sectionTitle}>这个点位的出片</Text>
           {postsLoading ? <ActivityIndicator color={COLORS.accent} /> : null}
-          {!postsLoading && postsError ? <Text style={styles.postsError}>{postsError}</Text> : null}
+          {!postsLoading && postsError ? (
+            <View style={styles.postsErrorWrap}>
+              <Text style={styles.postsError}>{postsError}</Text>
+              <Pressable
+                style={styles.postsRetryBtn}
+                onPress={() => {
+                  setPostsError('');
+                  setPostsLoading(true);
+                  setLoadAttempt((value) => value + 1);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="重新加载点位作品"
+              >
+                <Text style={styles.postsRetryText}>重试</Text>
+              </Pressable>
+            </View>
+          ) : null}
           {!postsLoading && !postsError && posts.length ? (
             <View style={styles.postsGrid}>
               {posts.map((post) => (
@@ -184,6 +213,14 @@ const styles = StyleSheet.create({
   retryText: { color: COLORS.onAccent, fontSize: 13, fontWeight: '700' },
   body: { paddingBottom: 40 },
   cover: { width: '100%', height: 200, backgroundColor: COLORS.bgDeep },
+  coverFallback: {
+    width: '100%',
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.bgDeep,
+  },
+  coverFallbackText: { color: COLORS.muted, fontSize: 14, fontWeight: '700' },
   content: { padding: 16 },
   title: { fontSize: 22, fontWeight: '700', color: COLORS.ink },
   sub: { fontSize: 13, color: COLORS.muted, marginTop: 4 },
@@ -213,7 +250,10 @@ const styles = StyleSheet.create({
   vpRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   vpLabel: { fontSize: 12.5, color: COLORS.muted, width: 40 },
   vpVal: { fontSize: 12.5, color: COLORS.ink, flex: 1, lineHeight: 18 },
-  postsError: { color: '#a34a2a', fontSize: 12.5, lineHeight: 18 },
+  postsErrorWrap: { alignItems: 'center', paddingVertical: 4 },
+  postsError: { color: '#a34a2a', fontSize: 12.5, lineHeight: 18, textAlign: 'center' },
+  postsRetryBtn: { marginTop: 8, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, backgroundColor: COLORS.accentBg },
+  postsRetryText: { color: COLORS.accent, fontSize: 12, fontWeight: '700' },
   postsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   postCard: { width: '48%' },
   navBtn: {
