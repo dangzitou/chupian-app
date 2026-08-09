@@ -12,7 +12,7 @@ export function buildPostShareMessage(post = {}) {
 export function buildPostShareUrl(post = {}) {
   const id = String(post?.id || '').trim();
   if (!id) return '';
-  if (PUBLIC_WEB_ORIGIN) return `${PUBLIC_WEB_ORIGIN}/post/${encodeURIComponent(id)}`;
+  if (PUBLIC_WEB_ORIGIN) return `${PUBLIC_WEB_ORIGIN}/share/post/${encodeURIComponent(id)}`;
   return `chupian://post/${encodeURIComponent(id)}`;
 }
 
