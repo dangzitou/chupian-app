@@ -36,6 +36,8 @@ const {
 const SPOT_CACHE_TTL_SECONDS = Number.parseInt(SPOT_CACHE_TTL, 10) || 90;
 const LOCATION_CACHE_TTL_SECONDS = Number.parseInt(process.env.LOCATION_CACHE_TTL || String(60 * 60 * 24), 10) || 60 * 60 * 24;
 const LOCATION_LOOKUP_TIMEOUT_MS = Number.parseInt(process.env.LOCATION_LOOKUP_TIMEOUT_MS || "2500", 10) || 2500;
+const WEATHER_CACHE_TTL_SECONDS = Number.parseInt(process.env.WEATHER_CACHE_TTL || "300", 10) || 300;
+const WEATHER_LOOKUP_TIMEOUT_MS = Number.parseInt(process.env.WEATHER_LOOKUP_TIMEOUT_MS || "3500", 10) || 3500;
 const HTTP_KEEP_ALIVE_TIMEOUT_MS = Number.parseInt(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || "65000", 10) || 65000;
 const HTTP_HEADERS_TIMEOUT_MS = Number.parseInt(process.env.HTTP_HEADERS_TIMEOUT_MS || "20000", 10) || 20000;
 const HTTP_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS || "180000", 10) || 180000;
@@ -2078,16 +2080,75 @@ const healthHandler = async (_req, res) => {
     dependencies,
   });
 };
-const weatherHandler = async (_req, res) => {
-  res.json({
-    ok: true,
-    temp: 27,
-    feelsLike: 31,
-    humidity: 74,
-    wind: 3,
-    label: "阳光明媚",
-    location: "当前位置",
+function weatherCodeLabel(code) {
+  const normalized = Number(code);
+  if (normalized === 0) return "晴朗";
+  if ([1, 2].includes(normalized)) return "晴间多云";
+  if (normalized === 3) return "多云";
+  if ([45, 48].includes(normalized)) return "有雾";
+  if ([51, 53, 55, 56, 57].includes(normalized)) return "毛毛雨";
+  if ([61, 63, 65, 66, 67].includes(normalized)) return "有雨";
+  if ([71, 73, 75, 77].includes(normalized)) return "降雪";
+  if ([80, 81, 82].includes(normalized)) return "阵雨";
+  if ([85, 86].includes(normalized)) return "阵雪";
+  if ([95, 96, 99].includes(normalized)) return "雷雨";
+  return "天气状况未知";
+}
+
+const weatherHandler = async (req, res) => {
+  const latitude = pickFloat(req.query.lat, null, { min: -90, max: 90 });
+  const longitude = pickFloat(req.query.lng, null, { min: -180, max: 180 });
+  if (latitude === null || longitude === null) {
+    return res.status(400).json({ ok: false, error: "weather location required" });
+  }
+
+  const cacheKey = `weather:current:v1:${latitude.toFixed(2)}:${longitude.toFixed(2)}`;
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+
+  const params = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+    current: "temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code",
+    timezone: "auto",
   });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WEATHER_LOOKUP_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+      headers: { Accept: "application/json", "User-Agent": "chupian-weather/1.0" },
+      signal: controller.signal,
+    });
+    if (!upstream.ok) return res.status(503).json({ ok: false, error: "weather unavailable" });
+    const data = await upstream.json();
+    const current = data?.current || {};
+    const temp = Number(current.temperature_2m);
+    const feelsLike = Number(current.apparent_temperature);
+    const humidity = Number(current.relative_humidity_2m);
+    const wind = Number(current.wind_speed_10m);
+    const weatherCode = Number(current.weather_code);
+    if (![temp, feelsLike, humidity, wind, weatherCode].every(Number.isFinite)) {
+      return res.status(503).json({ ok: false, error: "weather unavailable" });
+    }
+    const payload = {
+      ok: true,
+      temp,
+      feelsLike,
+      humidity,
+      wind,
+      weatherCode,
+      label: weatherCodeLabel(weatherCode),
+      location: safeText(req.query.label || "当前位置", 80),
+      source: "open-meteo",
+      updatedAt: new Date().toISOString(),
+    };
+    await cacheSetJson(cacheKey, payload, WEATHER_CACHE_TTL_SECONDS);
+    return res.json(payload);
+  } catch (_err) {
+    return res.status(503).json({ ok: false, error: "weather unavailable" });
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 app.get("/health", healthHandler);
 app.get("/api/v1/health", healthHandler);
@@ -2570,6 +2631,25 @@ app.get("/api/v1/community/me/posts", asyncHandler(async (req, res) => {
   });
   res.json(payload);
 }));
+
+async function mySpotCountHandler(req, res) {
+  const actor = readActorId(req, req.query);
+  const rows = await query(
+    `SELECT COUNT(DISTINCT CASE
+       WHEN p.spot_id IS NOT NULL THEN CONCAT('spot:', p.spot_id)
+       WHEN p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+         THEN CONCAT('coord:', ROUND(p.latitude, 4), ':', ROUND(p.longitude, 4))
+       ELSE NULL
+     END) AS c
+     FROM posts p
+     WHERE p.author_id = ? AND p.status = 'published'`,
+    [actor]
+  );
+  return res.json({ count: Number(rows[0]?.c || 0) });
+}
+
+app.get("/api/v1/community/me/spot-count", asyncHandler(mySpotCountHandler));
+app.get("/api/community/me/spot-count", asyncHandler(mySpotCountHandler));
 
 app.get("/api/v1/community/me/rewards", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.query);
