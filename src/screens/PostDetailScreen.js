@@ -877,6 +877,9 @@ export default function PostDetailScreen({ route, navigation }) {
               scrollEnabled
               textAlignVertical="top"
               returnKeyType="send"
+              editable={!commentSending}
+              accessibilityLabel="评论内容"
+              accessibilityHint="输入建议、复盘或打卡心得，最多 500 字"
               onSubmitEditing={() => {
                 if (!commentSending) onSubmitComment();
               }}
