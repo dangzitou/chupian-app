@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { COLORS } from '../config';
 import VideoSurface from './VideoSurface';
@@ -99,12 +99,13 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
   );
 }
 
-export default function MediaGallery({ media = [], onPressMedia, onPressImage, columns = 1, showAll = true, containerWidth }) {
+export default function MediaGallery({ media = [], onPressMedia, onPressImage, onDoubleTap, columns = 1, showAll = true, containerWidth }) {
   const { width: windowWidth } = useWindowDimensions();
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
   const [failedKeys, setFailedKeys] = useState(() => new Set());
   const [retryVersions, setRetryVersions] = useState({});
+  const tapRef = useRef({ at: 0, index: -1, item: null, timer: null });
   const toggleLive = useCallback((index, item) => {
     const playable = item?.kind === 'video'
       || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
@@ -142,13 +143,41 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
     }));
   }, []);
 
+  useEffect(() => () => {
+    if (tapRef.current.timer) clearTimeout(tapRef.current.timer);
+  }, []);
+
   const handleMediaPress = useCallback((index, item, key) => {
     if (failedKeys.has(key)) {
       retryMedia(key);
       return;
     }
-    toggleLive(index, item);
-  }, [failedKeys, retryMedia, toggleLive]);
+    if (!onDoubleTap) {
+      toggleLive(index, item);
+      return;
+    }
+
+    const now = Date.now();
+    const previous = tapRef.current;
+    if (previous.timer && previous.index === index && now - previous.at <= 280) {
+      clearTimeout(previous.timer);
+      tapRef.current = { at: 0, index: -1, item: null, timer: null };
+      onDoubleTap(item, index);
+      return;
+    }
+
+    if (previous.timer) {
+      clearTimeout(previous.timer);
+      if (previous.item && previous.index >= 0) toggleLive(previous.index, previous.item);
+    }
+
+    const timer = setTimeout(() => {
+      if (tapRef.current.index !== index || tapRef.current.at !== now) return;
+      tapRef.current = { at: 0, index: -1, item: null, timer: null };
+      toggleLive(index, item);
+    }, 280);
+    tapRef.current = { at: now, index, item, timer };
+  }, [failedKeys, onDoubleTap, retryMedia, toggleLive]);
 
   if (!normalized.length) return null;
 
@@ -182,6 +211,7 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
             onPress={() => handleMediaPress(idx, item, key)}
             accessibilityRole="button"
             accessibilityLabel={failed ? '重新加载素材' : (item.kind === 'video' ? '播放视频' : (item.kind === 'live' ? '播放实况' : '查看照片'))}
+            accessibilityHint={onDoubleTap ? '双击点赞，单击查看或播放' : undefined}
           >
             <MediaCover
               item={item}
