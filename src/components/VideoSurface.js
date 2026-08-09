@@ -44,9 +44,14 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
 
   return (
     <View style={[style, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#121212' }]}> 
-      <Pressable onPress={() => {}} style={{ alignItems: 'center' }}>
+      <Pressable
+        onPress={() => onError?.(new Error('视频播放组件不可用'))}
+        style={{ alignItems: 'center' }}
+        accessibilityRole="button"
+        accessibilityLabel="重试播放视频"
+      >
         <Text style={{ color: '#fff', fontSize: 12 }}>视频暂不可播放</Text>
-        <Text style={{ color: '#ddd', fontSize: 11, marginTop: 4 }}>请检查视频地址</Text>
+        <Text style={{ color: '#ddd', fontSize: 11, marginTop: 4 }}>点击重试</Text>
       </Pressable>
     </View>
   );
