@@ -86,6 +86,8 @@ export default function MapScreen({ navigation, route }) {
           const nextLocation = normalizeLocation(payload?.location);
           if (!nextLocation) throw new Error('invalid network location');
           setWebLocation(nextLocation);
+          setCurrentLocation(nextLocation);
+          setResolvedLocation(nextLocation);
           setLocationStatus('ready');
         })
         .catch(() => {
@@ -97,6 +99,8 @@ export default function MapScreen({ navigation, route }) {
       .then((nextLocation) => {
         if (!alive) return;
         setWebLocation(nextLocation);
+        setCurrentLocation(nextLocation);
+        setResolvedLocation(nextLocation);
         setLocationStatus('ready');
       })
       .catch(() => {
