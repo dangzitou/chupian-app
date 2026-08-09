@@ -653,6 +653,18 @@ export const api = {
     );
   },
 
+  async spot(spotId) {
+    const target = String(spotId || '').trim();
+    if (!target) throw new Error('spot id required');
+    const encoded = encodeURIComponent(target);
+    const raw = await safeRequestWithFallback(
+      `${API_PREFIX}/spots/${encoded}`,
+      `/api/spots/${encoded}`,
+      { cacheTtl: 30_000 },
+    );
+    return raw?.spot || raw;
+  },
+
   async mapData({ latitude, longitude, radiusKm = 35, limit = 60 } = {}) {
     const lat = Number(latitude);
     const lng = Number(longitude);

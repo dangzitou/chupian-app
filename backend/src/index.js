@@ -2603,13 +2603,7 @@ async function spotsHandler(req, res) {
       ],
     )
     : await query("SELECT * FROM spots ORDER BY name");
-  const normalizedSpots = spotRows.map((s) => ({
-    ...s,
-    lat: Number(s.latitude),
-    lng: Number(s.longitude),
-    tags: safeJsonList(s.tags),
-    styles: safeJsonList(s.styles),
-  }));
+  const normalizedSpots = spotRows.map(normalizeSpotRow);
   const spots = hasLocation
     ? normalizedSpots
       .map((spot) => ({
@@ -2625,6 +2619,30 @@ async function spotsHandler(req, res) {
     spots,
     ...(hasLocation ? { center: { lat: latitude, lng: longitude }, radiusKm } : {}),
   };
+  await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
+  return res.json(payload);
+}
+
+function normalizeSpotRow(row = {}) {
+  return {
+    ...row,
+    lat: Number(row.latitude),
+    lng: Number(row.longitude),
+    tags: safeJsonList(row.tags),
+    styles: safeJsonList(row.styles),
+  };
+}
+
+async function spotHandler(req, res) {
+  const spotId = pickInt(req.params.id, 0);
+  if (!spotId) return res.status(400).json({ error: "valid spot id is required" });
+  const cacheKey = `spot:detail:v1:${spotId}`;
+  const cached = await cacheGetJson(cacheKey);
+  if (cached) return res.json(cached);
+
+  const rows = await query("SELECT * FROM spots WHERE id = ? LIMIT 1", [spotId]);
+  if (!rows.length) return res.status(404).json({ error: "spot not found" });
+  const payload = { spot: normalizeSpotRow(rows[0]) };
   await cacheSetJson(cacheKey, payload, SPOT_CACHE_TTL_SECONDS);
   return res.json(payload);
 }
@@ -2728,6 +2746,8 @@ async function mapHandler(req, res) {
 
 app.get("/api/v1/spots", asyncHandler(spotsHandler));
 app.get("/api/spots", asyncHandler(spotsHandler));
+app.get("/api/v1/spots/:id", asyncHandler(spotHandler));
+app.get("/api/spots/:id", asyncHandler(spotHandler));
 app.get("/api/v1/location", asyncHandler(networkLocationHandler));
 app.get("/api/location", asyncHandler(networkLocationHandler));
 app.get("/api/v1/map", asyncHandler(mapHandler));
