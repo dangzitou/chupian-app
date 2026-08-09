@@ -576,11 +576,17 @@ export default function MapScreen({ navigation, route }) {
 
     const parent = navigation.getParent && navigation.getParent();
     if (parent) {
-      parent.navigate(APP_ROUTES.CREATE, { prefillSpot: spot });
+      parent.navigate(APP_ROUTES.CREATE, {
+        screen: 'NewPost',
+        params: { prefillSpot: spot },
+      });
       return;
     }
 
-    navigation.navigate(APP_ROUTES.CREATE, { prefillSpot: spot });
+    navigation.navigate(APP_ROUTES.CREATE, {
+      screen: 'NewPost',
+      params: { prefillSpot: spot },
+    });
   }, [navigation]);
 
   const onOpenPost = useCallback((postId) => {
