@@ -9,7 +9,18 @@ try {
   NativeVideo = null;
 }
 
-export default function VideoSurface({ uri, style, shouldPlay = false, loop = false, controls = true, poster, onError, muted = false }) {
+export default function VideoSurface({
+  uri,
+  style,
+  shouldPlay = false,
+  loop = false,
+  controls = true,
+  poster,
+  onError,
+  onLoadStart,
+  onReady,
+  muted = false,
+}) {
   if (!uri) return null;
 
   if (Platform.OS === 'web') {
@@ -23,6 +34,9 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
       playsInline: true,
       preload: 'metadata',
       poster: poster || undefined,
+      onLoadStart,
+      onLoadedMetadata: onReady,
+      onCanPlay: onReady,
       onError,
       'aria-label': '出片视频',
     });
@@ -38,6 +52,9 @@ export default function VideoSurface({ uri, style, shouldPlay = false, loop = fa
         shouldPlay={shouldPlay}
         isLooping={loop}
         isMuted={muted}
+        onLoadStart={onLoadStart}
+        onLoad={onReady}
+        onReadyForDisplay={onReady}
         onError={onError}
       />
     );
