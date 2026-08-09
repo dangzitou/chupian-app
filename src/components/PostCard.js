@@ -1,5 +1,6 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
 import Avatar from './Avatar';
@@ -44,6 +45,10 @@ function PostCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
+  const [heartBurst, setHeartBurst] = useState(false);
+  const heartScale = useRef(new Animated.Value(0.65)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+  const heartTimerRef = useRef(null);
   const cardMedia = post.media || [];
   const mediaColumns = cardMedia.length > 1 ? Math.min(cardMedia.length, 3) : 1;
   const mediaSummary = useMemo(() => {
@@ -78,8 +83,20 @@ function PostCard({
   }, [onAuthorPress, onPress, post]);
   const handleLike = useCallback(() => onLike?.(post.id), [onLike, post.id]);
   const handleDoubleTap = useCallback(() => {
+    if (!onLike || likeBusy) return;
     if (!post.liked) onLike?.(post.id);
-  }, [onLike, post.id, post.liked]);
+    heartScale.stopAnimation();
+    heartOpacity.stopAnimation();
+    heartScale.setValue(0.65);
+    heartOpacity.setValue(1);
+    setHeartBurst(true);
+    if (heartTimerRef.current) clearTimeout(heartTimerRef.current);
+    heartTimerRef.current = setTimeout(() => setHeartBurst(false), 560);
+    Animated.parallel([
+      Animated.timing(heartScale, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.timing(heartOpacity, { toValue: 0, duration: 500, delay: 60, useNativeDriver: true }),
+    ]).start();
+  }, [heartOpacity, heartScale, likeBusy, onLike, post.id, post.liked]);
   const handleFavorite = useCallback(() => onFavorite?.(post.id), [onFavorite, post.id]);
   const handleComment = useCallback(() => onComment?.(post.id), [onComment, post.id]);
   const handleShare = useCallback(() => onShare?.(post), [onShare, post]);
@@ -101,6 +118,16 @@ function PostCard({
   const followLabel = isFollowing ? '已关注' : '关注';
   const followable = Boolean(post.authorId);
 
+  useEffect(() => () => {
+    if (heartTimerRef.current) clearTimeout(heartTimerRef.current);
+  }, []);
+
+  const heartBurstView = heartBurst ? (
+    <Animated.View pointerEvents="none" style={[styles.heartBurst, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]}>
+      <Text style={styles.heartGlyph}>♥</Text>
+    </Animated.View>
+  ) : null;
+
   if (compact) {
     return (
       <View
@@ -112,7 +139,7 @@ function PostCard({
           }
         }}
       >
-        <View style={styles.compactMediaWrap}>
+        <View style={[styles.compactMediaWrap, styles.relativeMedia]}>
           <MediaGallery
             media={cardMedia}
             onPressImage={handlePress}
@@ -121,6 +148,7 @@ function PostCard({
             columns={1}
             containerWidth={Math.max(0, cardWidth - 4)}
           />
+          {heartBurstView}
           {cardMedia.length > 1 ? (
             <Text style={styles.multiMark}>▢ {cardMedia.length}</Text>
           ) : null}
@@ -207,7 +235,7 @@ function PostCard({
         ) : null}
       </View>
 
-      <View style={styles.mediaTapWrap}>
+      <View style={[styles.mediaTapWrap, styles.relativeMedia]}>
         <MediaGallery
           media={cardMedia}
           onPressImage={handlePress}
@@ -216,6 +244,7 @@ function PostCard({
           columns={compact ? 1 : mediaColumns}
           containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
         />
+        {heartBurstView}
         {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
       </View>
 
@@ -305,6 +334,27 @@ function arePostCardPropsEqual(previous, next) {
 export default memo(PostCard, arePostCardPropsEqual);
 
 const styles = StyleSheet.create({
+  relativeMedia: { position: 'relative' },
+  heartBurst: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 92,
+    height: 92,
+    marginLeft: -46,
+    marginTop: -46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  heartGlyph: {
+    color: '#fff',
+    fontSize: 72,
+    lineHeight: 78,
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 8,
+  },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 14,
