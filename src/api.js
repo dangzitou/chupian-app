@@ -17,6 +17,7 @@ const MAX_GET_CACHE_ENTRIES = 250;
 
 const inFlightGetRequests = new Map();
 const getResponseCache = new Map();
+let sessionRefreshPromise = null;
 const notificationRefreshListeners = new Set();
 
 function subscribeNotificationRefresh(listener) {
@@ -107,6 +108,17 @@ function shouldFallbackWrite(error) {
   return [404, 405, 410].includes(Number(error?.status));
 }
 
+function refreshSessionOnce() {
+  if (!sessionRefreshPromise) {
+    sessionRefreshPromise = Promise.resolve()
+      .then(() => refreshActorSession())
+      .finally(() => {
+        sessionRefreshPromise = null;
+      });
+  }
+  return sessionRefreshPromise;
+}
+
 async function doRequest(path, options = {}) {
   const {
     method: customMethod = 'GET',
@@ -131,8 +143,10 @@ async function doRequest(path, options = {}) {
   };
 
   const controller = new AbortController();
+  let timedOut = false;
   const timer = setTimeout(() => {
-    controller.abort(new Error('请求超时'));
+    timedOut = true;
+    controller.abort();
   }, timeout);
 
   try {
@@ -170,7 +184,7 @@ async function doRequest(path, options = {}) {
     return data;
   } catch (err) {
     if (err instanceof ApiError) throw err;
-    if (err?.name === 'AbortError') {
+    if (timedOut || err?.name === 'AbortError') {
       throw new ApiError('请求超时，请稍后重试', { status: 0, path, method, cause: err });
     }
     if (err instanceof TypeError) {
@@ -217,7 +231,7 @@ async function request(path, options = {}) {
         lastError = err;
         if (err?.status === 401 && !refreshedSession && !path.endsWith('/auth/anonymous')) {
           refreshedSession = true;
-          const actorId = await refreshActorSession();
+          const actorId = await refreshSessionOnce();
           if (actorId && getActorToken()) continue;
         }
         if (!shouldRetry(err.status, method, err, Boolean(options.retryUnsafe)) || i >= MAX_RETRIES) {
@@ -594,9 +608,10 @@ export const api = {
     if (!target) throw new Error('notification id required');
     const result = await request(`${API_PREFIX}/notifications/${encodeURIComponent(target)}/read`, {
       method: 'POST',
-      headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read', target) },
+    headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read', target) },
       body: JSON.stringify({}),
       noCache: true,
+      retryUnsafe: true,
     });
     emitNotificationRefresh();
     return result;
@@ -608,6 +623,7 @@ export const api = {
       headers: { 'Idempotency-Key': buildSessionIdempotencyKey('notification-read-all', 'current') },
       body: JSON.stringify({}),
       noCache: true,
+      retryUnsafe: true,
     });
     emitNotificationRefresh();
     return result;
@@ -676,6 +692,7 @@ export const api = {
       headers: { 'Idempotency-Key': buildSessionIdempotencyKey('author-block', `${target}-${action}`) },
       body: JSON.stringify(body),
       noCache: true,
+      retryUnsafe: true,
     });
   },
 
@@ -756,6 +773,7 @@ export const api = {
     const result = await request(`${API_PREFIX}/posts/${encodeURIComponent(target)}`, {
       method: 'DELETE',
       headers,
+      retryUnsafe: true,
     });
     clearNetworkCaches({ postId: target });
     return result;
@@ -773,6 +791,7 @@ export const api = {
       },
       body: JSON.stringify({ reason: normalizedReason, details }),
       noCache: true,
+      retryUnsafe: true,
     });
   },
 
@@ -782,8 +801,9 @@ export const api = {
     try {
       const result = await request(`${API_PREFIX}/posts`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
+      headers,
+      body: JSON.stringify(payload),
+      retryUnsafe: Boolean(idempotencyKey),
       });
       clearNetworkCaches();
       return result;
@@ -919,6 +939,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: Boolean(idempotencyKey),
       });
       clearNetworkCaches({ postId: id });
       return fresh;
@@ -928,6 +949,7 @@ export const api = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        retryUnsafe: Boolean(idempotencyKey),
       });
       clearNetworkCaches({ postId: id });
       return fresh;
