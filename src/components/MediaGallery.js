@@ -12,6 +12,10 @@ function clampColumns(value) {
   return Math.max(1, Math.min(3, value));
 }
 
+function getMediaKey(item, index) {
+  return `${item?.kind || 'media'}:${item?.url || ''}:${item?.cover || ''}:${index}`;
+}
+
 function getMediaRatio(item) {
   const width = Number(item?.width);
   const height = Number(item?.height);
@@ -30,9 +34,15 @@ function MediaFallback({ kind, ratio = IMAGE_RATIO }) {
   );
 }
 
-function MediaCover({ item, playing, ratio }) {
+function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
   const [failed, setFailed] = useState(false);
-  const handleError = useCallback(() => setFailed(true), []);
+  const handleError = useCallback(() => {
+    setFailed(true);
+    onMediaError?.();
+  }, [onMediaError]);
+  useEffect(() => {
+    setFailed(false);
+  }, [item?.kind, item?.url, item?.cover, retryVersion]);
   const mediaStyle = [styles.mediaWrap, { aspectRatio: ratio }];
   const videoStyle = [styles.videoSurface, { aspectRatio: ratio }];
 
@@ -93,6 +103,8 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
   const { width: windowWidth } = useWindowDimensions();
   const normalized = Array.isArray(media) ? media : [];
   const [playingIndex, setPlayingIndex] = useState(-1);
+  const [failedKeys, setFailedKeys] = useState(() => new Set());
+  const [retryVersions, setRetryVersions] = useState({});
   const toggleLive = useCallback((index, item) => {
     const playable = item?.kind === 'video'
       || (item?.kind === 'live' && item.cover && item.url && item.url !== item.cover);
@@ -107,6 +119,36 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
     }
     setPlayingIndex((current) => (current === index ? -1 : index));
   }, [onPressImage, onPressMedia]);
+
+  const markMediaFailed = useCallback((key) => {
+    setFailedKeys((current) => {
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, []);
+
+  const retryMedia = useCallback((key) => {
+    setFailedKeys((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+    setRetryVersions((current) => ({
+      ...current,
+      [key]: Number(current[key] || 0) + 1,
+    }));
+  }, []);
+
+  const handleMediaPress = useCallback((index, item, key) => {
+    if (failedKeys.has(key)) {
+      retryMedia(key);
+      return;
+    }
+    toggleLive(index, item);
+  }, [failedKeys, retryMedia, toggleLive]);
 
   if (!normalized.length) return null;
 
@@ -131,15 +173,23 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
     <View style={styles.grid}>
       {list.map((item, idx) => {
         const isLast = idx === list.length - 1;
+        const key = getMediaKey(item, idx);
+        const failed = failedKeys.has(key);
         return (
           <Pressable
-            key={`${item.url}-${idx}`}
+            key={key}
             style={renderStyle(idx, isLast)}
-            onPress={() => toggleLive(idx, item)}
+            onPress={() => handleMediaPress(idx, item, key)}
             accessibilityRole="button"
-            accessibilityLabel={item.kind === 'video' ? '播放视频' : (item.kind === 'live' ? '播放实况' : '查看照片')}
+            accessibilityLabel={failed ? '重新加载素材' : (item.kind === 'video' ? '播放视频' : (item.kind === 'live' ? '播放实况' : '查看照片'))}
           >
-            <MediaCover item={item} ratio={getMediaRatio(item)} playing={playingIndex === idx} />
+            <MediaCover
+              item={item}
+              ratio={getMediaRatio(item)}
+              playing={playingIndex === idx}
+              retryVersion={retryVersions[key] || 0}
+              onMediaError={() => markMediaFailed(key)}
+            />
           </Pressable>
         );
       })}
