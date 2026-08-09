@@ -2,14 +2,14 @@ import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import ActionBar from './ActionBar';
+import Avatar from './Avatar';
 import MediaGallery from './MediaGallery';
 import ShotMetaBoard from './ShotMetaBoard';
 import { toShotParamPairs } from '../utils/postCodec';
 import { formatRelativeTime } from '../utils/time';
 
-function AuthorAvatar({ name }) {
-  const label = String(name || '匿名').trim().slice(0, 2) || '拍';
-  return <Text style={styles.avatarText}>{label}</Text>;
+function AuthorAvatar({ name, uri, size }) {
+  return <Avatar name={name} uri={uri} size={size} />;
 }
 
 function TagPill({ children }) {
@@ -126,9 +126,7 @@ function PostCard({
           <View style={styles.compactFooter}>
             {hideCompactAuthor ? <View style={styles.compactAuthorSpacer} /> : (
               <Pressable style={styles.compactAuthor} onPress={handleAuthorPress}>
-                <View style={styles.avatarCompact}>
-                  <AuthorAvatar name={post.author} />
-                </View>
+                <AuthorAvatar name={post.author} uri={post.avatar} size={24} />
                 <Text style={styles.compactAuthorText} numberOfLines={1}>{post.author}</Text>
               </Pressable>
             )}
@@ -175,9 +173,7 @@ function PostCard({
     >
       <View style={[styles.header, compact && styles.headerCompact]}>
         <Pressable style={styles.authorTap} onPress={handleAuthorPress}>
-          <View style={[styles.avatar, compact && styles.avatarCompact]}>
-            <AuthorAvatar name={post.author} />
-          </View>
+          <AuthorAvatar name={post.author} uri={post.avatar} size={compact ? 24 : 32} />
           <View style={styles.meta}>
             <Text style={[styles.author, compact && styles.authorCompact]} numberOfLines={1}>
               {post.author}
@@ -333,24 +329,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.accentBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarCompact: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  avatarText: {
-    color: COLORS.accent,
-    fontSize: 14,
-    fontWeight: '700',
   },
   meta: { flex: 1 },
   author: { fontSize: 13.5, color: COLORS.ink, fontWeight: '700' },
