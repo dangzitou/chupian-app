@@ -81,6 +81,11 @@ export function createDraftStorage(namespace = 'chupian-draft') {
   return {
     async read() {
       return enqueueStorageOperation(key, async () => {
+        // A quota or native-storage failure may leave the newest payload only
+        // in memory. Prefer it over an older durable copy so a failed write
+        // cannot make the editor reopen stale content.
+        const memoryValue = memoryRead(key);
+        if (memoryValue != null) return memoryValue;
         if (isWebStorageAvailable()) {
           const webValue = await localStorageRead(key);
           if (webValue) return webValue;
@@ -93,7 +98,7 @@ export function createDraftStorage(namespace = 'chupian-draft') {
             // Fall back to the in-memory store if native storage is unavailable.
           }
         }
-        return memoryRead(key);
+        return null;
       });
     },
     async write(payload) {
