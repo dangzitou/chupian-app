@@ -1000,6 +1000,14 @@ export default function MapScreen({ navigation, route }) {
           <Pressable style={styles.retryBtn} onPress={retryLocation} accessibilityRole="button">
             <Text style={styles.retryText}>重新定位</Text>
           </Pressable>
+          <Pressable
+            style={[styles.retryBtn, styles.manualPickBtn]}
+            onPress={openCreateWithCurrent}
+            accessibilityRole="button"
+            accessibilityLabel="在地图上选点发布"
+          >
+            <Text style={styles.manualPickText}>在地图上选点发布</Text>
+          </Pressable>
           {Platform.OS !== 'web' ? (
             <Pressable style={[styles.retryBtn, styles.settingsBtn]} onPress={openAppSettings} accessibilityRole="button">
               <Text style={styles.settingsText}>打开系统设置</Text>
@@ -1230,6 +1238,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   retryText: { color: COLORS.onAccent, fontSize: 12.5, fontWeight: '700' },
+  manualPickBtn: { backgroundColor: COLORS.accentBg },
+  manualPickText: { color: COLORS.accent, fontSize: 12.5, fontWeight: '700' },
   settingsBtn: { backgroundColor: 'rgba(25,25,25,0.08)' },
   settingsText: { color: COLORS.ink, fontSize: 12.5, fontWeight: '700' },
   webFrame: {
