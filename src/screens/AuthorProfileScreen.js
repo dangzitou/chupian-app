@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
+import Avatar from '../components/Avatar';
 import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
 import { useFeedList } from '../hooks/useFeedList';
@@ -27,6 +28,9 @@ export default function AuthorProfileScreen({ route, navigation }) {
 
   const fetcher = useCallback((params) => api.authorPosts(authorId, params), [authorId]);
   const feed = useFeedList(fetcher, { limit: 12, sort: 'latest' });
+  const authorAvatar = String(
+    route?.params?.avatar || feed.posts.find((item) => item?.avatar)?.avatar || '',
+  ).trim();
   const getPostById = useCallback(
     (postId) => feed.posts.find((item) => String(item.id) === String(postId)),
     [feed.posts],
@@ -114,7 +118,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
       </View>
       <View style={styles.hero}>
         <View style={styles.heroTop}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{authorName.slice(0, 2)}</Text></View>
+          <Avatar name={authorName} uri={authorAvatar} size={58} />
           <View style={styles.copy}>
             <Text style={styles.name}>{authorName}</Text>
             <Text style={styles.bio}>出片位置记录者</Text>
@@ -152,7 +156,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
         <View style={styles.profileTabUnderline} />
       </View>
     </View>
-  ), [authorName, feed.total, followed, followBusy, followers, navigation, toggleFollow]);
+  ), [authorAvatar, authorName, feed.total, followed, followBusy, followers, navigation, toggleFollow]);
 
   if (!authorId) {
     return <SafeAreaView style={styles.empty}><Text style={styles.error}>创作者信息不可用</Text></SafeAreaView>;
@@ -205,8 +209,6 @@ const styles = StyleSheet.create({
   topSpacer: { width: 38 },
   hero: { paddingTop: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: COLORS.line },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 58, height: 58, borderRadius: 29, backgroundColor: COLORS.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: COLORS.accent, fontSize: 18, fontWeight: '800' },
   copy: { flex: 1 },
   name: { color: COLORS.ink, fontSize: 18, fontWeight: '700' },
   bio: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
