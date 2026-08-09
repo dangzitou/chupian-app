@@ -107,6 +107,7 @@ export default function ProfileScreen({ navigation }) {
   const [deletingPostId, setDeletingPostId] = useState('');
   const [notificationUnread, setNotificationUnread] = useState(0);
   const [creatorReward, setCreatorReward] = useState({ points: 0, publishedCount: 0, guideCount: 0, nextGuidePoints: 15 });
+  const firstFocusRef = useRef(true);
 
   const loadSectionPayload = useCallback((params) => {
     if (section === 'meLikes') return api.meLikes(params);
@@ -276,9 +277,10 @@ export default function ProfileScreen({ navigation }) {
     setActorAvatar(String(getCurrentUser()?.avatar || '').trim());
     setAuthenticated(nextAuthenticated);
     void loadSectionMetrics();
-    if (authChanged) {
+    if (authChanged || !firstFocusRef.current) {
       void load({ append: false, cursor: null });
     }
+    firstFocusRef.current = false;
   }, [load, loadSectionMetrics]));
 
   const onAuthAction = useCallback(() => {
