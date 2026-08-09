@@ -197,6 +197,7 @@ export default function NewPostScreen({ navigation, route }) {
   const hasHydratedDraftRef = useRef(false);
   const saveDraftRef = useRef(null);
   const mediaIdempotencyRef = useRef(new Map());
+  const leavingRef = useRef(false);
 
   const getMediaUploadKey = useCallback((item, part) => {
     const seed = `${part}:${item?.uri || ''}`;
@@ -820,6 +821,7 @@ export default function NewPostScreen({ navigation, route }) {
           return;
         }
       }
+      leavingRef.current = true;
       if (navigation.canGoBack && navigation.canGoBack()) {
         navigation.goBack();
         return;
@@ -827,19 +829,56 @@ export default function NewPostScreen({ navigation, route }) {
       const parent = navigation.getParent && navigation.getParent();
       if (parent) parent.navigate(APP_ROUTES.DISCOVERY);
     };
-    if (!hasDraftPayload) {
-      leave();
-      return;
-    }
+      if (!hasDraftPayload) {
+        leave();
+        return;
+      }
     Alert.alert(
       '退出发布？',
       '草稿会保留，之后可以继续编辑。',
       [
-        { text: '继续编辑', style: 'cancel' },
-        { text: '退出', style: 'destructive', onPress: leave },
-      ],
+      { text: '继续编辑', style: 'cancel' },
+      { text: '退出', style: 'destructive', onPress: leave },
+    ],
     );
   }, [hasDraftPayload, navigation, saveDraft]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (leavingRef.current) return;
+
+      if (submitting) {
+        event.preventDefault();
+        Alert.alert('正在发布', '请等待发布完成后再离开。');
+        return;
+      }
+
+      if (!hasDraftPayload) return;
+
+      event.preventDefault();
+      Alert.alert(
+        '退出发布？',
+        '草稿会保留，之后可以继续编辑。',
+        [
+          { text: '继续编辑', style: 'cancel' },
+          {
+            text: '保存并退出',
+            onPress: async () => {
+              try {
+                await saveDraft();
+                leavingRef.current = true;
+                navigation.dispatch(event.data.action);
+              } catch (_err) {
+                Alert.alert('草稿保存失败', '当前内容还没有退出，请检查存储空间后重试。');
+              }
+            },
+          },
+        ],
+      );
+    });
+
+    return unsubscribe;
+  }, [hasDraftPayload, navigation, saveDraft, submitting]);
 
   const draftStatusText = draftStatus === 'saving'
     ? '正在保存草稿…'
