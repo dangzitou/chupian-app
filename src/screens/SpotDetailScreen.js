@@ -15,6 +15,7 @@ export default function SpotDetailScreen({ navigation, route }) {
   const [postsLoading, setPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState('');
   const [error, setError] = useState(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -26,7 +27,11 @@ export default function SpotDetailScreen({ navigation, route }) {
       if (!alive) return;
       if (spotsResult.status === 'fulfilled') {
         const s = (spotsResult.value.spots || []).find((x) => String(x.id) === String(spotId));
-        setSpot(s || null);
+        if (s) {
+          setSpot(s);
+        } else {
+          setError('点位不存在或已下线');
+        }
       } else {
         setError(spotsResult.reason?.message || '点位加载失败');
       }
@@ -40,9 +45,28 @@ export default function SpotDetailScreen({ navigation, route }) {
       setPostsLoading(false);
     })();
     return () => { alive = false; };
-  }, [spotId]);
+  }, [loadAttempt, spotId]);
 
-  if (error) return <SafeAreaView style={styles.center}><Text style={styles.err}>{error}</Text></SafeAreaView>;
+  if (error) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.err}>{error}</Text>
+        <Pressable
+          style={styles.retryBtn}
+          onPress={() => {
+            setError(null);
+            setSpot(null);
+            setPostsLoading(true);
+            setLoadAttempt((value) => value + 1);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="重新加载点位"
+        >
+          <Text style={styles.retryText}>重新加载</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
   if (!spot) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></SafeAreaView>;
 
   const vps = spot.vantagePoints || [];
@@ -121,6 +145,8 @@ export default function SpotDetailScreen({ navigation, route }) {
                 id: String(spot.id || ''),
                 name: spot.name || '',
                 district: spot.district || '',
+                latitude: spot.latitude ?? spot.lat ?? '',
+                longitude: spot.longitude ?? spot.lng ?? '',
               };
               if (parent) {
                 parent.navigate(APP_ROUTES.CREATE, { prefillSpot });
@@ -141,6 +167,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg },
   err: { color: '#a34a2a' },
+  retryBtn: {
+    marginTop: 14,
+    minHeight: 40,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  retryText: { color: COLORS.onAccent, fontSize: 13, fontWeight: '700' },
   body: { paddingBottom: 40 },
   cover: { width: '100%', height: 200, backgroundColor: COLORS.bgDeep },
   content: { padding: 16 },
