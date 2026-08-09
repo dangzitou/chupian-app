@@ -47,7 +47,8 @@ const ACTOR_SESSION_TTL_SECONDS = Number.parseInt(process.env.ACTOR_SESSION_TTL_
 const ACTOR_SESSION_SECRET = String(process.env.ACTOR_SESSION_SECRET || "chupian-dev-session-secret");
 const REQUIRE_ACTOR_SESSION = String(process.env.REQUIRE_ACTOR_SESSION || "true").toLowerCase() === "true";
 const API_RATE_LIMIT_WINDOW_SECONDS = 60;
-const API_RATE_LIMIT_MAX = 240;
+const API_RATE_LIMIT_READ_MAX = Number.parseInt(process.env.API_RATE_LIMIT_READ_MAX || "600", 10) || 600;
+const API_RATE_LIMIT_WRITE_MAX = Number.parseInt(process.env.API_RATE_LIMIT_WRITE_MAX || "120", 10) || 120;
 const API_RATE_LIMIT_WINDOW_MS = API_RATE_LIMIT_WINDOW_SECONDS * 1000;
 const MAX_POST_MEDIA = 9;
 const MAX_POST_VIDEO_SECONDS = 40;
@@ -131,11 +132,14 @@ function isBypassedFromRateLimit(req) {
 function buildApiRateLimitPayload(req, windowNow) {
   const bucketStart = Math.floor(windowNow / API_RATE_LIMIT_WINDOW_MS);
   const identity = ipToActorFingerprint(req);
+  const bucketType = req.method === "GET" || req.method === "HEAD" ? "read" : "write";
   const bucketStartMs = bucketStart * API_RATE_LIMIT_WINDOW_MS;
   return {
     bucketStartMs,
     bucketResetMs: bucketStartMs + API_RATE_LIMIT_WINDOW_MS,
-    key: `rate_limit:${identity}:${bucketStart}`,
+    key: `rate_limit:${bucketType}:${identity}:${bucketStart}`,
+    limit: bucketType === "read" ? API_RATE_LIMIT_READ_MAX : API_RATE_LIMIT_WRITE_MAX,
+    bucketType,
   };
 }
 
@@ -161,7 +165,7 @@ async function checkInMemoryRateLimit(key, bucketResetMs) {
 async function apiLimiter(req, res, next) {
   if (isBypassedFromRateLimit(req)) return next();
   const now = Date.now();
-  const { bucketResetMs, key } = buildApiRateLimitPayload(req, now);
+  const { bucketResetMs, key, limit, bucketType } = buildApiRateLimitPayload(req, now);
   const remainingWindowMs = Math.max(bucketResetMs - now, 0);
 
   let count = null;
@@ -175,20 +179,22 @@ async function apiLimiter(req, res, next) {
     count = await checkInMemoryRateLimit(key, bucketResetMs);
   }
 
-  const remainingCount = Math.max(API_RATE_LIMIT_MAX - count, 0);
-  res.setHeader("X-Rate-Limit-Limit", String(API_RATE_LIMIT_MAX));
+  const remainingCount = Math.max(limit - count, 0);
+  res.setHeader("X-Rate-Limit-Limit", String(limit));
   res.setHeader("X-Rate-Limit-Remaining", String(remainingCount));
   res.setHeader("X-Rate-Limit-Reset", String(Math.ceil(bucketResetMs / 1000)));
-  res.setHeader("RateLimit-Limit", String(API_RATE_LIMIT_MAX));
+  res.setHeader("RateLimit-Limit", String(limit));
   res.setHeader("RateLimit-Remaining", String(remainingCount));
   res.setHeader("RateLimit-Reset", String(Math.ceil(bucketResetMs / 1000)));
+  res.setHeader("RateLimit-Policy", `${limit};w=${API_RATE_LIMIT_WINDOW_SECONDS};type=${bucketType}`);
 
-  if (count > API_RATE_LIMIT_MAX) {
+  if (count > limit) {
     const retryAfterSeconds = Math.max(1, Math.ceil((bucketResetMs - now) / 1000));
     res.setHeader("Retry-After", String(retryAfterSeconds));
     return res.status(429).json({
       error: "too many requests",
-      limit: API_RATE_LIMIT_MAX,
+      limit,
+      type: bucketType,
       remaining: remainingCount,
       resetAt: new Date(bucketResetMs).toISOString(),
       retryAfter: retryAfterSeconds,
