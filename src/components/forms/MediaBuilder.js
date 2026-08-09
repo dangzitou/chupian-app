@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS, MEDIA_KINDS } from '../../config';
 import VideoSurface from '../VideoSurface';
 
@@ -51,11 +51,18 @@ export default function MediaBuilder({
 }) {
   const mediaItems = Array.isArray(mediaList) ? mediaList : [];
   const [failedKeys, setFailedKeys] = React.useState(() => new Set());
+  const [loadedKeys, setLoadedKeys] = React.useState(() => new Set());
   const canSetCover = typeof onSetCover === 'function';
   const safeCoverIndex = Number.isInteger(Number(coverIndex)) ? Number(coverIndex) : -1;
 
   const markPreviewFailed = React.useCallback((item) => {
     const key = getMediaKey(item);
+    setLoadedKeys((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
     setFailedKeys((current) => {
       if (current.has(key)) return current;
       const next = new Set(current);
@@ -66,6 +73,12 @@ export default function MediaBuilder({
 
   const retryPreview = React.useCallback((item) => {
     const key = getMediaKey(item);
+    setLoadedKeys((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
     setFailedKeys((current) => {
       if (!current.has(key)) return current;
       const next = new Set(current);
@@ -85,6 +98,16 @@ export default function MediaBuilder({
     });
     onRemove?.(index);
   }, [mediaItems, onRemove]);
+
+  const markPreviewLoaded = React.useCallback((item) => {
+    const key = getMediaKey(item);
+    setLoadedKeys((current) => {
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, []);
 
   if (!mediaItems.length) {
     return (
@@ -108,6 +131,7 @@ export default function MediaBuilder({
         const isVideo = item.kind === MEDIA_KINDS.VIDEO;
         const mediaKey = getMediaKey(item);
         const previewFailed = failedKeys.has(mediaKey);
+        const previewLoading = !isVideo && !loadedKeys.has(mediaKey);
 
         return (
           <View key={`${mediaKey}-${idx}`} style={styles.card}>
@@ -116,13 +140,29 @@ export default function MediaBuilder({
             ) : isVideo ? (
               <VideoSurface uri={item.uri} style={styles.image} onError={() => markPreviewFailed(item)} />
             ) : (
-              <Image
-                source={{ uri: item.uri }}
-                style={styles.image}
-                resizeMode="cover"
-                onError={() => markPreviewFailed(item)}
-                accessibilityLabel={`${KIND_LABEL[item.kind] || '素材'}预览`}
-              />
+              <>
+                <Image
+                  source={{ uri: item.uri }}
+                  style={styles.image}
+                  resizeMode="cover"
+                  onLoadStart={() => {
+                    setLoadedKeys((current) => {
+                      if (!current.has(mediaKey)) return current;
+                      const next = new Set(current);
+                      next.delete(mediaKey);
+                      return next;
+                    });
+                  }}
+                  onLoad={() => markPreviewLoaded(item)}
+                  onError={() => markPreviewFailed(item)}
+                  accessibilityLabel={`${KIND_LABEL[item.kind] || '素材'}预览`}
+                />
+                {previewLoading ? (
+                  <View style={styles.previewLoading} pointerEvents="none">
+                    <ActivityIndicator size="small" color={COLORS.accent} />
+                  </View>
+                ) : null}
+              </>
             )}
             <Text style={styles.kind}>{KIND_LABEL[item.kind] || item.kind}</Text>
             <Text style={styles.badge}>
@@ -199,6 +239,12 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  previewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(238,234,230,0.72)',
   },
   kind: {
     position: 'absolute',
