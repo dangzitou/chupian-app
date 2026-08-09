@@ -46,7 +46,16 @@ export default function NotificationsScreen({ navigation }) {
     setError('');
     try {
       const payload = await api.notifications({ limit: 20, cursor: append ? nextCursor : null });
-      setItems((prev) => (append ? [...prev, ...payload.notifications] : payload.notifications));
+      setItems((prev) => {
+        const merged = append ? [...prev, ...payload.notifications] : payload.notifications;
+        const seen = new Set();
+        return merged.filter((item) => {
+          const key = String(item?.id || `${item?.actorId || ''}:${item?.createdAt || ''}:${item?.type || ''}`);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      });
       setCursor(payload.nextCursor);
       setHasMore(payload.hasMore);
       setUnread(payload.unread);
@@ -72,14 +81,18 @@ export default function NotificationsScreen({ navigation }) {
 
   const markAllRead = useCallback(async () => {
     if (!unread) return;
+    const previousItems = items;
+    const previousUnread = unread;
     setUnread(0);
     setItems((prev) => prev.map((item) => ({ ...item, read: true })));
     try {
       await api.markAllNotificationsRead();
     } catch (_err) {
-      load({ append: false });
+      setItems(previousItems);
+      setUnread(previousUnread);
+      setError('全部已读失败，请重试');
     }
-  }, [load, unread]);
+  }, [items, unread]);
 
   const openNotification = useCallback((item) => {
     if (!item.read) {
