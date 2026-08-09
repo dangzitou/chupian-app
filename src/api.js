@@ -610,7 +610,10 @@ export const api = {
   },
 
   async health() {
-    return safeRequestWithFallback('/api/v1/health', '/health');
+    return safeRequestWithFallback('/api/v1/health', '/health', {
+      noCache: true,
+      timeout: 5000,
+    });
   },
 
   async weather({ latitude, longitude, label } = {}) {
