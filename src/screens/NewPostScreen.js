@@ -460,17 +460,33 @@ export default function NewPostScreen({ navigation, route }) {
   }, [mediaList]);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
+      setLoadingSpots(true);
       try {
-        const response = await api.spots();
-        setSpots(response.spots || []);
+        let latitude = Number(routeSpot?.latitude);
+        let longitude = Number(routeSpot?.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          const locationPayload = await api.resolveLocation().catch(() => null);
+          latitude = Number(locationPayload?.location?.lat);
+          longitude = Number(locationPayload?.location?.lng);
+        }
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          if (alive) setSpots([]);
+          return;
+        }
+        const response = await api.spots({ latitude, longitude, radiusKm: 35, limit: 24 });
+        if (alive) setSpots(Array.isArray(response?.spots) ? response.spots : []);
       } catch (_err) {
-        setSpots([]);
+        if (alive) setSpots([]);
       } finally {
-        setLoadingSpots(false);
+        if (alive) setLoadingSpots(false);
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [routeSpot]);
 
   const selectSpot = useCallback((item) => {
     dispatch({
@@ -1188,7 +1204,7 @@ export default function NewPostScreen({ navigation, route }) {
           onToggle={() => setLocationOpen((value) => !value)}
         >
           <View style={styles.spotWrap}>
-            {loadingSpots ? <ActivityIndicator color={COLORS.accent} /> : (
+            {loadingSpots ? <ActivityIndicator color={COLORS.accent} /> : spots.length ? (
               spots.slice(0, 12).map((item) => {
                 const active = String(item.id) === String(state.spotId);
                 return (
@@ -1201,6 +1217,8 @@ export default function NewPostScreen({ navigation, route }) {
                   </Pressable>
                 );
               })
+            ) : (
+              <Text style={styles.spotEmpty}>暂时没有附近点位，可直接填写名称，或回首页地图选点。</Text>
             )}
           </View>
           <PostInput
@@ -1547,6 +1565,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 10,
+  },
+  spotEmpty: {
+    color: COLORS.muted,
+    fontSize: 11.5,
+    lineHeight: 17,
   },
   spotBtn: {
     borderWidth: 1,
