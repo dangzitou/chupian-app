@@ -435,7 +435,7 @@ export default function NewPostScreen({ navigation, route }) {
     }
 
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       quality: 1,
       exif: true,
       allowsMultipleSelection: true,
@@ -481,7 +481,7 @@ export default function NewPostScreen({ navigation, route }) {
     }
 
     const res = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       quality: 1,
       exif: true,
       videoMaxDuration: 40,
