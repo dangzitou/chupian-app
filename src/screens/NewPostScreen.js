@@ -848,6 +848,9 @@ export default function NewPostScreen({ navigation, route }) {
         : draftStatus === 'error'
           ? '草稿保存失败，请点击“保存草稿”重试'
           : '';
+  const uploadPercent = uploadProgress?.total
+    ? Math.round(Math.min(1, Math.max(0, Number(uploadProgress.completed || 0) / Number(uploadProgress.total))) * 100)
+    : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1230,11 +1233,21 @@ export default function NewPostScreen({ navigation, route }) {
             {submitting ? <ActivityIndicator color={COLORS.onAccent} /> : <Text style={styles.publishText}>发布出片</Text>}
           </Pressable>
           {submitting && uploadProgress ? (
-            <Text style={styles.uploadProgress}>
-              {uploadProgress.phase === 'publishing'
-                ? '正在发布作品'
-                : `正在上传素材 ${uploadProgress.completed}/${uploadProgress.total}`}
-            </Text>
+            <View
+              style={styles.uploadProgressWrap}
+              accessibilityRole="progressbar"
+              accessibilityLabel={`发布进度 ${uploadPercent}%`}
+              accessibilityValue={{ min: 0, max: 100, now: uploadPercent }}
+            >
+              <View style={styles.uploadTrack}>
+                <View style={[styles.uploadFill, { width: `${uploadPercent}%` }]} />
+              </View>
+              <Text style={styles.uploadProgress}>
+                {uploadProgress.phase === 'publishing'
+                  ? '素材已上传，正在发布作品'
+                  : `正在上传素材 ${uploadProgress.completed}/${uploadProgress.total}`}
+              </Text>
+            </View>
           ) : null}
         </View>
       </KeyboardAvoidingView>
@@ -1451,10 +1464,22 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.panel,
   },
   uploadProgress: {
-    marginTop: 5,
+    marginTop: 0,
     color: COLORS.muted,
     fontSize: 11.5,
     textAlign: 'center',
+  },
+  uploadProgressWrap: { marginTop: 5, gap: 5 },
+  uploadTrack: {
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: COLORS.line,
+  },
+  uploadFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: COLORS.accent,
   },
   publishText: {
     color: COLORS.onAccent,
