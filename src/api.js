@@ -58,8 +58,8 @@ function buildCacheKey(method, path, options = {}) {
 }
 
 function shouldRetry(status, method, error, allowUnsafe = false) {
-  if (!status) return true;
   if (method !== 'GET' && !allowUnsafe) return false;
+  if (!status) return true;
   if (status >= 500 && status < 600) return true;
   return status === 408 || status === 429 || status === 503;
 }
