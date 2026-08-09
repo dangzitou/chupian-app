@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Linking,
+  Alert, View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import PostCard from '../components/PostCard';
+import { usePostListActions } from '../hooks/usePostListActions';
+import { sharePost } from '../utils/share';
 
 export default function SpotDetailScreen({ navigation, route }) {
   const { spotId, name } = route.params;
@@ -17,6 +19,46 @@ export default function SpotDetailScreen({ navigation, route }) {
   const [coverError, setCoverError] = useState(false);
   const [error, setError] = useState(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const busyPostsRef = useRef(new Set());
+  const [, setBusyVersion] = useState(0);
+
+  const getPostById = useCallback(
+    (postId) => posts.find((item) => String(item.id) === String(postId)),
+    [posts],
+  );
+  const patchById = useCallback((postId, updater) => {
+    setPosts((current) => current.map((item) => {
+      if (String(item.id) !== String(postId)) return item;
+      return typeof updater === 'function' ? updater(item) : { ...item, ...updater };
+    }));
+  }, []);
+  const setBusyForPost = useCallback((postId, next) => {
+    const key = String(postId);
+    if (next) busyPostsRef.current.add(key);
+    else busyPostsRef.current.delete(key);
+    setBusyVersion((value) => value + 1);
+  }, []);
+  const isBusyExternal = useCallback((postId) => busyPostsRef.current.has(String(postId)), []);
+  const postActions = usePostListActions({
+    getPostById,
+    patchById,
+    setBusyForPost,
+    isBusyExternal,
+    onError: () => {},
+  });
+
+  const shareSpotPost = useCallback(async (post) => {
+    if (!post) return;
+    try {
+      const result = await sharePost(post);
+      if (result === 'copied') {
+        Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
+      }
+    } catch (shareError) {
+      if (shareError?.name === 'AbortError') return;
+      Alert.alert('分享失败', shareError?.message || '当前环境暂不支持分享，请稍后重试。');
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -152,6 +194,30 @@ export default function SpotDetailScreen({ navigation, route }) {
                   showFollow={false}
                   style={styles.postCard}
                   onPress={() => navigation.navigate('PostDetail', { postId: post.id, title: post.title })}
+                  onLike={() => postActions.toggleAction({
+                    postId: post.id,
+                    metricField: 'likes',
+                    stateField: 'liked',
+                    actionResolver: ({ currentPost, next, post: actionPost }) => api.toggleLike(
+                      (actionPost || currentPost || post).id,
+                      undefined,
+                      next ? 'like' : 'unlike',
+                    ),
+                  })}
+                  onFavorite={() => postActions.toggleAction({
+                    postId: post.id,
+                    metricField: 'favorites',
+                    stateField: 'favorited',
+                    actionResolver: ({ post: actionPost, next }) => api.toggleFavorite(
+                      actionPost.id,
+                      undefined,
+                      next ? 'favorite' : 'unfavorite',
+                    ),
+                  })}
+                  onComment={() => navigation.navigate('PostDetail', { postId: post.id, focusComment: true })}
+                  onShare={() => shareSpotPost(post)}
+                  likeBusy={postActions.isBusy(post.id, 'liked', 'liked')}
+                  favoriteBusy={postActions.isBusy(post.id, 'favorited', 'favorited')}
                 />
               ))}
             </View>
