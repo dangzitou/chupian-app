@@ -957,6 +957,7 @@ export default function NewPostScreen({ navigation, route }) {
         Alert.alert('链接已复制', '可以粘贴到聊天或社交平台分享这条出片。');
       }
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       Alert.alert('分享失败', err?.message || '当前环境暂不支持分享，请稍后重试。');
     }
   }, [publishResult]);
