@@ -1,4 +1,5 @@
 import { splitTags } from './postCodec';
+import { MAX_MEDIA_UPLOAD_BYTES } from '../config';
 
 const FIELD_LIMITS = {
   title: 90,
@@ -46,6 +47,12 @@ export function validatePostDraft(state = {}, mediaList = []) {
 
   if (!mediaList.length) errors.media = '请至少上传1张图片/视频';
   if (mediaList.length > FIELD_LIMITS.mediaList) errors.media = `素材不能超过${FIELD_LIMITS.mediaList}个`;
+  if (mediaList.some((item) => (
+    Number(item?.size || 0) > MAX_MEDIA_UPLOAD_BYTES
+    || Number(item?.pairedVideo?.size || 0) > MAX_MEDIA_UPLOAD_BYTES
+  ))) {
+    errors.media = '单个图片、实况或视频不能超过120MB';
+  }
 
   if (tags.length > FIELD_LIMITS.tags) errors.tags = `标签最多${FIELD_LIMITS.tags}个`;
   if (styles.length > FIELD_LIMITS.styles) errors.stylesText = `风格标签最多${FIELD_LIMITS.styles}个`;
