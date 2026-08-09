@@ -735,7 +735,15 @@ export default function NewPostScreen({ navigation, route }) {
   }, [clearDraft]);
 
   const closeEditor = useCallback(() => {
-    const leave = () => {
+    const leave = async () => {
+      if (hasDraftPayload) {
+        try {
+          await saveDraft();
+        } catch (_err) {
+          Alert.alert('草稿保存失败', '当前内容还没有退出，请检查存储空间后重试。');
+          return;
+        }
+      }
       if (navigation.canGoBack && navigation.canGoBack()) {
         navigation.goBack();
         return;
@@ -755,7 +763,7 @@ export default function NewPostScreen({ navigation, route }) {
         { text: '退出', style: 'destructive', onPress: leave },
       ],
     );
-  }, [hasDraftPayload, navigation]);
+  }, [hasDraftPayload, navigation, saveDraft]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
