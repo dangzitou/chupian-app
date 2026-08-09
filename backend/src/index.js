@@ -1566,6 +1566,65 @@ async function getPostHandler(req, res) {
   return res.json({ post });
 }
 
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>\"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+async function sharePostHandler(req, res) {
+  const postId = Number(req.params.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return res.status(400).type("text").send("invalid post id");
+  }
+
+  const rows = await query(
+    "SELECT p.* FROM posts p WHERE p.id = ? AND p.status = 'published'",
+    [postId],
+  );
+  if (!rows.length) return res.status(404).type("text").send("post not found");
+
+  const post = (await loadPostMeta(rows, { includeComments: false, actor: "" }))[0];
+  const title = safeText(post?.title || "出片记录", 120);
+  const description = safeText([
+    post?.content,
+    post?.spotName ? `📍 ${post.spotName}` : "",
+    post?.gear?.camera ? `相机：${post.gear.camera}` : "",
+    post?.gear?.focal ? `焦段：${post.gear.focal}` : "",
+  ].filter(Boolean).join(" · "), 180) || "记录机位、光线和器材，发现附近值得拍的出片位置。";
+  const image = String(post?.cover || post?.media?.[0]?.url || "").trim();
+  const canonical = `${req.protocol}://${req.get("host")}/post/${encodeURIComponent(postId)}`;
+  const escapedTitle = escapeHtml(title);
+  const escapedDescription = escapeHtml(description);
+  const escapedCanonical = escapeHtml(canonical);
+  const imageMeta = image ? `<meta property="og:image" content="${escapeHtml(image)}" />` : "";
+
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+  return res.type("html").send(`<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapedTitle} · 出片地图</title>
+    <meta name="description" content="${escapedDescription}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="出片地图" />
+    <meta property="og:title" content="${escapedTitle}" />
+    <meta property="og:description" content="${escapedDescription}" />
+    <meta property="og:url" content="${escapedCanonical}" />
+    ${imageMeta}
+    <meta http-equiv="refresh" content="0;url=${escapedCanonical}" />
+  </head>
+  <body>
+    <p>正在打开出片：<a href="${escapedCanonical}">${escapedTitle}</a></p>
+  </body>
+</html>`);
+}
+
 async function getPostCommentsPayload(req) {
   const postId = Number(req.params.id);
   if (!Number.isInteger(postId) || postId <= 0) {
@@ -3050,6 +3109,7 @@ app.post("/api/community/authors/:authorId/follow", asyncHandler(async (req, res
 }));
 
 app.get("/api/v1/posts/:id", asyncHandler(getPostHandler));
+app.get("/share/post/:id", asyncHandler(sharePostHandler));
 app.post("/api/v1/posts/:id/report", asyncHandler(async (req, res) => {
   const actor = readActorId(req, req.body || {});
   const idempotent = await runWithIdempotency({
