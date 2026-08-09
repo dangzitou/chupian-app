@@ -18,8 +18,9 @@ export default function OptionPills({ options, value, onChange, compact = false 
             active && styles.pillActive,
             pressed && styles.pillPressed,
           ]}
-          onPress={() => onChange?.(opt.value)}
+          onPress={() => onChange?.(active ? '' : opt.value)}
           accessibilityRole="button"
+          accessibilityHint={active ? '再次点击取消选择' : undefined}
           accessibilityLabel={opt.accessibilityLabel || opt.label}
           accessibilityState={{ selected: active }}
         >
