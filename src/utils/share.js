@@ -16,6 +16,25 @@ export function buildPostShareUrl(post = {}) {
   return `chupian://post/${encodeURIComponent(id)}`;
 }
 
+function copyWithDocument(value) {
+  if (typeof document === 'undefined' || typeof document.execCommand !== 'function') return false;
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body?.appendChild(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch (_err) {
+    copied = false;
+  }
+  textarea.parentNode?.removeChild(textarea);
+  return copied;
+}
+
 export async function shareText(message, title = '出片地图', shareUrl = '') {
   const text = String(message || '').trim();
   if (!text) throw new Error('分享内容为空');
@@ -23,6 +42,7 @@ export async function shareText(message, title = '出片地图', shareUrl = '') 
 
   if (Platform.OS === 'web') {
     const browserNavigator = typeof navigator !== 'undefined' ? navigator : null;
+    const sharePayload = [text, url].filter(Boolean).join('\n');
     if (typeof browserNavigator?.share === 'function') {
       await browserNavigator.share({
         title,
@@ -32,9 +52,10 @@ export async function shareText(message, title = '出片地图', shareUrl = '') 
       return 'shared';
     }
     if (typeof browserNavigator?.clipboard?.writeText === 'function') {
-      await browserNavigator.clipboard.writeText([text, url].filter(Boolean).join('\n'));
+      await browserNavigator.clipboard.writeText(sharePayload);
       return 'copied';
     }
+    if (copyWithDocument(sharePayload)) return 'copied';
     throw new Error('当前浏览器不支持分享或复制');
   }
 
