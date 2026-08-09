@@ -559,11 +559,15 @@ export default function PostsScreen({ navigation }) {
     : `${locationLabel || '附近'} · 出片记录`;
 
   const isMasonry = feedLayout === 'masonry';
-  const useWebMasonry = Platform.OS === 'web' && isMasonry;
-  const masonryColumns = useMemo(
-    () => (useWebMasonry ? splitMasonryColumns(posts) : [[], []]),
-    [posts, useWebMasonry],
-  );
+  const masonryBlocks = useMemo(() => {
+    if (!isMasonry) return [];
+    const blocks = [];
+    for (let start = 0; start < posts.length; start += PAGE_SIZE) {
+      const items = posts.slice(start, start + PAGE_SIZE);
+      if (items.length) blocks.push({ id: `masonry-${items[0].id}`, items });
+    }
+    return blocks;
+  }, [isMasonry, posts]);
   const showStaleBanner = Boolean(error && posts.length);
   const retryStaleFeed = useCallback(
     () => load({ append: false, cursor: null }),
@@ -589,19 +593,22 @@ export default function PostsScreen({ navigation }) {
     />
   ), [applyTagFilter, handleAuthorPress, handleComment, handlePostPress, isActionBusy, isMasonry, onFollow, onFavorite, onLike, onShare]);
 
-  const renderMasonryBlock = useCallback(() => (
-    <View style={styles.webMasonryRow}>
-      {masonryColumns.map((column, columnIndex) => (
-        <View style={styles.webMasonryColumn} key={`masonry-column-${columnIndex}`}>
-          {column.map((item) => (
-            <View key={String(item.id)}>
-              {renderCard({ item })}
-            </View>
-          ))}
-        </View>
-      ))}
-    </View>
-  ), [masonryColumns, renderCard]);
+  const renderMasonryBlock = useCallback(({ item: block }) => {
+    const columns = splitMasonryColumns(block.items);
+    return (
+      <View style={styles.masonryRow}>
+        {columns.map((column, columnIndex) => (
+          <View style={styles.masonryColumn} key={`masonry-column-${block.id}-${columnIndex}`}>
+            {column.map((item) => (
+              <View key={String(item.id)}>
+                {renderCard({ item })}
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }, [renderCard]);
 
   const ListHeader = useMemo(() => (
     <View style={styles.headerSection}>
@@ -761,10 +768,9 @@ export default function PostsScreen({ navigation }) {
       <FlatList
         ref={feedListRef}
         key={isMasonry ? 'feed-masonry' : 'feed-list'}
-        data={useWebMasonry ? (posts.length ? [{ id: '__web-masonry__' }] : []) : posts}
-        keyExtractor={(post) => String(post.id)}
-        numColumns={isMasonry && !useWebMasonry ? 2 : 1}
-        columnWrapperStyle={isMasonry && !useWebMasonry ? styles.columnWrapper : undefined}
+        data={isMasonry ? masonryBlocks : posts}
+        keyExtractor={(item) => String(item.id)}
+        numColumns={1}
         refreshing={refreshing}
         onRefresh={onRefresh}
         onEndReached={onEndReached}
@@ -775,7 +781,7 @@ export default function PostsScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
         contentContainerStyle={[styles.list, isMasonry ? styles.listMasonry : styles.listList]}
-        renderItem={useWebMasonry ? renderMasonryBlock : renderCard}
+        renderItem={isMasonry ? renderMasonryBlock : renderCard}
         ListEmptyComponent={
           showSkeleton ? <FeedSkeleton count={5} /> : (
             <View style={styles.emptyWrap}>
@@ -907,13 +913,13 @@ const styles = StyleSheet.create({
     zIndex: 2,
     elevation: 2,
   },
-  webMasonryRow: {
+  masonryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     columnGap: 4,
     paddingHorizontal: 2,
   },
-  webMasonryColumn: {
+  masonryColumn: {
     flex: 1,
     minWidth: 0,
   },
