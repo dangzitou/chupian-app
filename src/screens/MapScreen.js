@@ -14,12 +14,20 @@ import { WebView } from 'react-native-webview';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NEUTRAL_CENTER = {
   lat: 0,
   lng: 0,
   label: '',
 };
+
+const MAP_CACHE_PREFIX = 'chupian:map-data:v1:';
+const MAP_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getMapCacheKey(locationKey) {
+  return `${MAP_CACHE_PREFIX}${locationKey}`;
+}
 
 const normalizeLocation = (raw) => {
   const lat = Number(raw?.lat);
@@ -612,14 +620,44 @@ export default function MapScreen({ navigation, route }) {
     mapDataLocationRef.current = locationKey;
     setSelectedMapItem(null);
 
+    const cacheKey = getMapCacheKey(locationKey);
+    let freshLoaded = false;
+    let cacheApplied = false;
+
+    AsyncStorage.getItem(cacheKey)
+      .then((raw) => {
+        if (!alive || freshLoaded || !raw) return;
+        try {
+          const cached = JSON.parse(raw);
+          const savedAt = Number(cached?.savedAt || 0);
+          if (!savedAt || Date.now() - savedAt > MAP_CACHE_MAX_AGE_MS) return;
+          const payload = cached?.payload || {};
+          cacheApplied = true;
+          setSpots(Array.isArray(payload.spots) ? payload.spots : []);
+          setPosts(Array.isArray(payload.posts) ? payload.posts : []);
+        } catch (_err) {
+          // A corrupt cache must never prevent a fresh map request.
+        }
+      })
+      .catch(() => {});
+
     api.mapData({ latitude, longitude, radiusKm: 35, limit: 60 })
       .then((payload) => {
         if (!alive) return;
+        freshLoaded = true;
         setSpots(Array.isArray(payload?.spots) ? payload.spots : []);
         setPosts(Array.isArray(payload?.posts) ? payload.posts : []);
+        AsyncStorage.setItem(cacheKey, JSON.stringify({
+          savedAt: Date.now(),
+          payload: {
+            spots: Array.isArray(payload?.spots) ? payload.spots : [],
+            posts: Array.isArray(payload?.posts) ? payload.posts : [],
+          },
+        })).catch(() => {});
       })
       .catch(() => {
         if (!alive) return;
+        if (cacheApplied) return;
         setSpots([]);
         setPosts([]);
       });
