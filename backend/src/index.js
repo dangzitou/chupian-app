@@ -2579,7 +2579,7 @@ async function spotsHandler(req, res) {
   const limit = pickInt(req.query.limit, 80, { min: 1, max: 80 });
   const cacheKey = hasLocation
     ? `spots:list:v3:${latitude.toFixed(2)}:${longitude.toFixed(2)}:${radiusKm.toFixed(1)}:${limit}`
-    : "spots:list:v2";
+    : `spots:list:v3:all:${limit}`;
   const cached = await cacheGetJson(cacheKey);
   if (cached) return res.json(cached);
 
@@ -2602,7 +2602,7 @@ async function spotsHandler(req, res) {
         candidateLimit,
       ],
     )
-    : await query("SELECT * FROM spots ORDER BY name");
+    : await query("SELECT * FROM spots ORDER BY name LIMIT ?", [limit]);
   const normalizedSpots = spotRows.map(normalizeSpotRow);
   const spots = hasLocation
     ? normalizedSpots
