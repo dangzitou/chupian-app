@@ -4,6 +4,7 @@ import {
   AppState,
   Alert,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -72,6 +73,46 @@ function FormSection({ title, summary, expanded, onToggle, children }) {
       </Pressable>
       {expanded ? <View style={styles.formSectionBody}>{children}</View> : null}
     </View>
+  );
+}
+
+function PublishSuccessModal({ result, onView, onContinue }) {
+  return (
+    <Modal
+      visible={Boolean(result)}
+      transparent
+      animationType="fade"
+      onRequestClose={onContinue}
+    >
+      <View style={styles.successBackdrop}>
+        <View style={styles.successCard} accessibilityViewIsModal>
+          <Text style={styles.successEyebrow}>发布完成</Text>
+          <Text style={styles.successTitle} numberOfLines={2}>
+            {result?.title || '出片记录'}
+          </Text>
+          <View style={styles.successReward}>
+            <Text style={styles.successRewardValue}>+{result?.earnedPoints || 5}</Text>
+            <Text style={styles.successRewardLabel}>贡献值</Text>
+          </View>
+          <Text style={styles.successDescription}>
+            这条记录已经进入地图和发现，其他拍友可以按位置复现你的机位。
+          </Text>
+          <View style={styles.successGuideTip}>
+            <Text style={styles.successGuideTipText}>
+              {result?.guideEarned
+                ? '完整攻略奖励已到账，继续记录下一处光线。'
+                : '补充正文和 3 项拍摄参数，还可获得 +15 贡献值。'}
+            </Text>
+          </View>
+          <Pressable style={styles.successPrimary} onPress={onView} accessibilityRole="button">
+            <Text style={styles.successPrimaryText}>查看这条出片</Text>
+          </Pressable>
+          <Pressable style={styles.successSecondary} onPress={onContinue} accessibilityRole="button">
+            <Text style={styles.successSecondaryText}>继续发布</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -197,6 +238,7 @@ export default function NewPostScreen({ navigation, route }) {
   const [locationOpen, setLocationOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
+  const [publishResult, setPublishResult] = useState(null);
   const [state, dispatch] = useReducer(reducer, EMPTY_SHOT);
   const idempotencyKeyRef = useRef('');
   const draftTimer = useRef(null);
@@ -840,24 +882,18 @@ export default function NewPostScreen({ navigation, route }) {
       setUploadProgress(null);
       const earnedPoints = Number(created?.reward?.earnedPoints || 5);
       const createdPostId = String(created?.post?.id || created?.postId || created?.id || '').trim();
-      Alert.alert('发布成功', `作品已发布，获得 +${earnedPoints} 贡献值`);
+      setPublishResult({
+        postId: createdPostId,
+        title: created?.post?.title || state.title || '出片记录',
+        earnedPoints,
+        guideEarned: Boolean(created?.reward?.guide),
+      });
       dispatch({ type: 'reset' });
       setMediaList([]);
       setCoverIndex(-1);
+      setDraftLoaded(false);
+      setDraftMediaWarning('');
       idempotencyKeyRef.current = '';
-      const parent = navigation.getParent && navigation.getParent();
-      if (parent) {
-        parent.navigate(APP_ROUTES.DISCOVERY, createdPostId
-          ? {
-            screen: 'PostDetail',
-            params: { postId: createdPostId, title: created?.post?.title || state.title },
-          }
-          : undefined);
-        return;
-      }
-      if (navigation.canGoBack && navigation.canGoBack()) {
-        navigation.goBack();
-      }
     } catch (err) {
       try {
         await saveDraft();
@@ -870,6 +906,26 @@ export default function NewPostScreen({ navigation, route }) {
       setUploadProgress(null);
     }
   }, [api, clearDraft, coverIndex, dispatch, getMediaUploadKey, mediaList, navigation, saveDraft, selectedSpot, state, validation]);
+
+  const continuePublishing = useCallback(() => {
+    setPublishResult(null);
+  }, []);
+
+  const viewPublishedPost = useCallback(() => {
+    const result = publishResult;
+    setPublishResult(null);
+    const parent = navigation.getParent && navigation.getParent();
+    if (parent) {
+      parent.navigate(APP_ROUTES.DISCOVERY, result?.postId
+        ? {
+          screen: 'PostDetail',
+          params: { postId: result.postId, title: result.title },
+        }
+        : undefined);
+      return;
+    }
+    if (navigation.canGoBack && navigation.canGoBack()) navigation.goBack();
+  }, [navigation, publishResult]);
 
   const onSaveDraft = useCallback(() => {
     saveDraft()
@@ -1394,6 +1450,11 @@ export default function NewPostScreen({ navigation, route }) {
             </View>
           ) : null}
         </View>
+        <PublishSuccessModal
+          result={publishResult}
+          onView={viewPublishedPost}
+          onContinue={continuePublishing}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1650,5 +1711,97 @@ const styles = StyleSheet.create({
   draftStatusError: { color: '#a34a2a' },
   previewWrap: {
     marginTop: 10,
+  },
+  successBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(25, 25, 25, 0.48)',
+  },
+  successCard: {
+    width: '100%',
+    maxWidth: 360,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 16,
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
+    shadowColor: '#191919',
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  successEyebrow: {
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  successTitle: {
+    marginTop: 6,
+    color: COLORS.ink,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  successReward: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 18,
+  },
+  successRewardValue: {
+    color: COLORS.accent,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
+  },
+  successRewardLabel: {
+    color: COLORS.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  successDescription: {
+    marginTop: 8,
+    color: COLORS.muted,
+    fontSize: 12.5,
+    lineHeight: 19,
+  },
+  successGuideTip: {
+    marginTop: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: COLORS.accentBg,
+  },
+  successGuideTipText: {
+    color: COLORS.accent,
+    fontSize: 11.5,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  successPrimary: {
+    marginTop: 18,
+    minHeight: 46,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  successPrimaryText: {
+    color: COLORS.onAccent,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  successSecondary: {
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successSecondaryText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
