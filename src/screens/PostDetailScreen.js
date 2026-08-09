@@ -17,7 +17,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
@@ -180,6 +180,7 @@ function EditField({ label, value, onChange, placeholder, multiline = false }) {
 
 export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
+  const insets = useSafeAreaInsets();
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -203,6 +204,8 @@ export default function PostDetailScreen({ route, navigation }) {
   const commentInputRef = useRef(null);
   const commentIdempotencyRef = useRef('');
   const commentSeedRef = useRef('');
+  const commentsLoadingRef = useRef(false);
+  const commentsCursorRef = useRef(null);
 
   const applyPost = useCallback((updater) => {
     setPost((prev) => {
@@ -233,12 +236,14 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const loadComments = useCallback(async ({ append = false } = {}) => {
     if (!postId) return;
-    if (commentsLoading) return;
-    const cursor = append ? commentsCursor : null;
+    if (commentsLoadingRef.current) return;
+    const cursor = append ? commentsCursorRef.current : null;
+    commentsLoadingRef.current = true;
     setCommentsLoading(true);
     if (!append) {
       setComments([]);
       setCommentsCursor(null);
+      commentsCursorRef.current = null;
       setCommentsHasMore(false);
     }
     setCommentsLoadError(null);
@@ -249,7 +254,9 @@ export default function PostDetailScreen({ route, navigation }) {
         cursor,
       });
       setComments((prev) => (append ? [...prev, ...payload.comments] : payload.comments));
-      setCommentsCursor(payload.nextCursor || null);
+      const nextCursor = payload.nextCursor || null;
+      setCommentsCursor(nextCursor);
+      commentsCursorRef.current = nextCursor;
       setCommentsHasMore(Boolean(payload.hasMore));
     } catch (err) {
       setCommentsLoadError(err?.message || '评论加载失败');
@@ -259,9 +266,10 @@ export default function PostDetailScreen({ route, navigation }) {
         setCommentsHasMore(false);
       }
     } finally {
+      commentsLoadingRef.current = false;
       setCommentsLoading(false);
     }
-  }, [api, postId, commentsCursor, commentsLoading]);
+  }, [api, postId]);
 
   const loadPost = useCallback(async () => {
     if (!postId) return;
@@ -790,7 +798,7 @@ export default function PostDetailScreen({ route, navigation }) {
           ListHeaderComponentStyle={styles.header}
         />
 
-        <View style={styles.bottomDock}>
+        <View style={[styles.bottomDock, { paddingBottom: Math.max(8, insets.bottom || 0) }]}>
           {!!commentError ? <Text style={styles.commentErr}>评论发送失败：{commentError}</Text> : null}
           <View style={styles.bottomActions}>
             <ActionBar
