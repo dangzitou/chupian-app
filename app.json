@@ -7,6 +7,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "用于在地图上显示你附近的出片位置"
+        }
+      ],
+      "expo-image-picker"
+    ],
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
