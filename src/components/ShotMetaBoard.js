@@ -24,6 +24,18 @@ const TECHNICAL_KEYS = [
   'whiteBalance',
 ];
 
+const CONTEXT_KEYS = [
+  'angle',
+  'direction',
+  'spotName',
+  'locationName',
+  'district',
+  'shotAt',
+  'timeWindow',
+  'shotTime',
+  'bestTime',
+];
+
 function getContextOnlySource(source) {
   if (!source || typeof source !== 'object') return source;
   const context = { ...source };
@@ -34,6 +46,15 @@ function getContextOnlySource(source) {
     context.gear = {};
   }
   return context;
+}
+
+function getTechnicalOnlySource(source) {
+  if (!source || typeof source !== 'object') return source;
+  const technical = { ...source };
+  CONTEXT_KEYS.forEach((key) => {
+    technical[key] = '';
+  });
+  return technical;
 }
 
 function hasRows(source, options) {
@@ -56,6 +77,9 @@ export default function ShotMetaBoard({
     ...options,
   };
   const stripSource = showPanel ? getContextOnlySource(source) : source;
+  const panelSource = showPanel && showStrip && (mergeOptions.includeSpot || mergeOptions.includeLocation)
+    ? getTechnicalOnlySource(source)
+    : source;
 
   if (!hasRows(source, mergeOptions)) {
     return (
@@ -78,8 +102,8 @@ export default function ShotMetaBoard({
         />
       ) : null}
       {showPanel ? (
-        <ShotMetaPanel
-          post={source}
+      <ShotMetaPanel
+        post={panelSource}
           compact={compact}
           fallback={null}
         />
