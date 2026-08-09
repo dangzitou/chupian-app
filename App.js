@@ -200,6 +200,7 @@ const styles = StyleSheet.create({
     maxWidth: 430,
     height: '100%',
     minHeight: 0,
+    position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#f8f7f6',
     borderLeftWidth: 1,
