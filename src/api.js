@@ -57,9 +57,9 @@ function buildCacheKey(method, path, options = {}) {
   return `${normalized}${filteredHeaders ? ` ${filteredHeaders}` : ''} actor:${getActorId()}`;
 }
 
-function shouldRetry(status, method, error) {
+function shouldRetry(status, method, error, allowUnsafe = false) {
   if (!status) return true;
-  if (method !== 'GET') return false;
+  if (method !== 'GET' && !allowUnsafe) return false;
   if (status >= 500 && status < 600) return true;
   return status === 408 || status === 429 || status === 503;
 }
@@ -189,7 +189,7 @@ async function request(path, options = {}) {
           const actorId = await refreshActorSession();
           if (actorId && getActorToken()) continue;
         }
-        if (!shouldRetry(err.status, method, err) || i >= MAX_RETRIES) {
+        if (!shouldRetry(err.status, method, err, Boolean(options.retryUnsafe)) || i >= MAX_RETRIES) {
           throw err;
         }
         await sleep(Math.min(1200, 120 * 2 ** i) + Math.floor(Math.random() * 80));
@@ -926,6 +926,8 @@ export const api = {
       headers,
       body: form,
       timeout: 180_000,
+      // The upload route is idempotent by key; only retry writes with that guarantee.
+      retryUnsafe: Boolean(idempotencyKey),
     });
   },
 };
