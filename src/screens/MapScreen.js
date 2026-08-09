@@ -949,7 +949,7 @@ export default function MapScreen({ navigation, route }) {
         </View>
       ) : null}
       {locationPending ? (
-        <View style={styles.locationOverlay} pointerEvents="none">
+        <View style={styles.locationPendingOverlay} pointerEvents="none">
           <ActivityIndicator size="small" color={COLORS.accent} />
           <Text style={styles.locationTitle}>正在获取当前位置</Text>
           <Text style={styles.locationHint}>允许定位后显示附近的出片点</Text>
@@ -1167,6 +1167,18 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
+  },
+  locationPendingOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: COLORS.bg,
   },
   locationTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700', marginTop: 8 },
   locationHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
