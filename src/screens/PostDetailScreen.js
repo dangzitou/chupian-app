@@ -99,7 +99,17 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
         </Pressable>
         <View style={styles.viewerStage} {...panResponder.panHandlers}>
           {loadError ? (
-            <Text style={styles.viewerError}>素材加载失败，请切换下一份或稍后重试</Text>
+            <View style={styles.viewerErrorWrap}>
+              <Text style={styles.viewerError}>素材加载失败</Text>
+              <Pressable
+                style={styles.viewerRetry}
+                onPress={() => setLoadError(false)}
+                accessibilityRole="button"
+                accessibilityLabel="重试加载素材"
+              >
+                <Text style={styles.viewerRetryText}>重试</Text>
+              </Pressable>
+            </View>
           ) : playable ? (
             <VideoSurface
               uri={item.url}
@@ -1112,6 +1122,19 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.72)',
     fontSize: 13,
   },
+  viewerErrorWrap: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  viewerRetry: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  viewerRetryText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   viewerControls: {
     width: '100%',
     flexDirection: 'row',
