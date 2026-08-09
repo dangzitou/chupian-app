@@ -550,6 +550,10 @@ export default function PostsScreen({ navigation }) {
         onRefresh={onRefresh}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.2}
+        stickyHeaderIndices={[0]}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
         contentContainerStyle={[styles.list, isMasonry ? styles.listMasonry : styles.listList]}
         renderItem={renderCard}
@@ -651,7 +655,12 @@ const styles = StyleSheet.create({
   list: { paddingBottom: 34 },
   listList: { paddingHorizontal: 8 },
   listMasonry: { paddingHorizontal: 4 },
-  headerWrap: { paddingBottom: 8 },
+  headerWrap: {
+    paddingBottom: 8,
+    backgroundColor: COLORS.bg,
+    zIndex: 2,
+    elevation: 2,
+  },
   headerSection: {
     paddingTop: 4,
     paddingHorizontal: 2,
