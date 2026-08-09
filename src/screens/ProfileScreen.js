@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { api } from '../api';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
@@ -91,6 +91,8 @@ function CreatorRewardCard({ reward, onOpenCreate }) {
 }
 
 export default function ProfileScreen({ navigation }) {
+  const listRef = useRef(null);
+  useScrollToTop(listRef);
   const [actorName, setActorName] = useState(() => getActorName());
   const [actorAvatar, setActorAvatar] = useState(() => String(getCurrentUser()?.avatar || '').trim());
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
@@ -499,6 +501,7 @@ export default function ProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FlatList
+        ref={listRef}
         data={posts}
         keyExtractor={(post) => String(post.id)}
         numColumns={2}
