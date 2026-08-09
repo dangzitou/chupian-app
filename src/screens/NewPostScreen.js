@@ -684,18 +684,24 @@ export default function NewPostScreen({ navigation, route }) {
       mediaIdempotencyRef.current.clear();
       setUploadProgress(null);
       const earnedPoints = Number(created?.reward?.earnedPoints || 5);
+      const createdPostId = String(created?.post?.id || created?.postId || created?.id || '').trim();
       Alert.alert('发布成功', `作品已发布，获得 +${earnedPoints} 贡献值`);
       dispatch({ type: 'reset' });
       setMediaList([]);
       setCoverIndex(-1);
       idempotencyKeyRef.current = '';
-      if (navigation.canGoBack && navigation.canGoBack()) {
-        navigation.goBack();
-        return;
-      }
       const parent = navigation.getParent && navigation.getParent();
       if (parent) {
-        parent.navigate(APP_ROUTES.DISCOVERY);
+        parent.navigate(APP_ROUTES.DISCOVERY, createdPostId
+          ? {
+            screen: 'PostDetail',
+            params: { postId: createdPostId, title: created?.post?.title || state.title },
+          }
+          : undefined);
+        return;
+      }
+      if (navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
       }
     } catch (err) {
       setPublishError('发布失败，草稿和已完成的上传状态已保留。检查网络后再次点击即可继续。');
