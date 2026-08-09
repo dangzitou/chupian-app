@@ -19,6 +19,32 @@ const inFlightGetRequests = new Map();
 const getResponseCache = new Map();
 let sessionRefreshPromise = null;
 const notificationRefreshListeners = new Set();
+const networkStatusListeners = new Set();
+let networkOnline = true;
+
+function subscribeNetworkStatus(listener) {
+  if (typeof listener !== 'function') return () => {};
+  networkStatusListeners.add(listener);
+  try {
+    listener(networkOnline);
+  } catch (_err) {
+    // A status indicator must never affect the request pipeline.
+  }
+  return () => networkStatusListeners.delete(listener);
+}
+
+function setNetworkOnline(nextOnline) {
+  const next = Boolean(nextOnline);
+  if (networkOnline === next) return;
+  networkOnline = next;
+  for (const listener of networkStatusListeners) {
+    try {
+      listener(next);
+    } catch (_err) {
+      // A status indicator must never affect the request pipeline.
+    }
+  }
+}
 
 function subscribeNotificationRefresh(listener) {
   if (typeof listener !== 'function') return () => {};
@@ -157,6 +183,7 @@ async function doRequest(path, options = {}) {
       body: requestBody,
       signal: controller.signal,
     });
+    setNetworkOnline(true);
     const text = await res.text();
     let data = {};
     let isJson = false;
@@ -183,11 +210,16 @@ async function doRequest(path, options = {}) {
 
     return data;
   } catch (err) {
-    if (err instanceof ApiError) throw err;
+    if (err instanceof ApiError) {
+      if (err.status === 0) setNetworkOnline(false);
+      throw err;
+    }
     if (timedOut || err?.name === 'AbortError') {
+      setNetworkOnline(false);
       throw new ApiError('请求超时，请稍后重试', { status: 0, path, method, cause: err });
     }
     if (err instanceof TypeError) {
+      setNetworkOnline(false);
       throw new ApiError('网络连接异常，请检查网络设置', { status: 0, path, method, cause: err });
     }
     throw err;
@@ -601,6 +633,10 @@ export const api = {
 
   subscribeNotificationRefresh(listener) {
     return subscribeNotificationRefresh(listener);
+  },
+
+  subscribeNetworkStatus(listener) {
+    return subscribeNetworkStatus(listener);
   },
 
   async markNotificationRead(id) {
