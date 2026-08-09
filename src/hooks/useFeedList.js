@@ -32,6 +32,7 @@ export function useFeedList(fetcher, options = {}) {
 
   const busyIdsRef = useRef(new Set());
   const requestSeqRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   const ensureLoadingState = useCallback((append) => {
     if (append) {
@@ -48,7 +49,9 @@ export function useFeedList(fetcher, options = {}) {
     nextQ = q,
     nextTag = tag,
   } = {}) => {
-        if (append && loadingMore) return;
+    // FlatList may call onEndReached again before React commits loadingMore.
+    // Lock synchronously so the same cursor cannot create duplicate requests.
+    if (append && (loadingMore || loadingMoreRef.current)) return;
 
     const nextCursor = cursor || '';
     const normalizedSort = nextSort === 'hot' ? 'hot' : 'latest';
@@ -57,6 +60,7 @@ export function useFeedList(fetcher, options = {}) {
     const useLimit = Math.min(Math.max(pageSize, 1), 40);
     const requestSeq = ++requestSeqRef.current;
 
+    if (append) loadingMoreRef.current = true;
     ensureLoadingState(append);
 
     try {
@@ -91,6 +95,7 @@ export function useFeedList(fetcher, options = {}) {
       if (requestSeq !== requestSeqRef.current) return;
       setError(e.message || 'network error');
     } finally {
+      if (append) loadingMoreRef.current = false;
       if (requestSeq !== requestSeqRef.current) return;
       setLoading(false);
       setRefreshing(false);
@@ -104,7 +109,7 @@ export function useFeedList(fetcher, options = {}) {
   }, [load, sort, q, tag]);
 
   const onEndReached = useCallback(() => {
-    if (!hasMore || loadingMore || !nextCursor || loading) return;
+    if (!hasMore || loadingMore || loadingMoreRef.current || !nextCursor || loading) return;
     return load({
       append: true,
       cursor: nextCursor,
