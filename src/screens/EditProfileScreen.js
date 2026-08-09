@@ -19,6 +19,8 @@ export default function EditProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
+  const [initialDisplayName, setInitialDisplayName] = useState('');
+  const [initialBio, setInitialBio] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -27,9 +29,14 @@ export default function EditProfileScreen({ navigation }) {
     let alive = true;
     api.me().then((result) => {
       if (!alive) return;
-      setUsername(result?.user?.username || '');
-      setDisplayName(result?.user?.displayName || '');
-      setBio(result?.user?.bio || '');
+      const nextUsername = result?.user?.username || '';
+      const nextDisplayName = result?.user?.displayName || '';
+      const nextBio = result?.user?.bio || '';
+      setUsername(nextUsername);
+      setDisplayName(nextDisplayName);
+      setBio(nextBio);
+      setInitialDisplayName(nextDisplayName);
+      setInitialBio(nextBio);
     }).catch((err) => {
       if (alive) setError(err?.cause || err?.message || '资料加载失败');
     }).finally(() => {
@@ -37,6 +44,40 @@ export default function EditProfileScreen({ navigation }) {
     });
     return () => { alive = false; };
   }, []);
+
+  const hasChanges = displayName.trim() !== initialDisplayName || bio.trim() !== initialBio;
+
+  const requestBack = useCallback(() => {
+    if (saving) return;
+    if (!hasChanges) {
+      navigation.goBack();
+      return;
+    }
+    Alert.alert('放弃未保存修改？', '返回后，本次编辑的昵称和简介不会保留。', [
+      { text: '继续编辑', style: 'cancel' },
+      { text: '放弃修改', style: 'destructive', onPress: () => navigation.goBack() },
+    ]);
+  }, [hasChanges, navigation, saving]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (saving) {
+        event.preventDefault();
+        return;
+      }
+      if (!hasChanges) return;
+      event.preventDefault();
+      Alert.alert('放弃未保存修改？', '返回后，本次编辑的昵称和简介不会保留。', [
+        { text: '继续编辑', style: 'cancel' },
+        {
+          text: '放弃修改',
+          style: 'destructive',
+          onPress: () => navigation.dispatch(event.data.action),
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, [hasChanges, navigation, saving]);
 
   const save = useCallback(async () => {
     const nextName = displayName.trim();
@@ -53,6 +94,8 @@ export default function EditProfileScreen({ navigation }) {
     setError('');
     try {
       await api.updateProfile(nextName, nextBio);
+      setInitialDisplayName(nextName);
+      setInitialBio(nextBio);
       Alert.alert('资料已更新', '新的昵称和简介已同步到你的作品。', [
         { text: '好的', onPress: () => navigation.goBack() },
       ]);
@@ -66,7 +109,7 @@ export default function EditProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="返回">
+        <Pressable style={styles.back} onPress={requestBack} accessibilityRole="button" accessibilityLabel="返回">
           <Text style={styles.backText}>‹</Text>
         </Pressable>
         <Text style={styles.headerTitle}>编辑资料</Text>
