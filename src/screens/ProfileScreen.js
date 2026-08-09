@@ -63,12 +63,16 @@ function CreatorRewardCard({ reward, onOpenCreate }) {
   const points = Number(reward?.points || 0);
   const publishedCount = Number(reward?.publishedCount || 0);
   const guideCount = Number(reward?.guideCount || 0);
+  const nextGuidePoints = Number(reward?.nextGuidePoints || 15);
+  const guideRewardText = guideCount > 0
+    ? `已完成 ${guideCount} 篇攻略 · 下一篇完整攻略再得 +${nextGuidePoints}`
+    : `发布第一篇即可得 +5 · 完整攻略再得 +${nextGuidePoints}`;
   return (
     <View style={styles.rewardCard}>
       <View style={styles.rewardCopy}>
         <Text style={styles.rewardTitle}>贡献值 {points}</Text>
         <Text style={styles.rewardMeta}>已发布 {publishedCount} 条 · 完整攻略 {guideCount} 条</Text>
-        <Text style={styles.rewardNext}>补充攻略文字和拍摄参数，下一篇可多得 +{Number(reward?.nextGuidePoints || 15)}</Text>
+        <Text style={styles.rewardNext}>{guideRewardText}</Text>
       </View>
       <Pressable style={styles.rewardAction} onPress={onOpenCreate} accessibilityRole="button">
         <Text style={styles.rewardActionText}>继续发布</Text>
