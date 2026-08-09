@@ -269,6 +269,54 @@ function EditField({ label, value, onChange, placeholder, multiline = false }) {
   );
 }
 
+const EDIT_BEST_TIME_OPTIONS = [
+  { value: 'day', label: '日间' },
+  { value: 'golden', label: '黄金时刻' },
+  { value: 'night', label: '夜景' },
+];
+
+const EDIT_CHOICE_ROW_STYLE = { flexDirection: 'row', gap: 8 };
+const EDIT_CHOICE_STYLE = {
+  flex: 1,
+  minHeight: 40,
+  paddingHorizontal: 8,
+  borderWidth: 1,
+  borderColor: '#D9D0C6',
+  borderRadius: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: '#FFFDF9',
+};
+const EDIT_CHOICE_ACTIVE_STYLE = { borderColor: '#B7663B', backgroundColor: '#F7E9DF' };
+const EDIT_CHOICE_TEXT_STYLE = { color: '#6C6259', fontSize: 13, fontWeight: '600' };
+const EDIT_CHOICE_TEXT_ACTIVE_STYLE = { color: '#7D3F22' };
+
+function EditChoiceField({ label, value, onChange, options }) {
+  return (
+    <View style={styles.editField}>
+      <Text style={styles.editLabel}>{label}</Text>
+      <View style={EDIT_CHOICE_ROW_STYLE}>
+        {options.map((option) => {
+          const active = value === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              style={[EDIT_CHOICE_STYLE, active && EDIT_CHOICE_ACTIVE_STYLE]}
+              onPress={() => onChange(active ? '' : option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[EDIT_CHOICE_TEXT_STYLE, active && EDIT_CHOICE_TEXT_ACTIVE_STYLE]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function PostDetailScreen({ route, navigation }) {
   const { postId } = route?.params || {};
   const insets = useSafeAreaInsets();
@@ -1053,7 +1101,14 @@ export default function PostDetailScreen({ route, navigation }) {
                 <View style={styles.editCol}><EditField label="光圈" value={editDraft.aperture} onChange={(value) => setEditField('aperture', value)} placeholder="f/2.8" /></View>
                 <View style={styles.editCol}><EditField label="快门" value={editDraft.shutter} onChange={(value) => setEditField('shutter', value)} placeholder="1/125s" /></View>
                 <View style={styles.editCol}><EditField label="ISO" value={editDraft.iso} onChange={(value) => setEditField('iso', value)} placeholder="100" /></View>
+                <View style={styles.editCol}><EditField label="白平衡" value={editDraft.whiteBalance} onChange={(value) => setEditField('whiteBalance', value)} placeholder="自动 / 5200K" /></View>
               </View>
+              <EditChoiceField
+                label="最佳时段"
+                value={editDraft.bestTime}
+                onChange={(value) => setEditField('bestTime', value)}
+                options={EDIT_BEST_TIME_OPTIONS}
+              />
             </ScrollView>
             <View style={styles.editFooter}>
               <Pressable style={styles.editCancel} onPress={() => setEditOpen(false)} disabled={editSaving}>
