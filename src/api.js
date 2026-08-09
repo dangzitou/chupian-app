@@ -434,15 +434,18 @@ async function safeRequestWithFallback(primaryPath, fallbackPath, options = {}) 
   }
 }
 
-function clearNetworkCaches({ postId } = {}) {
+function clearNetworkCaches({ postId, authorId } = {}) {
   const targetPostPath = postId == null ? '' : `/posts/${encodeURIComponent(String(postId))}`;
+  const targetAuthorPath = authorId == null ? '' : `/authors/${encodeURIComponent(String(authorId))}`;
   for (const key of getResponseCache.keys()) {
     const path = String(key).split(' actor:')[0];
     const isFeedCache = path.includes('/community/feed')
       || path.includes('/community/me/')
       || path.includes('/api/posts?');
     const isTargetPostCache = targetPostPath && path.includes(targetPostPath);
-    if (isFeedCache || isTargetPostCache) {
+    const isTargetAuthorCache = targetAuthorPath && path.includes(targetAuthorPath);
+    const isDiscoveryCache = authorId != null && path.includes('/community/discovery');
+    if (isFeedCache || isTargetPostCache || isTargetAuthorCache || isDiscoveryCache) {
       getResponseCache.delete(key);
     }
   }
@@ -852,20 +855,24 @@ export const api = {
     const body = { action, author: getDefaultAuthor(), avatar: getActorAvatar() };
     const headers = { 'Idempotency-Key': buildSessionIdempotencyKey('author-follow', `${target}-${action}`) };
     try {
-      return await request(`${API_PREFIX}/authors/${encoded}/follow`, {
+      const result = await request(`${API_PREFIX}/authors/${encoded}/follow`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         retryUnsafe: true,
       });
+      clearNetworkCaches({ authorId: target });
+      return result;
     } catch (err) {
       if (!shouldFallbackWrite(err)) throw err;
-      return request(`/api/authors/${encoded}/follow`, {
+      const result = await request(`/api/authors/${encoded}/follow`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         retryUnsafe: true,
       });
+      clearNetworkCaches({ authorId: target });
+      return result;
     }
   },
 
@@ -877,13 +884,15 @@ export const api = {
       action,
       author: String(authorName || getActorName() || '匿名拍友').slice(0, 80),
     };
-    return request(`${API_PREFIX}/authors/${encoded}/block`, {
+    const result = await request(`${API_PREFIX}/authors/${encoded}/block`, {
       method: 'POST',
       headers: { 'Idempotency-Key': buildSessionIdempotencyKey('author-block', `${target}-${action}`) },
       body: JSON.stringify(body),
       noCache: true,
       retryUnsafe: true,
     });
+    clearNetworkCaches({ authorId: target });
+    return result;
   },
 
   async blockedAuthors() {
