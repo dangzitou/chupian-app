@@ -22,32 +22,45 @@ export default function SpotsScreen({ navigation }) {
   const [cat, setCat] = useState('all');
   const [time, setTime] = useState('all');
   const [error, setError] = useState(null);
+  const [locationError, setLocationError] = useState('');
   const [locationLabel, setLocationLabel] = useState('');
   const [locationLoading, setLocationLoading] = useState(true);
   const [location, setLocation] = useState(null);
+  const [locationAttempt, setLocationAttempt] = useState(0);
 
   const load = useCallback(async () => {
+    if (locationLoading) return;
+    if (!location) {
+      setSpots([]);
+      setLocationError('暂时无法获取当前位置，请允许定位后重试。');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const d = await api.spots({
-        latitude: location?.lat,
-        longitude: location?.lng,
+        latitude: location.lat,
+        longitude: location.lng,
         radiusKm: 50,
         limit: 80,
       });
       setSpots(d.spots || []);
       setError(null);
+      setLocationError('');
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [location]);
+  }, [location, locationLoading]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     let alive = true;
+    setLocationLoading(true);
+    setLocationError('');
     api.resolveLocation()
       .then((payload) => {
         if (!alive) return;
@@ -59,7 +72,11 @@ export default function SpotsScreen({ navigation }) {
         setLocationLabel(String(payload?.location?.label || '').trim());
       })
       .catch(() => {
-        if (alive) setLocationLabel('');
+        if (alive) {
+          setLocation(null);
+          setLocationLabel('');
+          setLocationError('暂时无法获取当前位置，请允许定位后重试。');
+        }
       })
       .finally(() => {
         if (alive) setLocationLoading(false);
@@ -67,9 +84,15 @@ export default function SpotsScreen({ navigation }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locationAttempt]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
+  const retryLocation = useCallback(() => {
+    setLoading(true);
+    setLocation(null);
+    setLocationError('');
+    setLocationAttempt((value) => value + 1);
+  }, []);
   const openMap = useCallback(() => {
     const parent = navigation.getParent && navigation.getParent();
     if (parent) {
@@ -154,7 +177,16 @@ export default function SpotsScreen({ navigation }) {
         ))}
       </View>
 
-      {error && <Text style={styles.error}>加载失败：{error}</Text>}
+      {locationError ? (
+        <View style={styles.locationNotice}>
+          <Text style={styles.locationNoticeTitle}>需要当前位置</Text>
+          <Text style={styles.locationNoticeText}>{locationError}</Text>
+          <Pressable style={styles.retryLocationBtn} onPress={retryLocation} accessibilityRole="button">
+            <Text style={styles.retryLocationText}>重新定位</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {error && !locationError ? <Text style={styles.error}>加载失败：{error}</Text> : null}
 
       <FlatList
         data={filtered}
@@ -189,7 +221,7 @@ export default function SpotsScreen({ navigation }) {
             </View>
           </Pressable>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>没有匹配的出片点</Text>}
+        ListEmptyComponent={locationError ? null : <Text style={styles.empty}>没有匹配的出片点</Text>}
       />
     </SafeAreaView>
   );
@@ -221,6 +253,26 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, color: COLORS.muted },
   pillTextActive: { color: COLORS.onAccent, fontWeight: '600' },
   error: { color: '#a34a2a', paddingHorizontal: 16, paddingVertical: 8 },
+  locationNotice: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: COLORS.accentBg,
+    borderWidth: 1,
+    borderColor: COLORS.accentSoft,
+  },
+  locationNoticeTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '700' },
+  locationNoticeText: { color: COLORS.muted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  retryLocationBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: COLORS.accent,
+  },
+  retryLocationText: { color: COLORS.onAccent, fontSize: 12, fontWeight: '700' },
   list: { padding: 16, gap: 12, paddingBottom: 30 },
   card: {
     flexDirection: 'row', gap: 12, backgroundColor: COLORS.panel,
