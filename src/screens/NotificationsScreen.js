@@ -41,21 +41,32 @@ export default function NotificationsScreen({ navigation }) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const requestSeqRef = useRef(0);
+  const loadingRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const markingReadRef = useRef(new Set());
   const hasLoadedOnFocusRef = useRef(false);
   const isFocused = useIsFocused();
 
-  const load = useCallback(async ({ append = false, nextCursor = null } = {}) => {
-    if (append ? loadingMore : (loading && !refreshing)) return;
+  const load = useCallback(async ({ append = false, nextCursor = null, force = false } = {}) => {
+    if (append ? (loadingMoreRef.current || loadingRef.current) : (loadingRef.current && !force)) return;
     const requestId = requestSeqRef.current + 1;
     requestSeqRef.current = requestId;
-    if (append) setLoadingMore(true);
-    else setLoading(true);
+    if (append) {
+      loadingMoreRef.current = true;
+      setLoadingMore(true);
+    } else {
+      loadingRef.current = true;
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+      setLoading(true);
+    }
     setError('');
     try {
       const payload = await api.notifications({ limit: 20, cursor: append ? nextCursor : null });
       if (requestId !== requestSeqRef.current) return;
+      const incoming = Array.isArray(payload?.notifications) ? payload.notifications : [];
       setItems((prev) => {
-        const merged = append ? [...prev, ...payload.notifications] : payload.notifications;
+        const merged = append ? [...prev, ...incoming] : incoming;
         const seen = new Set();
         return merged.filter((item) => {
           const key = String(item?.id || `${item?.actorId || ''}:${item?.createdAt || ''}:${item?.type || ''}`);
@@ -64,21 +75,25 @@ export default function NotificationsScreen({ navigation }) {
           return true;
         });
       });
-      setCursor(payload.nextCursor);
-      setHasMore(payload.hasMore);
-      setUnread(payload.unread);
+      setCursor(payload?.nextCursor || null);
+      setHasMore(Boolean(payload?.hasMore));
+      setUnread(Number(payload?.unread || 0));
     } catch (err) {
       if (requestId !== requestSeqRef.current) return;
       setError(err?.message || '通知加载失败');
     } finally {
       if (requestId !== requestSeqRef.current) return;
-      if (append) setLoadingMore(false);
+      if (append) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
       else {
+        loadingRef.current = false;
         setLoading(false);
         setRefreshing(false);
       }
     }
-  }, [loading, loadingMore, refreshing]);
+  }, []);
 
   useEffect(() => {
     if (!isFocused) {
@@ -92,7 +107,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const refresh = useCallback(() => {
     setRefreshing(true);
-    load({ append: false });
+    load({ append: false, force: true });
   }, [load]);
 
   const markAllRead = useCallback(async () => {
@@ -111,17 +126,21 @@ export default function NotificationsScreen({ navigation }) {
   }, [items, unread]);
 
   const openNotification = useCallback((item) => {
-    if (!item.read) {
+    const notificationId = String(item?.id || '').trim();
+    if (!item.read && notificationId && !markingReadRef.current.has(notificationId)) {
+      markingReadRef.current.add(notificationId);
       setItems((prev) => prev.map((entry) => (
-        entry.id === item.id ? { ...entry, read: true } : entry
+        String(entry.id) === notificationId ? { ...entry, read: true } : entry
       )));
       setUnread((value) => Math.max(0, value - 1));
-      api.markNotificationRead(item.id).catch(() => {
+      api.markNotificationRead(notificationId).catch(() => {
         setItems((prev) => prev.map((entry) => (
-          entry.id === item.id ? { ...entry, read: false } : entry
+          String(entry.id) === notificationId ? { ...entry, read: false } : entry
         )));
         setUnread((value) => value + 1);
         setError('标记已读失败，已恢复未读状态');
+      }).finally(() => {
+        markingReadRef.current.delete(notificationId);
       });
     }
     if (item.postId) {
