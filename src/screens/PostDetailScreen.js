@@ -253,7 +253,16 @@ export default function PostDetailScreen({ route, navigation }) {
         limit: COMMENT_PAGE_SIZE,
         cursor,
       });
-      setComments((prev) => (append ? [...prev, ...payload.comments] : payload.comments));
+      setComments((prev) => {
+        const merged = append ? [...prev, ...payload.comments] : payload.comments;
+        const seen = new Set();
+        return merged.filter((item) => {
+          const key = String(item?.id || `${item?.author || ''}:${item?.createdAt || ''}:${item?.text || ''}`);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      });
       const nextCursor = payload.nextCursor || null;
       setCommentsCursor(nextCursor);
       commentsCursorRef.current = nextCursor;
