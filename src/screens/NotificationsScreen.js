@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -38,14 +38,18 @@ export default function NotificationsScreen({ navigation }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
+  const requestSeqRef = useRef(0);
 
   const load = useCallback(async ({ append = false, nextCursor = null } = {}) => {
     if (append ? loadingMore : (loading && !refreshing)) return;
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
     if (append) setLoadingMore(true);
     else setLoading(true);
     setError('');
     try {
       const payload = await api.notifications({ limit: 20, cursor: append ? nextCursor : null });
+      if (requestId !== requestSeqRef.current) return;
       setItems((prev) => {
         const merged = append ? [...prev, ...payload.notifications] : payload.notifications;
         const seen = new Set();
@@ -60,8 +64,10 @@ export default function NotificationsScreen({ navigation }) {
       setHasMore(payload.hasMore);
       setUnread(payload.unread);
     } catch (err) {
+      if (requestId !== requestSeqRef.current) return;
       setError(err?.message || '通知加载失败');
     } finally {
+      if (requestId !== requestSeqRef.current) return;
       if (append) setLoadingMore(false);
       else {
         setLoading(false);
