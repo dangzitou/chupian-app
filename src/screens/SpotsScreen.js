@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator,
+  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
@@ -96,6 +96,10 @@ export default function SpotsScreen({ navigation }) {
     setLocationError('');
     setLocationAttempt((value) => value + 1);
   }, []);
+  const openLocationSettings = useCallback(() => {
+    if (typeof Linking.openSettings !== 'function') return;
+    Linking.openSettings().catch(() => {});
+  }, []);
   const openMap = useCallback(() => {
     const parent = navigation.getParent && navigation.getParent();
     if (parent) {
@@ -184,9 +188,19 @@ export default function SpotsScreen({ navigation }) {
         <View style={styles.locationNotice}>
           <Text style={styles.locationNoticeTitle}>需要当前位置</Text>
           <Text style={styles.locationNoticeText}>{locationError}</Text>
-          <Pressable style={styles.retryLocationBtn} onPress={retryLocation} accessibilityRole="button">
-            <Text style={styles.retryLocationText}>重新定位</Text>
-          </Pressable>
+          <View style={styles.locationActions}>
+            <Pressable style={styles.retryLocationBtn} onPress={retryLocation} accessibilityRole="button">
+              <Text style={styles.retryLocationText}>重新定位</Text>
+            </Pressable>
+            <Pressable
+              style={styles.settingsLocationBtn}
+              onPress={openLocationSettings}
+              accessibilityRole="button"
+              accessibilityLabel="打开系统定位设置"
+            >
+              <Text style={styles.settingsLocationText}>打开设置</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
       {error && !locationError ? <Text style={styles.error}>加载失败：{error}</Text> : null}
@@ -272,15 +286,24 @@ const styles = StyleSheet.create({
   },
   locationNoticeTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '700' },
   locationNoticeText: { color: COLORS.muted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  locationActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   retryLocationBtn: {
     alignSelf: 'flex-start',
-    marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: COLORS.accent,
   },
   retryLocationText: { color: COLORS.onAccent, fontSize: 12, fontWeight: '700' },
+  settingsLocationBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.card,
+  },
+  settingsLocationText: { color: COLORS.accent, fontSize: 12, fontWeight: '700' },
   list: { padding: 16, gap: 12, paddingBottom: 30 },
   card: {
     flexDirection: 'row', gap: 12, backgroundColor: COLORS.panel,
