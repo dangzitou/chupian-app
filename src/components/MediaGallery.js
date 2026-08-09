@@ -12,29 +12,40 @@ function clampColumns(value) {
   return Math.max(1, Math.min(3, value));
 }
 
-function MediaFallback({ kind }) {
+function getMediaRatio(item) {
+  const width = Number(item?.width);
+  const height = Number(item?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return IMAGE_RATIO;
+  }
+  return Math.min(Math.max(width / height, 0.75), 1.78);
+}
+
+function MediaFallback({ kind, ratio = IMAGE_RATIO }) {
   return (
-    <View style={[styles.mediaWrap, styles.mediaFallback]}>
+    <View style={[styles.mediaWrap, { aspectRatio: ratio }, styles.mediaFallback]}>
       <Text style={styles.fallbackTitle}>{kind === 'video' ? '视频暂不可用' : '图片暂不可用'}</Text>
       <Text style={styles.fallbackHint}>素材地址已失效或无法加载</Text>
     </View>
   );
 }
 
-function MediaCover({ item, playing }) {
+function MediaCover({ item, playing, ratio }) {
   const [failed, setFailed] = useState(false);
   const handleError = useCallback(() => setFailed(true), []);
+  const mediaStyle = [styles.mediaWrap, { aspectRatio: ratio }];
+  const videoStyle = [styles.videoSurface, { aspectRatio: ratio }];
 
   if (!item) return null;
-  if (failed) return <MediaFallback kind={item.kind} />;
+  if (failed) return <MediaFallback kind={item.kind} ratio={ratio} />;
 
   if (item.kind === 'video') {
-    if (!item.url) return <MediaFallback kind="video" />;
+    if (!item.url) return <MediaFallback kind="video" ratio={ratio} />;
     return (
-      <View style={styles.mediaWrap}>
+      <View style={mediaStyle}>
         <VideoSurface
           uri={item.url}
-          style={styles.videoSurface}
+          style={videoStyle}
           shouldPlay={playing}
           controls={playing}
           poster={item.cover || item.thumbnail}
@@ -51,14 +62,14 @@ function MediaCover({ item, playing }) {
   }
 
   const imageUri = item.kind === 'live' ? (item.cover || item.url) : item.url;
-  if (!imageUri) return <MediaFallback kind="image" />;
+  if (!imageUri) return <MediaFallback kind="image" ratio={ratio} />;
 
   if (item.kind === 'live' && playing && item.cover && item.url && item.url !== item.cover) {
     return (
-      <View style={styles.mediaWrap}>
+      <View style={mediaStyle}>
         <VideoSurface
           uri={item.url}
-          style={styles.videoSurface}
+          style={videoStyle}
           shouldPlay
           loop
           controls
@@ -72,7 +83,7 @@ function MediaCover({ item, playing }) {
 
   return (
     <View>
-      <Image source={{ uri: imageUri }} style={styles.mediaWrap} resizeMode="cover" onError={handleError} />
+      <Image source={{ uri: imageUri }} style={mediaStyle} resizeMode="cover" onError={handleError} />
       {item.kind === 'live' ? <Text style={styles.liveMark}>{item.cover ? '实况 · 动态' : '实况'}</Text> : null}
     </View>
   );
@@ -128,7 +139,7 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, c
             accessibilityRole="button"
             accessibilityLabel={item.kind === 'video' ? '播放视频' : (item.kind === 'live' ? '播放实况' : '查看照片')}
           >
-            <MediaCover item={item} playing={playingIndex === idx} />
+            <MediaCover item={item} ratio={getMediaRatio(item)} playing={playingIndex === idx} />
           </Pressable>
         );
       })}
