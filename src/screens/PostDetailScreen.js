@@ -30,7 +30,7 @@ import ShotMetaBoard from '../components/ShotMetaBoard';
 import { formatRelativeTime } from '../utils/time';
 import { sharePost } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
-import { getActorId, getActorName } from '../lib/actor';
+import { getActorId, getActorName, getCurrentUser } from '../lib/actor';
 
 const COMMENT_PAGE_SIZE = 12;
 
@@ -490,6 +490,7 @@ export default function PostDetailScreen({ route, navigation }) {
     const params = {
       authorId: post.authorId,
       authorName: post.author || '创作者主页',
+      avatar: post.avatar || '',
     };
     const parent = navigation?.getParent?.();
     if (parent) {
@@ -662,6 +663,7 @@ export default function PostDetailScreen({ route, navigation }) {
       {
         id: tempId,
         author: getActorName(),
+        avatar: String(getCurrentUser()?.avatar || '').trim(),
         text,
         createdAt: tempAt,
         _optimistic: true,
@@ -762,9 +764,7 @@ export default function PostDetailScreen({ route, navigation }) {
               accessibilityRole="button"
               accessibilityLabel={`查看${post.author || '创作者'}主页`}
             >
-              <View style={styles.authorAvatar}>
-                <Text style={styles.authorAvatarText}>{String(post.author || '匿名拍友').slice(0, 2)}</Text>
-              </View>
+              <Avatar name={post.author || '匿名拍友'} uri={post.avatar} size={38} />
               <View style={styles.authorCopy}>
                 <Text style={styles.authorName} numberOfLines={1}>{post.author || '匿名拍友'}</Text>
                 <Text style={styles.authorBio} numberOfLines={1}>{post.authorBio || '出片位置记录者'}</Text>
@@ -792,7 +792,10 @@ export default function PostDetailScreen({ route, navigation }) {
           </View>
           <Text style={styles.title}>{postMeta.title}</Text>
           <Pressable style={styles.locationLink} onPress={onOpenMap}>
-            <Text style={styles.subtitle}>📍 {postMeta.subtitle}</Text>
+            <View style={styles.locationCopy}>
+              <View style={styles.locationDot} />
+              <Text style={styles.subtitle} numberOfLines={1}>{postMeta.subtitle}</Text>
+            </View>
             <Text style={styles.locationAction}>地图</Text>
           </Pressable>
 
@@ -1309,15 +1312,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
   },
-  authorAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.bgDeep,
-  },
-  authorAvatarText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
   authorCopy: { flex: 1 },
   authorName: { color: COLORS.ink, fontSize: 13, fontWeight: '700' },
   authorBio: { color: COLORS.muted, fontSize: 11.2, marginTop: 2 },
@@ -1411,6 +1405,20 @@ const styles = StyleSheet.create({
   subtitle: {
     color: COLORS.muted,
     fontSize: 12.5,
+  },
+  locationCopy: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationDot: {
+    width: 6,
+    height: 6,
+    flexShrink: 0,
+    borderRadius: 3,
+    backgroundColor: COLORS.accent,
   },
   locationLink: {
     flexDirection: 'row',
