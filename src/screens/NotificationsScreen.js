@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
+import Avatar from '../components/Avatar';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import { formatRelativeTime } from '../utils/time';
@@ -39,6 +41,8 @@ export default function NotificationsScreen({ navigation }) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const requestSeqRef = useRef(0);
+  const hasLoadedOnFocusRef = useRef(false);
+  const isFocused = useIsFocused();
 
   const load = useCallback(async ({ append = false, nextCursor = null } = {}) => {
     if (append ? loadingMore : (loading && !refreshing)) return;
@@ -77,8 +81,14 @@ export default function NotificationsScreen({ navigation }) {
   }, [loading, loadingMore, refreshing]);
 
   useEffect(() => {
+    if (!isFocused) {
+      hasLoadedOnFocusRef.current = false;
+      return;
+    }
+    if (hasLoadedOnFocusRef.current) return;
+    hasLoadedOnFocusRef.current = true;
     load();
-  }, []);
+  }, [isFocused, load]);
 
   const refresh = useCallback(() => {
     setRefreshing(true);
@@ -120,7 +130,11 @@ export default function NotificationsScreen({ navigation }) {
     }
     if (item.actorId) {
       const parent = navigation?.getParent?.();
-      const params = { authorId: item.actorId, authorName: item.actorName };
+      const params = {
+        authorId: item.actorId,
+        authorName: item.actorName,
+        avatar: item.avatar,
+      };
       if (parent) {
         parent.navigate(APP_ROUTES.DISCOVERY, { screen: 'AuthorProfile', params });
         return;
@@ -139,8 +153,11 @@ export default function NotificationsScreen({ navigation }) {
     const meta = TYPE_META[item.type] || TYPE_META.comment;
     return (
       <Pressable style={[styles.item, !item.read && styles.itemUnread]} onPress={() => openNotification(item)}>
-        <View style={[styles.mark, { backgroundColor: meta.color }]}>
-          <Text style={styles.markText}>{meta.mark}</Text>
+        <View style={styles.avatarWrap}>
+          <Avatar name={item.actorName} uri={item.avatar} size={34} />
+          <View style={[styles.typeBadge, { backgroundColor: meta.color }]}>
+            <Text style={styles.typeBadgeText}>{meta.mark}</Text>
+          </View>
         </View>
         <View style={styles.itemBody}>
           <Text style={styles.itemTitle}>
@@ -296,6 +313,20 @@ const styles = StyleSheet.create({
   inlineRetryText: { color: COLORS.accent, fontSize: 11.5, fontWeight: '800' },
   mark: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   markText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  avatarWrap: { width: 34, height: 34, marginRight: 10, position: 'relative' },
+  typeBadge: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  typeBadgeText: { color: COLORS.white, fontSize: 8, fontWeight: '800' },
   itemBody: { flex: 1, minWidth: 0 },
   itemTitle: { color: COLORS.ink, fontSize: 13.5, lineHeight: 19 },
   actor: { fontWeight: '800' },
