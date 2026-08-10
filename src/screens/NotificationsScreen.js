@@ -15,6 +15,7 @@ import Avatar from '../components/Avatar';
 import { COLORS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import { formatRelativeTime } from '../utils/time';
+import AppIcon from '../components/AppIcon';
 
 const TYPE_META = {
   like: { mark: '赞', label: '赞了你的出片', color: '#d93657' },
@@ -198,7 +199,7 @@ export default function NotificationsScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button">
-          <Text style={styles.backText}>‹</Text>
+          <AppIcon name="chevronLeft" size={19} color={COLORS.ink} stroke={1.8} />
         </Pressable>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.title}>消息</Text>

@@ -34,6 +34,7 @@ import ShotMetaBoard from '../components/ShotMetaBoard';
 import PostInput from '../components/forms/PostInput';
 import OptionPills from '../components/forms/OptionPills';
 import MediaBuilder from '../components/forms/MediaBuilder';
+import AppIcon from '../components/AppIcon';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
 import { createDraftStorage } from '../hooks/useDraftStorage';
 
@@ -73,7 +74,9 @@ function FormSection({ title, summary, expanded, onToggle, children }) {
           <Text style={styles.sectionTitle}>{title}</Text>
           <Text style={styles.formSectionSummary}>{summary}</Text>
         </View>
-        <Text style={styles.formSectionChevron}>{expanded ? '−' : '+'}</Text>
+        <View style={styles.formSectionChevron}>
+          <AppIcon name={expanded ? 'chevronUp' : 'chevronDown'} size={18} color={COLORS.accent} stroke={1.7} />
+        </View>
       </Pressable>
       {expanded ? <View style={styles.formSectionBody}>{children}</View> : null}
     </View>
@@ -1519,19 +1522,25 @@ export default function NewPostScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.bg },
-  body: { padding: 16, paddingBottom: 96 },
+  body: { width: '100%', maxWidth: 720, alignSelf: 'center', padding: 16, paddingBottom: 96 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   titleCopy: { flex: 1 },
-  title: { fontSize: 24, color: COLORS.ink, fontWeight: '700' },
-  subtitle: { color: COLORS.muted, marginTop: 3, marginBottom: 12, fontSize: 12.5 },
+  title: {
+    fontSize: 30,
+    color: COLORS.ink,
+    fontWeight: '800',
+    letterSpacing: -1.1,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia' }),
+  },
+  subtitle: { color: COLORS.muted, marginTop: 4, marginBottom: 16, fontSize: 12.5, lineHeight: 18 },
   closeBtn: { paddingHorizontal: 4, paddingVertical: 6 },
   closeText: { color: COLORS.muted, fontSize: 12.5, fontWeight: '700' },
   rewardHint: {
-    marginBottom: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: COLORS.accentBg,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: COLORS.ink,
   },
   rewardHintHeader: {
     flexDirection: 'row',
@@ -1539,31 +1548,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  rewardHintTitle: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
-  rewardHintStatus: { color: COLORS.accent, fontSize: 10.5, fontWeight: '700' },
+  rewardHintTitle: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
+  rewardHintStatus: { color: '#f2b7aa', fontSize: 10.5, fontWeight: '800' },
   rewardMeter: { marginTop: 8, gap: 6 },
   rewardMeterRow: { gap: 3 },
   rewardMeterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  rewardMeterLabel: { color: COLORS.muted, fontSize: 10.5 },
-  rewardMeterValue: { color: COLORS.ink, fontSize: 10.5, fontWeight: '700' },
+  rewardMeterLabel: { color: 'rgba(255,253,248,0.66)', fontSize: 10.5 },
+  rewardMeterValue: { color: COLORS.white, fontSize: 10.5, fontWeight: '700' },
   rewardTrack: {
     height: 4,
     overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: COLORS.cardBorder,
+    backgroundColor: 'rgba(255,253,248,0.18)',
   },
   rewardFill: {
     height: '100%',
     borderRadius: 999,
     backgroundColor: COLORS.accent,
   },
-  rewardHintText: { color: COLORS.muted, fontSize: 11.5, marginTop: 7 },
+  rewardHintText: { color: 'rgba(255,253,248,0.7)', fontSize: 11.5, marginTop: 7 },
   sectionTitle: {
     color: COLORS.ink,
-    marginTop: 16,
-    marginBottom: 8,
-    fontSize: 17,
-    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 9,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.25,
   },
   subTitleSmall: {
     marginTop: 12,
@@ -1572,12 +1582,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   formSection: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.cardBorder,
+    marginTop: 12,
+    paddingHorizontal: 13,
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.accent,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,253,248,0.58)',
   },
   formSectionHeader: {
-    minHeight: 58,
+    minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1586,14 +1599,14 @@ const styles = StyleSheet.create({
   formSectionSummary: {
     color: COLORS.muted,
     fontSize: 11.5,
-    marginTop: -4,
-    paddingBottom: 9,
+    marginTop: -2,
+    paddingBottom: 10,
   },
   formSectionChevron: {
-    color: COLORS.accent,
-    fontSize: 24,
-    fontWeight: '400',
-    paddingHorizontal: 8,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   formSectionBody: {
     paddingBottom: 4,
@@ -1612,7 +1625,7 @@ const styles = StyleSheet.create({
   spotBtn: {
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 999,
+    borderRadius: 8,
     paddingHorizontal: 11,
     paddingVertical: 6,
     backgroundColor: COLORS.card,
@@ -1648,8 +1661,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 999,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingVertical: 11,
     alignItems: 'center',
     backgroundColor: COLORS.card,
   },
@@ -1665,7 +1678,7 @@ const styles = StyleSheet.create({
     width: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     backgroundColor: COLORS.card,
@@ -1713,8 +1726,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   publishBtn: {
-    borderRadius: 999,
-    paddingVertical: 14,
+    borderRadius: 10,
+    paddingVertical: 15,
     alignItems: 'center',
     backgroundColor: COLORS.accent,
   },
@@ -1723,11 +1736,11 @@ const styles = StyleSheet.create({
   },
   publishDock: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.line,
-    backgroundColor: COLORS.panel,
+    backgroundColor: 'rgba(255,253,248,0.98)',
   },
   uploadProgress: {
     marginTop: 0,

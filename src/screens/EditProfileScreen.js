@@ -17,6 +17,7 @@ import { api } from '../api';
 import { COLORS } from '../config';
 import Avatar from '../components/Avatar';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
+import AppIcon from '../components/AppIcon';
 
 export default function EditProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -176,7 +177,7 @@ export default function EditProfileScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Pressable style={styles.back} onPress={requestBack} accessibilityRole="button" accessibilityLabel="返回">
-          <Text style={styles.backText}>‹</Text>
+          <AppIcon name="chevronLeft" size={19} color={COLORS.ink} stroke={1.8} />
         </Pressable>
         <Text style={styles.headerTitle}>编辑资料</Text>
         <View style={styles.headerSpacer} />

@@ -27,6 +27,7 @@ import ActionBar from '../components/ActionBar';
 import MediaGallery from '../components/MediaGallery';
 import VideoSurface from '../components/VideoSurface';
 import ShotMetaBoard from '../components/ShotMetaBoard';
+import AppIcon from '../components/AppIcon';
 import { formatRelativeTime } from '../utils/time';
 import { sharePost } from '../utils/share';
 import { buildSessionIdempotencyKey } from '../lib/idempotency';
@@ -160,7 +161,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
           accessibilityRole="button"
           accessibilityLabel="关闭媒体预览"
         >
-          <Text style={styles.viewerCloseText}>×</Text>
+          <AppIcon name="close" size={20} color={COLORS.white} stroke={1.8} />
         </Pressable>
         <View style={styles.viewerStage} {...panResponder.panHandlers}>
           {loadError ? (
@@ -230,7 +231,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
             accessibilityRole="button"
             accessibilityLabel="上一份素材"
           >
-            <Text style={styles.viewerArrowText}>‹</Text>
+            <AppIcon name="chevronLeft" size={21} color={COLORS.white} stroke={1.8} />
           </Pressable>
           <Text style={styles.viewerIndex}>{index + 1} / {count}</Text>
           <Pressable
@@ -240,7 +241,7 @@ function MediaViewer({ item, index, count, onClose, onStep }) {
             accessibilityRole="button"
             accessibilityLabel="下一份素材"
           >
-            <Text style={styles.viewerArrowText}>›</Text>
+            <AppIcon name="chevronRight" size={21} color={COLORS.white} stroke={1.8} />
           </Pressable>
         </View>
       </View>
@@ -1048,7 +1049,7 @@ export default function PostDetailScreen({ route, navigation }) {
             style={styles.backBtn}
             onPress={() => navigation?.goBack?.()}
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <AppIcon name="chevronLeft" size={20} color={COLORS.ink} stroke={1.8} />
           </Pressable>
           <Text style={styles.topBarTitle} numberOfLines={1}>{postMeta.title}</Text>
           <View style={styles.backBtn} />
@@ -1169,7 +1170,7 @@ export default function PostDetailScreen({ route, navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel="关闭编辑"
               >
-                <Text style={styles.editCloseText}>×</Text>
+                <AppIcon name="close" size={18} color={COLORS.muted} stroke={1.8} />
               </Pressable>
             </View>
             <ScrollView

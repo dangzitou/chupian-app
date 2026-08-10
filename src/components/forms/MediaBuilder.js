@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS, MEDIA_KINDS } from '../../config';
 import VideoSurface from '../VideoSurface';
+import AppIcon from '../AppIcon';
 
 const KIND_LABEL = {
   [MEDIA_KINDS.IMAGE]: '图片',
@@ -208,7 +209,7 @@ export default function MediaBuilder({
               accessibilityLabel={`删除第 ${idx + 1} 个素材`}
               hitSlop={6}
             >
-              <Text style={styles.deleteText}>−</Text>
+              <AppIcon name="close" size={12} color={COLORS.white} stroke={2} />
             </Pressable>
             </View>
             {canMove ? (
@@ -262,7 +263,7 @@ const styles = StyleSheet.create({
   card: {
     width: 112,
     height: 112,
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
     minHeight: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 7,
+    borderRadius: 6,
     backgroundColor: COLORS.panel,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,

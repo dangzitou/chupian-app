@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import { usePostListActions } from '../hooks/usePostListActions';
 import { sharePost } from '../utils/share';
 import { getCreatorTier } from '../utils/rewards';
 import { getActorName, getCurrentUser, isAuthenticated } from '../lib/actor';
+import AppIcon from '../components/AppIcon';
 
 const PAGE_SIZE = 8;
 
@@ -469,7 +471,7 @@ export default function ProfileScreen({ navigation }) {
                 {weather.label} {Math.round(weather.temp)}°C
               </Text>
             </View>
-            <Text style={styles.weatherChevron}>{weatherOpen ? '−' : '+'}</Text>
+            <AppIcon name={weatherOpen ? 'chevronUp' : 'chevronDown'} size={18} color="#6d3112" stroke={1.8} />
           </View>
           {weatherOpen ? (
             <Text style={styles.weatherHint}>
@@ -570,14 +572,14 @@ const styles = StyleSheet.create({
   },
   blockedManageText: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
   blockedManageHint: { color: COLORS.muted, fontSize: 12 },
-  list: { paddingBottom: 40, paddingHorizontal: 6 },
+  list: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingBottom: 40, paddingHorizontal: 10 },
   heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 16,
     borderWidth: 0,
     gap: 12,
     marginBottom: 8,
@@ -601,13 +603,20 @@ const styles = StyleSheet.create({
   },
   notifyBadgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
   profileAction: {
-    borderWidth: 0,
-    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
   profileActionText: { color: COLORS.muted, fontSize: 11.5, fontWeight: '700' },
-  name: { fontSize: 20, color: COLORS.ink, fontWeight: '700' },
+  name: {
+    fontSize: 27,
+    color: COLORS.ink,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia' }),
+  },
   bio: { color: COLORS.muted, marginTop: 3, fontSize: 12.8 },
   statsRow: {
     flexDirection: 'row',
@@ -624,7 +633,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: COLORS.accentBg,
   },
   rewardCopy: { flex: 1 },
@@ -635,7 +644,7 @@ const styles = StyleSheet.create({
     height: 5,
     marginTop: 7,
     overflow: 'hidden',
-    borderRadius: 999,
+    borderRadius: 8,
     backgroundColor: 'rgba(217,54,87,0.16)',
   },
   rewardProgressFill: {
@@ -659,7 +668,7 @@ const styles = StyleSheet.create({
   statLabel: { color: COLORS.muted, marginTop: 3, fontSize: 11.8 },
   weatherCard: {
     backgroundColor: COLORS.accentSoft,
-    borderRadius: 10,
+    borderRadius: 14,
     marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -691,8 +700,8 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     bottom: 3,
-    height: 2,
-    borderRadius: 2,
+    height: 3,
+    borderRadius: 1,
     backgroundColor: COLORS.accent,
   },
   columnWrapper: { gap: 8 },

@@ -6,6 +6,7 @@ import ActionBar from './ActionBar';
 import Avatar from './Avatar';
 import MediaGallery from './MediaGallery';
 import ShotMetaBoard from './ShotMetaBoard';
+import AppIcon from './AppIcon';
 import { toShotParamPairs } from '../utils/postCodec';
 import { formatRelativeTime } from '../utils/time';
 
@@ -124,7 +125,7 @@ function PostCard({
 
   const heartBurstView = heartBurst ? (
     <Animated.View pointerEvents="none" style={[styles.heartBurst, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]}>
-      <Text style={styles.heartGlyph}>♥</Text>
+      <AppIcon name="heart" size={68} color="#fffdf8" filled />
     </Animated.View>
   ) : null;
 
@@ -146,11 +147,14 @@ function PostCard({
             onDoubleTap={handleDoubleTap}
             showAll={false}
             columns={1}
-            containerWidth={Math.max(0, cardWidth - 4)}
+            containerWidth={Math.max(0, cardWidth)}
           />
           {heartBurstView}
           {cardMedia.length > 1 ? (
-            <Text style={styles.multiMark}>▢ {cardMedia.length}</Text>
+            <View style={styles.multiMark}>
+              <AppIcon name="layers" size={13} color={COLORS.onAccent} stroke={1.5} />
+              <Text style={styles.multiMarkText}>{cardMedia.length}</Text>
+            </View>
           ) : null}
         </View>
         <View style={styles.compactBody}>
@@ -242,10 +246,15 @@ function PostCard({
           onDoubleTap={handleDoubleTap}
           showAll={!compact}
           columns={compact ? 1 : mediaColumns}
-          containerWidth={compact ? Math.max(0, cardWidth - 4) : 0}
+          containerWidth={Math.max(0, cardWidth)}
         />
         {heartBurstView}
-        {cardMedia.length > 1 ? <Text style={styles.multiMark}>▢ {cardMedia.length} 张素材</Text> : null}
+        {cardMedia.length > 1 ? (
+          <View style={styles.multiMark}>
+            <AppIcon name="layers" size={13} color={COLORS.onAccent} stroke={1.5} />
+            <Text style={styles.multiMarkText}>{cardMedia.length} 张素材</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
@@ -357,21 +366,21 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.card,
-    borderRadius: 14,
-    borderWidth: 0,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
     overflow: 'hidden',
-    marginHorizontal: 6,
-    marginBottom: 12,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    marginHorizontal: 8,
+    marginBottom: 16,
+    gap: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   cardCompact: {
     backgroundColor: 'transparent',
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 0,
+    marginBottom: 14,
     marginHorizontal: 0,
     shadowOpacity: 0,
     shadowRadius: 0,
@@ -380,12 +389,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    paddingHorizontal: 13,
+    paddingTop: 13,
     gap: 8,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   headerCompact: {
-    padding: 8,
+    paddingHorizontal: 2,
+    paddingTop: 8,
+    paddingBottom: 7,
     gap: 6,
   },
   authorTap: {
@@ -395,12 +407,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   meta: { flex: 1 },
-  author: { fontSize: 13.5, color: COLORS.ink, fontWeight: '700' },
+  author: { fontSize: 13.5, color: COLORS.ink, fontWeight: '800', letterSpacing: -0.15 },
   authorCompact: {
     fontSize: 12,
     fontWeight: '700',
   },
-  sub: { fontSize: 11.5, color: COLORS.muted, marginTop: 1 },
+  sub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
   subCompact: {
     fontSize: 10.5,
   },
@@ -408,22 +420,22 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     transform: [{ scale: 0.92 }],
   },
-  body: { paddingHorizontal: 12, paddingTop: 6, gap: 6 },
+  body: { paddingHorizontal: 14, paddingTop: 13, paddingBottom: 4, gap: 5 },
   bodyCompact: {
-    paddingHorizontal: 8,
-    paddingTop: 5,
+    paddingHorizontal: 2,
+    paddingTop: 1,
     gap: 5,
   },
-  title: { fontSize: 16, color: COLORS.ink, fontWeight: '700', lineHeight: 21 },
+  title: { fontSize: 17, color: COLORS.ink, fontWeight: '800', lineHeight: 23, letterSpacing: -0.35 },
   titleCompact: {
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 14.2,
+    lineHeight: 19.5,
   },
   content: {
-    marginTop: 6,
+    marginTop: 7,
     color: COLORS.ink,
-    fontSize: 13.5,
-    lineHeight: 19,
+    fontSize: 13.2,
+    lineHeight: 20,
   },
   contentCompact: {
     fontSize: 12,
@@ -431,43 +443,45 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tagPill: {
-    backgroundColor: COLORS.accentBg,
-    color: COLORS.accent,
-    borderRadius: 999,
-    fontSize: 10,
-    paddingHorizontal: 8,
+    backgroundColor: 'transparent',
+    color: COLORS.muted,
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.accent,
+    fontSize: 10.5,
+    paddingLeft: 6,
+    paddingRight: 2,
     paddingVertical: 2,
   },
-  tagPressable: {
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
+  tagPressable: { overflow: 'hidden' },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 6,
+    gap: 8,
+    marginTop: 7,
   },
   expandWrap: { marginTop: 2 },
-  expandText: { color: COLORS.accent, fontSize: 12, fontWeight: '600' },
+  expandText: { color: COLORS.accent, fontSize: 12, fontWeight: '800' },
   subStat: {
     color: COLORS.muted,
     fontSize: 11,
     marginTop: 4,
   },
   followBtn: {
-    borderRadius: 999,
-    backgroundColor: COLORS.accentBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    backgroundColor: 'transparent',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   followBtnActive: {
-    backgroundColor: '#ececf1',
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.panel,
   },
   followText: {
     color: COLORS.accent,
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   followTextActive: {
     color: COLORS.muted,
@@ -482,14 +496,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 12,
     bottom: 12,
-    color: COLORS.onAccent,
-    fontSize: 11,
-    fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.56)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(28,26,23,0.72)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
     paddingVertical: 3,
-    overflow: 'hidden',
+  },
+  multiMarkText: {
+    color: COLORS.onAccent,
+    fontSize: 10.5,
+    fontWeight: '800',
   },
   mediaTapWrap: {
     position: 'relative',
@@ -499,14 +517,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   compactBody: {
-    paddingHorizontal: 9,
-    paddingBottom: 2,
+    paddingHorizontal: 2,
+    paddingBottom: 3,
   },
   compactMetaLine: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 4,
+    marginTop: 5,
   },
   compactLocation: {
     flex: 1,
@@ -515,7 +533,7 @@ const styles = StyleSheet.create({
   },
   compactParam: {
     maxWidth: '54%',
-    color: COLORS.accent,
+    color: COLORS.accent2,
     fontSize: 10.5,
     fontWeight: '600',
     textAlign: 'right',

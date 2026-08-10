@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { hydrateActorId } from './src/lib/actor';
 
 import { APP_ROUTES } from './src/constants/routes';
-import { PUBLIC_WEB_ORIGIN } from './src/config';
+import { COLORS, PUBLIC_WEB_ORIGIN } from './src/config';
 
 import MapScreen from './src/screens/MapScreen';
 import PostsScreen from './src/screens/PostsScreen';
@@ -92,6 +92,8 @@ function ProfileStack() {
 
 export default function App() {
   const [actorReady, setActorReady] = useState(false);
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= 840;
 
   useEffect(() => {
     let alive = true;
@@ -115,15 +117,15 @@ export default function App() {
       node.style.margin = '0';
       node.style.overflow = 'hidden';
     });
-    body.style.backgroundColor = '#e9e6e2';
+    body.style.backgroundColor = COLORS.bgDeep;
     body.style.webkitFontSmoothing = 'antialiased';
   }, []);
 
   if (!actorReady) {
     return (
       <SafeAreaProvider>
-        <View style={styles.viewport}>
-          <View style={[styles.mobileShell, styles.bootScreen]}>
+        <View style={[styles.viewport, isDesktopWeb && styles.desktopViewport]}>
+          <View style={[styles.mobileShell, isDesktopWeb && styles.desktopShell, styles.bootScreen]}>
             <ActivityIndicator size="small" color="#d93657" />
           </View>
         </View>
@@ -135,8 +137,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppErrorBoundary>
-        <View style={styles.viewport}>
-          <View style={styles.mobileShell}>
+        <View style={[styles.viewport, isDesktopWeb && styles.desktopViewport]}>
+          <View style={[styles.mobileShell, isDesktopWeb && styles.desktopShell]}>
             <NetworkStatusBanner />
             <NavigationContainer linking={linking}>
               <Tab.Navigator
@@ -201,29 +203,40 @@ const styles = StyleSheet.create({
     minHeight: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e9e6e2',
+    backgroundColor: COLORS.bgDeep,
   },
   mobileShell: {
     flex: 1,
     width: '100%',
-    maxWidth: 430,
+    maxWidth: 760,
     height: '100%',
     minHeight: 0,
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: '#f8f7f6',
+    backgroundColor: COLORS.bg,
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    borderColor: 'rgba(25,25,25,0.06)',
-    shadowColor: '#1c1c1c',
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
+    borderColor: 'rgba(52,45,37,0.08)',
+    shadowColor: '#5f5548',
+    shadowOpacity: 0.1,
+    shadowRadius: 28,
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
   },
   bootScreen: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8f7f6',
+    backgroundColor: COLORS.bg,
+  },
+  desktopViewport: {
+    padding: 18,
+  },
+  desktopShell: {
+    borderWidth: 1,
+    borderRadius: 28,
+    borderColor: 'rgba(52,45,37,0.13)',
+    shadowOpacity: 0.18,
+    shadowRadius: 42,
+    shadowOffset: { width: 0, height: 16 },
   },
 });

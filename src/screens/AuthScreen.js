@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
+import AppIcon from '../components/AppIcon';
 
 export default function AuthScreen({ navigation }) {
   const [mode, setMode] = useState('login');
@@ -63,9 +64,12 @@ export default function AuthScreen({ navigation }) {
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Pressable style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button">
-            <Text style={styles.backText}>‹ 返回</Text>
+            <View style={styles.backContent}>
+              <AppIcon name="chevronLeft" size={17} color={COLORS.muted} stroke={1.8} />
+              <Text style={styles.backText}>返回</Text>
+            </View>
           </Pressable>
-          <View style={styles.brandMark}><Text style={styles.brandPlus}>＋</Text></View>
+          <View style={styles.brandMark}><AppIcon name="plus" size={25} color={COLORS.onAccent} stroke={2} /></View>
           <Text style={styles.eyebrow}>CHUPIAN / CREATOR IDENTITY</Text>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>
@@ -144,6 +148,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
   back: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 12 },
+  backContent: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   backText: { color: COLORS.muted, fontSize: 14, fontWeight: '600' },
   brandMark: {
     width: 48,
@@ -154,7 +159,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: COLORS.accent,
   },
-  brandPlus: { color: COLORS.white, fontSize: 28, lineHeight: 32, fontWeight: '300' },
   eyebrow: { color: COLORS.accent, fontSize: 10, letterSpacing: 1.4, marginTop: 22, fontWeight: '700' },
   title: { color: COLORS.ink, fontSize: 28, lineHeight: 35, fontWeight: '800', marginTop: 8 },
   subtitle: { color: COLORS.muted, fontSize: 13, lineHeight: 20, marginTop: 8, marginBottom: 24 },

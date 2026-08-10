@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Linking,
+  Alert, View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Linking, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS, TIME_LABELS } from '../config';
 import { APP_ROUTES } from '../constants/routes';
 import PostCard from '../components/PostCard';
+import AppIcon from '../components/AppIcon';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { sharePost } from '../utils/share';
 
@@ -136,7 +137,7 @@ export default function SpotDetailScreen({ navigation, route }) {
         <View style={styles.content}>
           <Text style={styles.title}>{spot.name}</Text>
           <Text style={styles.sub}>
-            {spot.district} · {TIME_LABELS[spot.bestTime] || spot.bestTime} · ⭐ {spot.rating} · {spot.difficulty}
+            {spot.district} · {TIME_LABELS[spot.bestTime] || spot.bestTime} · 评分 {spot.rating} · {spot.difficulty}
           </Text>
           <Text style={styles.summary}>{spot.summary}</Text>
 
@@ -145,10 +146,22 @@ export default function SpotDetailScreen({ navigation, route }) {
           </View>
 
           <View style={styles.infoCard}>
-            <Text style={styles.infoLine}>🕐 最佳时段：{spot.timeWindow || '—'}</Text>
-            <Text style={styles.infoLine}>📷 推荐镜头：{spot.gear || '—'}</Text>
-            <Text style={styles.infoLine}>📍 地址：{spot.address || '—'}</Text>
-            <Text style={styles.infoLine}>💡 提示：{spot.tips || '—'}</Text>
+            <View style={styles.infoRow}>
+              <AppIcon name="clock" size={17} color={COLORS.accent2} stroke={1.6} />
+              <Text style={styles.infoLine}>最佳时段：{spot.timeWindow || '—'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <AppIcon name="camera" size={17} color={COLORS.accent2} stroke={1.6} />
+              <Text style={styles.infoLine}>推荐镜头：{spot.gear || '—'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <AppIcon name="pin" size={17} color={COLORS.accent2} stroke={1.6} />
+              <Text style={styles.infoLine}>地址：{spot.address || '—'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <AppIcon name="bulb" size={17} color={COLORS.accent2} stroke={1.6} />
+              <Text style={styles.infoLine}>提示：{spot.tips || '—'}</Text>
+            </View>
           </View>
 
           <Text style={styles.sectionTitle}>机位 · 角度 · 时间</Text>
@@ -233,7 +246,8 @@ export default function SpotDetailScreen({ navigation, route }) {
             style={styles.navBtn}
             onPress={() => Linking.openURL(`https://www.openstreetmap.org/?mlat=${spot.lat}&mlon=${spot.lng}#map=17/${spot.lat}/${spot.lng}`)}
           >
-            <Text style={styles.navBtnText}>🧭 打开导航</Text>
+            <AppIcon name="compass" size={18} color={COLORS.onAccent} stroke={1.7} />
+            <Text style={styles.navBtnText}>打开导航</Text>
           </Pressable>
           <Pressable
             style={styles.navBtn}
@@ -259,7 +273,8 @@ export default function SpotDetailScreen({ navigation, route }) {
               });
             }}
           >
-            <Text style={styles.navBtnText}>＋ 去发布这个点</Text>
+            <AppIcon name="plus" size={18} color={COLORS.onAccent} stroke={1.9} />
+            <Text style={styles.navBtnText}>去发布这个点</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -290,8 +305,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgDeep,
   },
   coverFallbackText: { color: COLORS.muted, fontSize: 14, fontWeight: '700' },
-  content: { padding: 16 },
-  title: { fontSize: 22, fontWeight: '700', color: COLORS.ink },
+  content: { width: '100%', maxWidth: 720, alignSelf: 'center', padding: 16 },
+  title: {
+    fontSize: 29,
+    fontWeight: '800',
+    color: COLORS.ink,
+    letterSpacing: -0.9,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia' }),
+  },
   sub: { fontSize: 13, color: COLORS.muted, marginTop: 4 },
   summary: { fontSize: 14, lineHeight: 21, color: COLORS.ink, marginTop: 10, opacity: 0.92 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
@@ -300,14 +321,15 @@ const styles = StyleSheet.create({
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, overflow: 'hidden',
   },
   infoCard: {
-    backgroundColor: COLORS.panel, borderRadius: 14, padding: 14,
+    backgroundColor: COLORS.panel, borderRadius: 16, padding: 14,
     borderWidth: 1, borderColor: COLORS.line, marginTop: 14, gap: 6,
   },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   infoLine: { fontSize: 13, color: COLORS.ink, lineHeight: 20 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.ink, marginTop: 20, marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.ink, marginTop: 22, marginBottom: 10, letterSpacing: -0.25 },
   emptyInline: { color: COLORS.muted, fontSize: 13 },
   vpCard: {
-    backgroundColor: COLORS.panel, borderRadius: 14, padding: 14,
+    backgroundColor: COLORS.panel, borderRadius: 16, padding: 14,
     borderWidth: 1, borderColor: COLORS.line, marginBottom: 10,
   },
   vpHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
@@ -326,8 +348,8 @@ const styles = StyleSheet.create({
   postsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   postCard: { width: '48%' },
   navBtn: {
-    marginTop: 16, backgroundColor: COLORS.accent, borderRadius: 999,
-    paddingVertical: 13, alignItems: 'center',
+    marginTop: 16, backgroundColor: COLORS.accent, borderRadius: 10,
+    paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
   },
   navBtnText: { color: COLORS.onAccent, fontSize: 15, fontWeight: '600' },
 });

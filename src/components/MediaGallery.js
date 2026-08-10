@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { COLORS } from '../config';
 import VideoSurface from './VideoSurface';
+import AppIcon from './AppIcon';
 
 const COL_GAP = 6;
 
@@ -85,7 +86,9 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
               <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
             </View>
           ) : null}
-          <Text style={styles.playBadge}>▶</Text>
+          <View style={styles.playBadge}>
+            <AppIcon name="play" size={13} color={COLORS.onAccent} />
+          </View>
         </View>
       );
     }
@@ -107,7 +110,11 @@ function MediaCover({ item, playing, ratio, retryVersion = 0, onMediaError }) {
             <Text style={styles.durationText}>{Math.max(1, Math.floor(item.duration))}s</Text>
           </View>
         ) : null}
-        {playing ? <Text style={styles.liveMark}>视频 · 播放中</Text> : <Text style={styles.playBadge}>▶</Text>}
+        {playing ? <Text style={styles.liveMark}>视频 · 播放中</Text> : (
+          <View style={styles.playBadge}>
+            <AppIcon name="play" size={13} color={COLORS.onAccent} />
+          </View>
+        )}
       </View>
     );
   }
@@ -237,10 +244,9 @@ export default function MediaGallery({ media = [], onPressMedia, onPressImage, o
   const list = showAll ? normalized : normalized.slice(0, columns > 1 ? 4 : 1);
   const activeColumns = clampColumns(columns);
   const visibleCols = activeColumns > 1 ? Math.min(activeColumns, list.length) : 1;
-  const shellWidth = Platform.OS === 'web' ? Math.min(windowWidth, 480) : windowWidth;
   const maxWidth = Number.isFinite(containerWidth) && containerWidth > 0
     ? containerWidth
-    : Math.max(0, shellWidth - 32);
+    : Math.max(0, windowWidth - 32);
   const width = visibleCols === 1
     ? maxWidth
     : (maxWidth - COL_GAP * (visibleCols - 1)) / visibleCols;
@@ -284,21 +290,21 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 10,
+    marginBottom: 0,
   },
   mediaWrap: {
     width: '100%',
     aspectRatio: IMAGE_RATIO,
-    borderRadius: 10,
-    backgroundColor: '#e8e8e8',
+    borderRadius: 14,
+    backgroundColor: '#e9e2d8',
   },
   posterImage: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 10,
+    borderRadius: 14,
   },
   posterShade: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.12)',
   },
   loadingOverlay: {
@@ -326,7 +332,7 @@ const styles = StyleSheet.create({
   videoSurface: {
     width: '100%',
     aspectRatio: IMAGE_RATIO,
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: LIVE_CARD_COLOR,
   },
   durationBadge: {
@@ -361,11 +367,8 @@ const styles = StyleSheet.create({
     marginLeft: -17,
     marginTop: -17,
     borderRadius: 17,
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    color: COLORS.onAccent,
-    fontSize: 15,
-    lineHeight: 34,
-    textAlign: 'center',
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,26,23,0.68)',
   },
 });

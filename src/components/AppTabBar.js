@@ -6,6 +6,7 @@ import { APP_ROUTES } from '../constants/routes';
 import { NEW_POST_DRAFT_STORAGE_KEY } from '../constants/storage';
 import { api } from '../api';
 import { createDraftStorage, subscribeDraftStorage } from '../hooks/useDraftStorage';
+import AppIcon from './AppIcon';
 
 const draftStorage = createDraftStorage(NEW_POST_DRAFT_STORAGE_KEY);
 const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -54,15 +55,6 @@ function ProfileIcon({ color }) {
     <View style={styles.profileIcon}>
       <View style={[styles.profileHead, { borderColor: color }]} />
       <View style={[styles.profileBody, { borderColor: color }]} />
-    </View>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <View style={styles.plusIcon}>
-      <View style={styles.plusHorizontal} />
-      <View style={styles.plusVertical} />
     </View>
   );
 }
@@ -164,7 +156,7 @@ function DraftBadge({ onChange }) {
 }
 
 function TabGlyph({ routeName, color, isCreate }) {
-  if (isCreate) return <PlusIcon />;
+  if (isCreate) return <AppIcon name="plus" size={20} color={COLORS.white} stroke={2} />;
   if (routeName === APP_ROUTES.MAP) return <MapIcon color={color} />;
   if (routeName === APP_ROUTES.DISCOVERY) return <DiscoverIcon color={color} />;
   return <ProfileIcon color={color} />;
@@ -229,23 +221,22 @@ export default function AppTabBar({ state, descriptors, navigation }) {
 
 const styles = StyleSheet.create({
   bar: {
-    marginHorizontal: 10,
-    marginBottom: 8,
+    marginHorizontal: 0,
+    marginBottom: 0,
     paddingTop: 8,
-    paddingHorizontal: 8,
-    backgroundColor: 'rgba(255,253,251,0.98)',
-    borderWidth: 1,
-    borderColor: 'rgba(25,25,25,0.08)',
-    borderRadius: 22,
-    shadowColor: '#5a4039',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,253,248,0.98)',
+    borderTopWidth: 1,
+    borderColor: COLORS.line,
+    shadowColor: '#473e34',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
   },
   row: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 560,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -254,7 +245,7 @@ const styles = StyleSheet.create({
   item: {
     position: 'relative',
     flex: 1,
-    minHeight: 56,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'flex-start',
     borderRadius: 14,
@@ -270,42 +261,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   createIcon: {
-    width: 44,
-    height: 40,
-    marginTop: -2,
-    borderRadius: 15,
+    width: 48,
+    height: 36,
+    marginTop: 0,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.accent,
   },
   createShadow: {
     shadowColor: COLORS.accent,
-    shadowOpacity: 0.24,
-    shadowRadius: 9,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
   label: {
-    marginTop: 2,
-    fontSize: 10.5,
+    marginTop: 3,
+    fontSize: 10,
     lineHeight: 14,
     fontWeight: '600',
-    letterSpacing: 0.1,
+    letterSpacing: 0.35,
   },
   labelActive: {
     fontWeight: '700',
   },
   activeDot: {
-    width: 3,
-    height: 3,
-    marginTop: 2,
-    borderRadius: 2,
+    width: 12,
+    height: 2,
+    marginTop: 3,
+    borderRadius: 1,
     backgroundColor: COLORS.accent,
   },
   activeDotPlaceholder: {
-    width: 3,
-    height: 3,
-    marginTop: 2,
+    width: 12,
+    height: 2,
+    marginTop: 3,
   },
   badge: {
     position: 'absolute',
@@ -319,7 +310,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: COLORS.accent,
     borderWidth: 2,
-    borderColor: '#fffdfb',
+    borderColor: COLORS.card,
   },
   badgeText: {
     color: COLORS.white,
@@ -339,7 +330,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: COLORS.ink,
     borderWidth: 2,
-    borderColor: '#fffdfb',
+    borderColor: COLORS.card,
   },
   draftBadgeText: {
     color: COLORS.white,
@@ -396,25 +387,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
-  },
-  plusIcon: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plusHorizontal: {
-    position: 'absolute',
-    width: 17,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: COLORS.white,
-  },
-  plusVertical: {
-    position: 'absolute',
-    width: 2,
-    height: 17,
-    borderRadius: 1,
-    backgroundColor: COLORS.white,
   },
 });

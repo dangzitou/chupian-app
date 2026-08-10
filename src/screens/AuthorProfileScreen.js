@@ -14,6 +14,7 @@ import { COLORS } from '../config';
 import Avatar from '../components/Avatar';
 import PostCard from '../components/PostCard';
 import FeedSkeleton from '../components/FeedSkeleton';
+import AppIcon from '../components/AppIcon';
 import { useFeedList } from '../hooks/useFeedList';
 import { usePostListActions } from '../hooks/usePostListActions';
 import { sharePost } from '../utils/share';
@@ -134,7 +135,7 @@ export default function AuthorProfileScreen({ route, navigation }) {
     <View>
       <View style={styles.topBar}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
-          <Text style={styles.back}>‹</Text>
+          <AppIcon name="chevronLeft" size={19} color={COLORS.ink} stroke={1.8} />
         </Pressable>
         <Text style={styles.topTitle}>创作者</Text>
         <View style={styles.topSpacer} accessibilityElementsHidden />

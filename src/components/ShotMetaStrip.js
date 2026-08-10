@@ -29,13 +29,12 @@ export default function ShotMetaStrip({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.panel,
-    padding: 10,
+    borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    padding: 0,
     gap: 6,
-    marginTop: 6,
+    marginTop: 0,
   },
   compactWrap: {
     marginTop: 0,

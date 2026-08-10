@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { APP_ROUTES } from '../constants/routes';
 import RemoteImage from '../components/RemoteImage';
+import AppIcon from '../components/AppIcon';
 import { getCurrentLocation } from '../utils/location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -921,8 +922,7 @@ export default function MapScreen({ navigation, route }) {
             style={styles.actionBtn}
             onPress={openCreateWithCurrent}
           >
-            <View style={styles.plusHorizontal} />
-            <View style={styles.plusVertical} />
+            <AppIcon name="plus" size={23} color={COLORS.onAccent} stroke={2} />
           </Pressable>
         </View>
       ) : null}
@@ -935,7 +935,7 @@ export default function MapScreen({ navigation, route }) {
               accessibilityRole="button"
               accessibilityLabel="关闭地图预览"
             >
-              <Text style={styles.previewCloseText}>×</Text>
+              <AppIcon name="close" size={15} color={COLORS.muted} stroke={1.8} />
             </Pressable>
             <RemoteImage
               uri={selectedMapItem.cover}
@@ -1038,75 +1038,79 @@ export default function MapScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#e6edf3' },
+  container: { flex: 1, backgroundColor: COLORS.bgDeep },
   webview: { flex: 1 },
   actionsWrap: {
     position: 'absolute',
-    right: 18,
-    bottom: 22,
+    right: 16,
+    bottom: 24,
     alignItems: 'flex-end',
   },
   actionBtn: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#d93657',
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,253,248,0.76)',
+    backgroundColor: COLORS.accent,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 3,
-    shadowColor: '#1e1e1e',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#40372d',
+    shadowOpacity: 0.26,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
   },
   previewWrap: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 88,
+    left: 14,
+    right: 14,
+    bottom: 96,
   },
   previewCard: {
     position: 'relative',
     flexDirection: 'row',
-    gap: 10,
-    padding: 10,
-    borderRadius: 18,
-    backgroundColor: COLORS.white,
-    shadowColor: '#1e1e1e',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
+    gap: 12,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.card,
+    shadowColor: '#493f34',
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
     shadowOffset: { width: 0, height: 5 },
     elevation: 4,
   },
   previewImage: {
     width: 88,
     height: 88,
-    borderRadius: 12,
-    backgroundColor: '#e8edf2',
+    borderRadius: 14,
+    backgroundColor: COLORS.bgDeep,
   },
   previewImageFallback: {
     width: 88,
     height: 88,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.accentBg,
   },
   previewImageFallbackText: { color: COLORS.accent, fontSize: 13, fontWeight: '800' },
   previewCopy: { flex: 1, minWidth: 0, paddingRight: 16 },
-  previewEyebrow: { color: COLORS.accent, fontSize: 10.5, fontWeight: '800' },
-  previewTitle: { color: COLORS.ink, fontSize: 13.5, lineHeight: 18, fontWeight: '800', marginTop: 3 },
+  previewEyebrow: { color: COLORS.accent, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8 },
+  previewTitle: { color: COLORS.ink, fontSize: 14, lineHeight: 19, fontWeight: '800', marginTop: 4 },
   previewMeta: { color: COLORS.muted, fontSize: 10.5, marginTop: 3 },
   previewActions: { flexDirection: 'row', gap: 7, marginTop: 8 },
   previewPrimary: {
-    borderRadius: 999,
+    borderRadius: 8,
     paddingHorizontal: 11,
     paddingVertical: 6,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.ink,
   },
   previewPrimaryText: { color: COLORS.white, fontSize: 11, fontWeight: '800' },
   previewSecondary: {
-    borderRadius: 999,
+    borderRadius: 8,
     paddingHorizontal: 11,
     paddingVertical: 6,
     backgroundColor: COLORS.accentBg,
@@ -1121,8 +1125,8 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,253,248,0.92)',
   },
   previewCloseText: { color: COLORS.muted, fontSize: 20, lineHeight: 21, fontWeight: '500' },
   chooserBackdrop: {
@@ -1132,10 +1136,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   chooserCard: {
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: COLORS.white,
-    shadowColor: '#1e1e1e',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.card,
+    shadowColor: '#493f34',
     shadowOpacity: 0.16,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 5 },
@@ -1145,15 +1151,15 @@ const styles = StyleSheet.create({
   chooserHint: { color: COLORS.muted, fontSize: 11.5, marginTop: 5 },
   chooserActions: { gap: 9, marginTop: 14 },
   chooserPrimary: {
-    borderRadius: 13,
+    borderRadius: 10,
     paddingHorizontal: 13,
     paddingVertical: 11,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.ink,
   },
   chooserPrimaryText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
   chooserPrimaryHint: { color: 'rgba(255,255,255,0.78)', fontSize: 10.5, marginTop: 3 },
   chooserSecondary: {
-    borderRadius: 13,
+    borderRadius: 10,
     paddingHorizontal: 13,
     paddingVertical: 11,
     backgroundColor: COLORS.accentBg,
@@ -1171,10 +1177,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 999,
+    borderRadius: 12,
     paddingVertical: 9,
     paddingHorizontal: 13,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,253,248,0.96)',
     shadowColor: '#1e1e1e',
     shadowOpacity: 0.12,
     shadowRadius: 10,
@@ -1183,21 +1189,7 @@ const styles = StyleSheet.create({
   },
   pickHintTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '700' },
   pickHintCancel: { color: COLORS.accent, fontSize: 12, fontWeight: '800' },
-  plusHorizontal: {
-    position: 'absolute',
-    width: 20,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: '#ffffff',
-  },
-  plusVertical: {
-    position: 'absolute',
-    width: 2,
-    height: 20,
-    borderRadius: 1,
-    backgroundColor: '#ffffff',
-  },
-  loadingWrap: { flex: 1, backgroundColor: '#e6edf3' },
+  loadingWrap: { flex: 1, backgroundColor: COLORS.bgDeep },
   errorOverlay: {
     position: 'absolute',
     left: 24,
@@ -1205,8 +1197,8 @@ const styles = StyleSheet.create({
     top: '40%',
     alignItems: 'center',
     padding: 20,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,253,248,0.96)',
   },
   locationOverlay: {
     position: 'absolute',
@@ -1215,8 +1207,8 @@ const styles = StyleSheet.create({
     top: '38%',
     alignItems: 'center',
     padding: 20,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,253,248,0.96)',
     shadowColor: '#1e1e1e',
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -1233,7 +1225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: 'rgba(230,237,243,0.62)',
+    backgroundColor: 'rgba(233,225,213,0.68)',
   },
   locationTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '700', marginTop: 8 },
   locationHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
@@ -1241,7 +1233,7 @@ const styles = StyleSheet.create({
   errorHint: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
   retryBtn: {
     marginTop: 12,
-    borderRadius: 999,
+    borderRadius: 9,
     paddingHorizontal: 16,
     paddingVertical: 9,
     backgroundColor: COLORS.accent,

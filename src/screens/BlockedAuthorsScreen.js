@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { COLORS } from '../config';
 import { formatRelativeTime } from '../utils/time';
+import AppIcon from '../components/AppIcon';
 
 export default function BlockedAuthorsScreen({ navigation }) {
   const [authors, setAuthors] = useState([]);
@@ -81,7 +82,7 @@ export default function BlockedAuthorsScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button">
-          <Text style={styles.backText}>‹</Text>
+          <AppIcon name="chevronLeft" size={19} color={COLORS.ink} stroke={1.8} />
         </Pressable>
         <Text style={styles.title}>屏蔽管理</Text>
         <View style={styles.back} />

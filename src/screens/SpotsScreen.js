@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator, Linking,
+  View, Text, FlatList, StyleSheet, Pressable, RefreshControl, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { COLORS, TIME_LABELS } from '../config';
 import CATEGORIES from '../data/categories';
 import { APP_ROUTES } from '../constants/routes';
 import RemoteImage from '../components/RemoteImage';
+import AppIcon from '../components/AppIcon';
 import { getCurrentLocation } from '../utils/location';
 
 function formatDistance(value) {
@@ -152,7 +153,8 @@ export default function SpotsScreen({ navigation }) {
           {filtered.length} 个地点 · {locationLoading ? '正在定位' : (locationLabel || (location ? '附近' : '全部点位'))}
         </Text>
         <Pressable style={styles.mapBtn} onPress={openMap}>
-          <Text style={styles.mapBtnText}>🗺️ 打开地图</Text>
+          <AppIcon name="pin" size={15} color={COLORS.accent} stroke={1.6} />
+          <Text style={styles.mapBtnText}>打开地图</Text>
         </Pressable>
       </View>
 
@@ -227,7 +229,7 @@ export default function SpotsScreen({ navigation }) {
                 {[
                   item.district,
                   TIME_LABELS[item.bestTime] || item.bestTime,
-                  item.rating ? `⭐ ${item.rating}` : '',
+                  item.rating ? `评分 ${item.rating}` : '',
                   formatDistance(item.distanceKm),
                 ].filter(Boolean).join(' · ')}
               </Text>
@@ -252,13 +254,22 @@ export default function SpotsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg },
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
-  title: { fontSize: 24, fontWeight: '700', color: COLORS.ink, letterSpacing: -0.5 },
+  header: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
+  title: {
+    fontSize: 29,
+    fontWeight: '800',
+    color: COLORS.ink,
+    letterSpacing: -1,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia' }),
+  },
   subtitle: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
   mapBtn: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 8,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     backgroundColor: COLORS.accentBg,
@@ -266,10 +277,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   mapBtnText: { fontSize: 12.5, color: COLORS.accent, fontWeight: '600' },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingVertical: 5 },
+  filterRow: { width: '100%', maxWidth: 720, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingVertical: 5 },
   pill: {
-    borderRadius: 999, borderWidth: 1, borderColor: COLORS.line,
-    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 8, borderWidth: 1, borderColor: COLORS.line,
+    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.card,
   },
   pillActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   pillText: { fontSize: 13, color: COLORS.muted },
@@ -304,14 +315,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
   },
   settingsLocationText: { color: COLORS.accent, fontSize: 12, fontWeight: '700' },
-  list: { padding: 16, gap: 12, paddingBottom: 30 },
+  list: { width: '100%', maxWidth: 720, alignSelf: 'center', padding: 16, gap: 12, paddingBottom: 30 },
   card: {
     flexDirection: 'row', gap: 12, backgroundColor: COLORS.panel,
-    borderRadius: 16, padding: 12, borderWidth: 1, borderColor: COLORS.line,
+    borderRadius: 18, padding: 12, borderWidth: 1, borderColor: COLORS.line,
   },
   cover: { width: 84, height: 84, borderRadius: 12, backgroundColor: COLORS.bgDeep },
   cardBody: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: COLORS.ink },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: COLORS.ink, letterSpacing: -0.2 },
   cardSub: { fontSize: 12.5, color: COLORS.muted, marginTop: 3 },
   cardSub2: { fontSize: 11.5, color: COLORS.muted, marginTop: 2, opacity: 0.9 },
   tags: { flexDirection: 'row', gap: 6, marginTop: 6 },
@@ -321,7 +332,7 @@ const styles = StyleSheet.create({
   },
   quickPostBtn: {
     marginTop: 8,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.accent,
     paddingHorizontal: 10,

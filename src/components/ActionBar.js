@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../config';
 import { formatCount } from '../utils/format';
+import AppIcon from './AppIcon';
 
 function ActionGlyph({ type, active = false, busy = false, compact = false }) {
   const activeScale = useRef(new Animated.Value(1)).current;
@@ -36,37 +37,29 @@ function ActionGlyph({ type, active = false, busy = false, compact = false }) {
     );
   }
 
-  if (type === 'comment') {
-    return (
-      <View
-        style={[
-          styles.commentGlyph,
-          compact && styles.commentGlyphCompact,
-          active && styles.commentGlyphActive,
-        ]}
-      >
-        <View style={[styles.commentTail, active && styles.commentTailActive]} />
-      </View>
-    );
-  }
-
-  const glyph = type === 'like'
-    ? (active ? '♥' : '♡')
+  const iconName = type === 'like'
+    ? 'heart'
     : type === 'favorite'
-      ? (active ? '★' : '☆')
-      : '↗';
+      ? 'bookmark'
+      : type;
+  const color = active ? COLORS.accent : COLORS.ink;
 
   return (
-    <Animated.Text
+    <Animated.View
       style={[
         styles.icon,
         compact && styles.iconCompact,
-        active && styles.active,
         { transform: [{ scale: activeScale }] },
       ]}
     >
-      {glyph}
-    </Animated.Text>
+      <AppIcon
+        name={iconName}
+        size={compact ? 15 : 18}
+        color={color}
+        filled={active}
+        stroke={compact ? 1.45 : 1.7}
+      />
+    </Animated.View>
   );
 }
 
@@ -225,38 +218,10 @@ const styles = StyleSheet.create({
   itemDisabled: {
     opacity: 0.5,
   },
-  icon: { fontSize: 16, color: COLORS.ink },
-  iconCompact: { fontSize: 14 },
+  icon: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  iconCompact: { width: 15, height: 15 },
   busy: { width: 16, height: 16 },
   busyCompact: { width: 14, height: 14 },
-  commentGlyph: {
-    width: 15,
-    height: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.ink,
-    borderRadius: 4,
-    marginHorizontal: 1,
-  },
-  commentGlyphCompact: {
-    width: 13,
-    height: 10,
-    borderRadius: 3,
-    borderWidth: 1.25,
-  },
-  commentGlyphActive: { borderColor: COLORS.accent },
-  commentTail: {
-    position: 'absolute',
-    left: 2,
-    bottom: -3,
-    width: 5,
-    height: 5,
-    backgroundColor: COLORS.card,
-    borderLeftWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: COLORS.ink,
-    transform: [{ skewX: '-18deg' }, { rotate: '-28deg' }],
-  },
-  commentTailActive: { borderColor: COLORS.accent },
   text: { fontSize: 11.8, color: COLORS.mutedText || COLORS.muted },
   textCompact: { fontSize: 10.5 },
   active: { color: COLORS.accent },

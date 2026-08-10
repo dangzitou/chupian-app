@@ -114,21 +114,24 @@ export default function ShotMetaBoard({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.panel,
-    padding: 10,
-    gap: 8,
+    borderRadius: 0,
+    borderTopWidth: 1,
+    borderColor: COLORS.line,
+    backgroundColor: 'transparent',
+    paddingTop: 9,
+    paddingBottom: 4,
+    gap: 6,
   },
   compactWrap: {
-    padding: 8,
-    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 2,
+    gap: 5,
   },
   title: {
     color: COLORS.ink,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.1,
   },
   compactTitle: {
     fontSize: 12.2,
